@@ -39,7 +39,12 @@
     "test:pi": "node --import tsx --test test/*.test.ts test/workers/*.test.ts",
     "test:upstream": "cd skills/poteto-mode/scripts && bun test orch watch-pr",
     "typecheck": "tsc --noEmit && cd skills/poteto-mode/scripts && bun run typecheck",
-    "check": "pnpm test && pnpm typecheck"
+    "check": "pnpm test && pnpm typecheck",
+    "port:diff": "node scripts/port-diff.mjs",
+    "port:difftool": "node scripts/port-difftool.mjs",
+    "port:verify": "node scripts/verify-port.mjs",
+    "upstream:check": "node scripts/check-upstream.mjs",
+    "upstream:import": "node scripts/import-upstream.mjs"
   },
   "pi": {
     "extensions": [
