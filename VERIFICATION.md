@@ -3,19 +3,27 @@
 This record captures bounded checks performed against pstack `0.14.7` at commit `efa2a531985e0a8084d36ff3cf87233be8a9f34b`.
 Generated logs and disposable profiles remain under `.work/` and are not release artifacts.
 
-## Mechanical boundaries
+## Current no-model boundaries
 
-`pnpm check` passed 90 Pi boundary tests, 52 lifted upstream Bun tests, the root TypeScript check, and the upstream watch-pr TypeScript check.
-`node scripts/check-upstream.mjs` reported the pinned upstream commit as current.
-`node scripts/sync-integrations.mjs` verified all six pinned official files by SHA-256 digest.
-`node scripts/report-port.mjs` reported 92 exact files, 55 adapted files, 11 intentional omissions, six official integration files, and 29 Pi-only files.
-The omissions are the upstream plugin manifest, the unsupported Grok Bot skill, the vendor-specific automated-review policy, the host-specific worktree audit, and seven unused vendor integration playbooks.
-`node scripts/smoke-profiles.mjs` loaded plain, pstack, and current disposable Pi profiles without model calls.
-The profile smoke built an npm tarball, installed it into a clean prefix, and loaded its Pi commands.
+`pnpm port:verify` verified that `vendor/pstack` has the exact locked upstream tree and the required upstream commit and tree trailers.
+It passed 96 Pi boundary tests, 52 lifted upstream Bun tests, the root TypeScript check, and the upstream watch-pr TypeScript check.
+It verified all six pinned official files by SHA-256 digest.
+The generated port report records 99 exact files, 55 adapted files, four intentional omissions, six official integration files, and 66 Pi-owned files.
+The remaining omissions are the upstream plugin manifest, the unsupported Grok Bot skill, the vendor-specific automated-review policy, and the host-specific worktree audit.
+The report gives every upstream file a `port-map.json` classification and action, and no upstream file is unclassified.
+
+The packed-profile smoke built an npm tarball, installed it into clean disposable prefixes, and loaded the plain, pstack, and current Pi profiles without model calls.
 The tarball contains no bundled Bun binary, `node_modules`, Grok Bot skill, dormant automation source, source guide, or assets.
-The system Bun runtime returned `1.3.13`.
+The packed worker-resource smoke started a Pi RPC session without a prompt and confirmed that the Poteto skill command was registered.
+It confirmed that all 48 packaged skills and the core pstack extension crossed the worker boundary while delegation extensions, `Task`, and other delegation tools did not.
+It confirmed that `pstack_todo` remained available to the worker.
 
-## Herdr persistent worker boundary
+The configured creator-equivalent model selectors were resolved through Pi's model runtime without sending prompts.
+All four selected model IDs were available: `opencode-go/grok-4.6`, `openrouter/anthropic/claude-fable-5.1`, `openai-codex/gpt-5.6-sol`, and `openrouter/anthropic/claude-opus-5`.
+The no-model checks establish provenance, packaging, resource visibility, tool ownership, model routing shape, and process startup.
+They do not establish that a model follows the complete workflow or that the workflow improves task outcomes.
+
+## Historical Herdr transport boundary
 
 A disposable pstack parent Pi session ran in unfocused Herdr tab `wRE:t3` and pane `wRE:p7`.
 The parent called a background `Task` named `integration-smoke-1` using `openai-codex/gpt-5.6-luna` at medium thinking.
@@ -28,12 +36,16 @@ A separate disposable Git repository exercised `herdr worktree create` with an e
 The returned workspace, tab, pane, branch, and checkout path matched the metadata consumed by the worker adapter.
 The disposable checkout and Herdr surface were removed after inspection.
 
-## Non-Herdr fallback boundary
+This transport run predates the repaired worker identity, explicit skill-loading contract, and thinking-aware role routing.
+It remains evidence for Herdr persistence and completion delivery, not for current workflow conformance.
+
+## Historical non-Herdr fallback transport boundary
 
 A clean installed profile was loaded with the Herdr environment removed.
 The fallback registered the single `Task` owner and loaded without extension errors.
 A foreground Luna Task returned `FALLBACK_CHILD_OK`, and the parent returned `FALLBACK_PARENT_OK`.
 The child used a persistent Pi session file under the disposable profile.
+This transport run predates the repaired fallback resource boundary and does not verify the current fallback prompt or model-routing behavior.
 
 ## Browser control boundary
 
@@ -41,7 +53,7 @@ The pinned `chrome-devtools-axi` version `0.1.33` connected to a disposable head
 It opened a data URL and returned an accessibility snapshot containing heading `PSTACK_AXI_OK` and button `Test` with current generation references.
 The bridge reported `status: stopped`, and the disposable browser process and profile were removed.
 
-## Harbor boundary
+## Historical Harbor boundary
 
 Harbor `0.17.1` loaded the pinned `spersico/pi-harbor-adapter` commit `55826f51ad17d8087c1606d0eaf85aa258b68bf2`.
 An install-only Terminal-Bench 2.1 trial completed with Pi `0.84.4`, the generated pstack profile, auth detection, and no model or verifier calls.
@@ -54,7 +66,9 @@ The plain agent command reported `NonZeroAgentExitCodeError` after completing th
 Pstack exceeded the three-times-token stop threshold without changing a control failure into a pass, so the five-task follow-up was not run.
 `BENCHMARK.md` records the complete pilot table and decision.
 
-## Hard-task benchmark boundary
+These Harbor outcomes predate the repaired worker and model-routing boundaries and are not evidence of the current port's workflow conformance or effectiveness.
+
+## Historical hard-task benchmark boundary
 
 Harbor `0.17.1` downloaded each of the six SWE-bench Pro task references frozen in `HARD-BENCHMARK.md` at registry revision `2`.
 Each downloaded `task.toml` declared the expected `scale-ai/<instance>` task name and a 3000-second agent and verifier timeout.

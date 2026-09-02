@@ -1,5 +1,9 @@
 # Hard-task pstack benchmark manifest
 
+> Historical result only.
+> The exploratory run predates the repaired worker identity, explicit skill-loading contract, thinking-aware model routing, four-member panel defaults, and fallback resource boundary.
+> Historical target commits also contaminated several trajectories, so this run does not establish current workflow conformance or unaided effectiveness.
+
 This manifest freezes a challenge set for comparing plain Pi with Pi plus pstack on coding tasks where successful completion is uncertain.
 It records the completed exploratory run but does not authorize confirmatory model runs.
 

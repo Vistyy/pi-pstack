@@ -20,6 +20,7 @@ Herdr, chrome-devtools-axi, Pi sessions, worktrees, and background workers
 ### Upstream layer
 
 `upstream.lock.json` identifies the exact pstack commit from which the current port is derived.
+The `vendor/pstack` branch is an immutable Git snapshot of that commit's pstack subtree, with the upstream commit and tree IDs recorded in commit trailers.
 The checkout under `.work/upstream/` is disposable and must remain byte-identical to that commit.
 `port-map.json` classifies upstream paths without changing them.
 `check-upstream.mjs` reports changes between the pinned commit and upstream `main`.
@@ -66,16 +67,25 @@ The intended mechanism mappings are:
 | `control-cli` | Herdr-backed terminal control adapter |
 | `control-ui` | chrome-devtools-axi-backed browser control adapter |
 
+A worker starts with resource discovery disabled and then receives an explicit allowlist.
+The allowlist contains inherited skills, the package's non-delegating core extension, safe external extensions, and `pstack_todo`.
+It excludes `Task`, other delegation tools, recursive delegation extensions, and delegation skills so one parent owns the worker graph.
+
+Model routing is a separate boundary from workflow prose.
+Each role resolves to one target or an ordered panel of targets, where a target contains a Pi `provider/model` selector and optional thinking level.
+Panel entries rotate per role rather than against one global task sequence, and alias entries still count toward panel length.
+
 ## Upgrade procedure
 
-1. Run `node scripts/check-upstream.mjs` and review every changed path.
-2. Run `node scripts/report-port.mjs` to distinguish exact copies, adaptations, omissions, and Pi-only files.
-3. Update platform-independent upstream files before changing adapters.
-4. Adapt only the changed mechanism boundaries.
-5. Update `capabilities.json` with implementation, verification, and deviation status.
-6. Run package checks and no-model integration checks.
-7. Obtain approval before model-backed comparisons.
-8. Update `upstream.lock.json` only after the target commit's supported behavior has been adapted and reviewed.
+1. Run `pnpm upstream:check` and review every changed path.
+2. Run `pnpm upstream:import <commit>` to create the exact next snapshot on `vendor/pstack`.
+3. Merge that vendor commit and use `pnpm port:diff` to inspect exact copies, adaptations, omissions, and Pi-only files.
+4. Update platform-independent upstream files before changing adapters.
+5. Adapt only the changed mechanism boundaries.
+6. Update `capabilities.json` with implementation, verification, and deviation status.
+7. Run `pnpm port:verify` for package, provenance, packed-install, and no-model integration checks.
+8. Obtain approval before model-backed comparisons.
+9. Update `upstream.lock.json` only after the target commit's supported behavior has been adapted and reviewed.
 
 ## Recovery boundary
 

@@ -1,5 +1,9 @@
 # Three-condition pstack benchmark
 
+> Historical result only.
+> This run predates the repaired worker identity, explicit skill-loading contract, thinking-aware model routing, four-member panel defaults, and fallback resource boundary.
+> It does not establish current workflow conformance or effectiveness.
+
 This benchmark determines whether the candidate pstack port improves completed coding outcomes enough to justify its additional model work and maintenance.
 Terminal-Bench verification is the primary outcome authority.
 Wall time, model sessions, tokens, and intervention are secondary costs.

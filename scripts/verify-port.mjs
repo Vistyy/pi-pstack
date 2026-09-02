@@ -7,6 +7,9 @@ const commands = [
   ["node", ["scripts/verify-vendor.mjs"]],
   ["node", ["scripts/report-port.mjs"]],
   ["node", ["scripts/sync-integrations.mjs"]],
+  ["pnpm", ["check"]],
+  ["node", ["scripts/smoke-profiles.mjs"]],
+  ["node", ["--import", "tsx", "scripts/smoke-worker-resources.ts"]],
 ];
 
 for (const [command, args] of commands) {

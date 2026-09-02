@@ -2,6 +2,11 @@
   "schemaVersion": 1,
   "rules": [
     {
+      "exact": "pstack/.gitignore",
+      "classification": "pi-owned-ignore-policy",
+      "action": "Preserve upstream entries and add only Pi package, verification, and local work outputs."
+    },
+    {
       "prefix": "pstack/.cursor-plugin/",
       "classification": "pi-owned-manifest",
       "action": "Do not copy Cursor metadata. Review version and resource-registration changes against package.json."

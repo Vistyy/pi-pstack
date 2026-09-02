@@ -12,8 +12,8 @@
       "scope": "core",
       "implementation": "complete",
       "verification": "mechanical",
-      "evidence": ["upstream.lock.json", ".work/port-report.json"],
-      "deviations": ["The upstream plugin manifest maps to package.json. Two invalid Pi skill names and the root README are adapted. The unsupported Grok Bot webhook skill is omitted."]
+      "evidence": ["upstream.lock.json", "vendor/pstack", ".work/port-report.json"],
+      "deviations": ["The upstream plugin manifest maps to package.json. Two invalid Pi skill names and the root README are adapted. The Grok Bot webhook skill, vendor-specific automated-review policy, and host-specific worktree audit are omitted."]
     },
     {
       "id": "mode/sticky-poteto-and-todo",
@@ -28,16 +28,16 @@
       "owner": "pi",
       "scope": "core",
       "implementation": "complete",
-      "verification": "end-to-end",
-      "evidence": ["test/workers/tool-contract.test.ts", "test/fallback.test.ts", "VERIFICATION.md"]
+      "verification": "mechanical",
+      "evidence": ["test/workers/tool-contract.test.ts", "test/fallback.test.ts", "scripts/smoke-worker-resources.ts", "VERIFICATION.md"]
     },
     {
       "id": "workers/foreground-and-background",
       "owner": "pi",
       "scope": "core",
       "implementation": "complete",
-      "verification": "end-to-end",
-      "evidence": ["test/workers/tool-contract.test.ts", "test/workers/manager.test.ts", "VERIFICATION.md"]
+      "verification": "mechanical",
+      "evidence": ["test/workers/tool-contract.test.ts", "test/workers/manager.test.ts", "scripts/smoke-worker-resources.ts", "VERIFICATION.md"]
     },
     {
       "id": "workers/persistent-session-and-completion-wake",
@@ -64,6 +64,15 @@
       "implementation": "complete",
       "verification": "mechanical",
       "evidence": ["test/workers/manager.test.ts", "test/workers/agent-view.test.ts"]
+    },
+    {
+      "id": "models/creator-equivalent-role-routing",
+      "owner": "pi",
+      "scope": "core",
+      "implementation": "complete",
+      "verification": "mechanical",
+      "evidence": ["extensions/pstack/config.ts", "test/config.test.ts", "test/workers/tool-contract.test.ts", "VERIFICATION.md"],
+      "deviations": ["Pi uses provider/model selectors plus explicit thinking levels instead of Cursor model slugs that embed reasoning levels."]
     },
     {
       "id": "interaction/structured-question",
@@ -105,6 +114,15 @@
       "implementation": "complete",
       "verification": "mechanical",
       "evidence": ["skills/poteto-mode/playbooks", "skills/poteto-mode/scripts", "VERIFICATION.md"]
+    },
+    {
+      "id": "workflow/model-conformance",
+      "owner": "upstream-pstack",
+      "scope": "core",
+      "implementation": "complete",
+      "verification": "unverified",
+      "evidence": ["VERIFICATION.md"],
+      "deviations": ["No model-backed conformance or effectiveness run has been performed after repairing identity, skill-loading, thinking-level, panel, and fallback-resource boundaries."]
     },
     {
       "id": "workflow/benny-automation-runtime",

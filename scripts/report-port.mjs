@@ -11,6 +11,7 @@ const checkout = path.join(root, ".work", "upstream");
 const packageRoot = root;
 const upstream = JSON.parse(fs.readFileSync(path.join(root, "upstream.lock.json"), "utf8"));
 const integrations = JSON.parse(fs.readFileSync(path.join(root, "integrations.lock.json"), "utf8"));
+const portMap = JSON.parse(fs.readFileSync(path.join(root, "port-map.json"), "utf8"));
 const officialDestinations = new Set(
   integrations.sources.flatMap((source) => source.files.map((file) => file.destination)),
 );
@@ -35,11 +36,16 @@ function digest(content) {
   return createHash("sha256").update(content).digest("hex");
 }
 
-function packageFiles(directory) {
-  if (!fs.existsSync(directory)) return [];
-  return fs.readdirSync(directory, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile())
-    .map((entry) => path.relative(packageRoot, path.join(entry.parentPath, entry.name)).split(path.sep).join("/"));
+function packageFiles() {
+  return git(["-C", packageRoot, "ls-files", "--cached", "--others", "--exclude-standard"])
+    .split("\n")
+    .filter(Boolean);
+}
+
+function policyFor(relative) {
+  const sourcePath = `${upstream.path}/${relative}`;
+  const rule = portMap.rules.find((candidate) => candidate.exact === sourcePath || (candidate.prefix && sourcePath.startsWith(candidate.prefix)));
+  return rule ? { classification: rule.classification, action: rule.action } : { classification: "unclassified", action: "Assign an owner before adapting this path." };
 }
 
 ensureCheckout();
@@ -64,7 +70,7 @@ for (const relative of upstreamFiles) {
   const source = gitBuffer(["-C", checkout, "show", `${upstream.commit}:${sourcePrefix}${relative}`]);
   const destination = path.join(packageRoot, relative);
   if (!fs.existsSync(destination)) {
-    rows.push({ path: relative, status: "omitted", upstreamSha256: digest(source) });
+    rows.push({ path: relative, status: "omitted", upstreamSha256: digest(source), ...policyFor(relative) });
     continue;
   }
   const packaged = fs.readFileSync(destination);
@@ -73,29 +79,20 @@ for (const relative of upstreamFiles) {
     status: source.equals(packaged) ? "exact" : "adapted",
     upstreamSha256: digest(source),
     packageSha256: digest(packaged),
+    ...policyFor(relative),
   });
 }
 
-const portMetadata = new Set([
-  ".gitignore",
-  "ARCHITECTURE.md",
-  "BENCHMARK.md",
-  "PORTING.md",
-  "capabilities.json",
-  "integrations.lock.json",
-  "port-map.json",
-  "upstream.lock.json",
-]);
-for (const relative of packageFiles(packageRoot).filter((file) =>
-  !file.startsWith(".git/") &&
-  !file.startsWith(".work/") &&
-  !file.split("/").includes("node_modules") &&
-  !file.startsWith("scripts/") &&
-  !file.startsWith("test/") &&
-  !portMetadata.has(file)
-).sort()) {
+for (const relative of packageFiles().sort()) {
   if (upstreamRelative.has(relative)) continue;
-  rows.push({ path: relative, status: officialDestinations.has(relative) ? "official-integration" : "pi-only", packageSha256: digest(fs.readFileSync(path.join(packageRoot, relative))) });
+  const official = officialDestinations.has(relative);
+  rows.push({
+    path: relative,
+    status: official ? "official-integration" : "pi-only",
+    packageSha256: digest(fs.readFileSync(path.join(packageRoot, relative))),
+    classification: official ? "official-integration" : "pi-owned",
+    action: official ? "Keep byte-identical to integrations.lock.json." : "Review as a Pi-owned addition.",
+  });
 }
 
 const counts = Object.fromEntries(
@@ -106,3 +103,8 @@ const reportPath = path.join(root, ".work", "port-report.json");
 fs.mkdirSync(path.dirname(reportPath), { recursive: true });
 fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
 process.stdout.write(`${JSON.stringify({ ...report, files: undefined, reportPath: path.relative(root, reportPath) }, null, 2)}\n`);
+const unclassified = rows.filter((row) => row.classification === "unclassified");
+if (unclassified.length > 0) {
+  process.stderr.write(`Unclassified upstream paths: ${unclassified.map((row) => row.path).join(", ")}\n`);
+  process.exitCode = 1;
+}

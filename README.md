@@ -4,7 +4,7 @@
 One Pi package installs the extension adapters, supported pstack skills, agents, playbooks, scripts, official integration skills, and JavaScript runtime dependencies.
 
 The package preserves upstream pstack content unless Pi needs a different host mechanism.
-`upstream.lock.json`, `integrations.lock.json`, and `scripts/report-port.mjs` make that boundary inspectable.
+`vendor/pstack`, `upstream.lock.json`, `integrations.lock.json`, and `scripts/report-port.mjs` make that boundary inspectable.
 
 ## Pi runtime
 
@@ -13,7 +13,7 @@ The package preserves upstream pstack content unless Pi needs a different host m
 - Outside Herdr, workers use persistent Pi session files, background completion wakes, and standard local Git worktrees.
 - Pi's `/loop` command and the `pstack_loop` tool own bounded autonomous predicates.
 - `pstack_question` presents an interactive selection and fails closed to a persisted human gate without a UI.
-- `/setup-pstack` and `pstack_config` own model-role configuration.
+- `/setup-pstack` and `pstack_config` own model-role selectors, thinking levels, ordered panels, and panel sizes.
 - `pstack_sessions` provides workspace-scoped transcript discovery and reads.
 - `control-cli` uses the pinned official Herdr skill.
 - `control-ui` uses the pinned official chrome-devtools-axi skill.
@@ -41,7 +41,8 @@ Bun is a system prerequisite for the lifted orchestration and PR watcher scripts
 Git is required when a Task requests `isolation: worktree`.
 Browser work uses `npx -y chrome-devtools-axi` as directed by the official skill.
 
-Run `/setup-pstack` once to map pstack roles to models available in the current Pi installation.
+Run `/setup-pstack` once to confirm that the creator-equivalent default role map is available or to select replacements.
+The default map preserves the upstream model families, reasoning levels, panel order, and four-member review panels through Pi `provider/model` selectors.
 Run `/poteto-mode` to enable sticky Poteto Mode for an interactive session.
 Run `/loop <verified completion predicate>` for autonomous work that needs a bounded heartbeat, and run `/loop stop` to cancel it.
 
@@ -62,15 +63,13 @@ pnpm install
 pnpm check
 ```
 
-Run provenance and profile checks with:
+Run the complete provenance, package, integration, packed-profile, and worker-resource verification with:
 
 ```bash
-node scripts/check-upstream.mjs
-node scripts/sync-integrations.mjs
-node scripts/report-port.mjs
-node scripts/smoke-profiles.mjs
+pnpm port:verify
 ```
 
-`BENCHMARK.md` records the controlled Harbor pilot against clean Pi and the current local configuration.
-All three conditions passed, but pstack crossed the token-overhead stop threshold, so no larger benchmark was run.
+Inspect the complete Git overlay with `pnpm port:diff -- --name-status`, `pnpm port:diff`, or `pnpm port:difftool`.
+`BENCHMARK.md` and `HARD-BENCHMARK.md` retain historical experiments and their interpretation limits.
+Those runs predate the repaired worker identity, skill-loading, model-thinking, and panel-routing boundaries, so they are not evidence of current workflow conformance or effectiveness.
 `ARCHITECTURE.md`, `PORTING.md`, `THIRD_PARTY_NOTICES.md`, and the lock files document ownership and update policy.

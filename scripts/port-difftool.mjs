@@ -3,7 +3,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const result = spawnSync("git", ["-C", root, "difftool", "--find-renames", ...process.argv.slice(2), "vendor/pstack", "HEAD"], {
+const args = process.argv.slice(2);
+if (args[0] === "--") args.shift();
+const result = spawnSync("git", ["-C", root, "difftool", "--find-renames", ...args, "vendor/pstack", "HEAD"], {
   stdio: "inherit",
 });
 
