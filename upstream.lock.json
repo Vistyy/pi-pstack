@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/cursor/plugins.git",
+  "path": "pstack",
+  "commit": "efa2a531985e0a8084d36ff3cf87233be8a9f34b",
+  "pluginVersion": "0.14.7",
+  "portSeed": {
+    "repository": "https://github.com/kkgogogo17/pi-pstack.git",
+    "baseCommit": "14da130e7aac196d355fa70706b06d5b4d71e095",
+    "adaptationCommit": "9ddf6d43eba77aa95c837df7d649c2be90202d6b"
+  }
+}

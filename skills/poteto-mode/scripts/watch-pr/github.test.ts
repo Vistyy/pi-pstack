@@ -192,7 +192,7 @@ describe("closed enum parsing", () => {
   });
 });
 
-it("annotates Bugbot threads with distinct review-pass counts", () => {
+it("annotates automated-review threads with distinct review-pass counts", () => {
   const response = {
     data: {
       repository: {
@@ -209,7 +209,7 @@ it("annotates Bugbot threads with distinct review-pass counts", () => {
                       createdAt: "now",
                       path: "a.ts",
                       line: 1,
-                      author: { login: "bugbot" },
+                      author: { login: "reviewer[bot]" },
                     },
                   ],
                 },
@@ -220,11 +220,11 @@ it("annotates Bugbot threads with distinct review-pass counts", () => {
                 comments: {
                   nodes: [
                     {
-                      body: "CURSOR_AUTOMATION_ID: run-2 severity high",
+                      body: "RUN_ID: run-2 automated review severity high",
                       createdAt: "now",
                       path: null,
                       line: null,
-                      author: { login: "cursor" },
+                      author: { login: "security-reviewer[bot]" },
                     },
                   ],
                 },
@@ -239,7 +239,7 @@ it("annotates Bugbot threads with distinct review-pass counts", () => {
                       createdAt: "now",
                       path: null,
                       line: null,
-                      author: { login: "bugbot" },
+                      author: { login: "reviewer[bot]" },
                     },
                   ],
                 },
@@ -252,8 +252,8 @@ it("annotates Bugbot threads with distinct review-pass counts", () => {
   };
   const threads = parseReviewThreads(response);
   expect(threads).toHaveLength(2);
-  expect(threads.map((thread) => thread.isBugbot)).toEqual([true, true]);
-  expect(threads.map((thread) => thread.bugbotReviewPasses)).toEqual([3, 3]);
+  expect(threads.map((thread) => thread.isAutomatedReview)).toEqual([true, true]);
+  expect(threads.map((thread) => thread.automatedReviewPasses)).toEqual([3, 3]);
 });
 
 describe("context and stack discovery", () => {

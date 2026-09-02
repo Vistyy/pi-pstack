@@ -1,0 +1,83 @@
+{
+  "name": "@vistyy/pi-pstack",
+  "version": "0.14.7-pi.0",
+  "type": "module",
+  "description": "Pi-native port of pstack workflows, agents, scripts, and local Herdr workers.",
+  "license": "MIT",
+  "author": "Lauren Tan; Pi adaptation maintained by Vistyy",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Vistyy/pi-pstack.git"
+  },
+  "homepage": "https://github.com/Vistyy/pi-pstack#readme",
+  "bugs": {
+    "url": "https://github.com/Vistyy/pi-pstack/issues"
+  },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "skills",
+    "subagent",
+    "pstack"
+  ],
+  "files": [
+    "extensions",
+    "skills",
+    "agents",
+    "licenses",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "ARCHITECTURE.md",
+    "VERIFICATION.md",
+    "capabilities.json",
+    "integrations.lock.json",
+    "upstream.lock.json"
+  ],
+  "scripts": {
+    "test": "pnpm test:pi && pnpm test:upstream",
+    "test:pi": "node --import tsx --test test/*.test.ts test/workers/*.test.ts",
+    "test:upstream": "cd skills/poteto-mode/scripts && bun test orch watch-pr",
+    "typecheck": "tsc --noEmit && cd skills/poteto-mode/scripts && bun run typecheck",
+    "check": "pnpm test && pnpm typecheck"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/pstack/index.ts",
+      "./extensions/pstack-workers/index.ts",
+      "./extensions/pstack-fallback/index.ts"
+    ],
+    "skills": [
+      "./skills"
+    ],
+    "subagents": {
+      "agents": [
+        "./agents"
+      ]
+    }
+  },
+  "pi-subagents": {
+    "agents": [
+      "./agents"
+    ]
+  },
+  "dependencies": {
+    "commander": "14.0.0",
+    "minimatch": "^10.2.5",
+    "yaml": "^2.8.1"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "0.84.4",
+    "@earendil-works/pi-coding-agent": "0.84.4",
+    "@types/node": "^24.0.0",
+    "bun-types": "^1.4.0",
+    "tsx": "^4.23.0",
+    "typebox": "^1.0.0",
+    "typescript": "^5.9.0"
+  }
+}

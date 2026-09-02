@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "statusValues": {
+    "scope": ["core", "deferred", "unsupported"],
+    "implementation": ["absent", "partial", "complete"],
+    "verification": ["unverified", "static", "mechanical", "model", "end-to-end"]
+  },
+  "capabilities": [
+    {
+      "id": "upstream/content",
+      "owner": "upstream-pstack",
+      "scope": "core",
+      "implementation": "complete",
+      "verification": "mechanical",
+      "evidence": ["upstream.lock.json", ".work/port-report.json"],
+      "deviations": ["The upstream plugin manifest maps to package.json. Two invalid Pi skill names and the root README are adapted. The unsupported Grok Bot webhook skill is omitted."]
+    },
+    {
+      "id": "mode/sticky-poteto-and-todo",
+      "owner": "pi",
+      "scope": "core",
+      "implementation": "complete",
+      "verification": "mechanical",
+      "evidence": ["test/package.test.ts", "test/port.test.ts"]
+    },
+    {
+      "id": "workers/task-routing",
+      "owner": "pi",
+      "scope": "core",
+      "implementation": "complete",
+      "verification": "end-to-end",
+      "evidence": ["test/workers/tool-contract.test.ts", "test/fallback.test.ts", "VERIFICATION.md"]
+    },
+    {
+      "id": "workers/foreground-and-background",
+      "owner": "pi",
+      "scope": "core",
+      "implementation": "complete",
+      "verification": "end-to-end",
+      "evidence": ["test/workers/tool-contract.test.ts", "test/workers/manager.test.ts", "VERIFICATION.md"]
+    },
+    {
+      "id": "workers/persistent-session-and-completion-wake",
+      "owner": "pi",
+      "scope": "core",
+      "implementation": "complete",
+      "verification": "end-to-end",
+      "evidence": ["test/workers/manager.test.ts", "VERIFICATION.md"],
+      "deviations": ["The non-Herdr fallback cannot reattach to a subprocess whose completion raced a parent crash, but it preserves the child session file and recorded state."]
+    },
+    {
+      "id": "workers/worktree-isolation",
+      "owner": "pi",
+      "scope": "core",
+      "implementation": "complete",
+      "verification": "mechanical",
+      "evidence": ["test/workers/herdr.test.ts", "test/workers/tool-contract.test.ts", "VERIFICATION.md"],
+      "deviations": ["The port provides local worktree isolation, not remote worker compute."]
+    },
+    {
+      "id": "workers/restart-reconciliation",
+      "owner": "pi",
+      "scope": "core",
+      "implementation": "complete",
+      "verification": "mechanical",
+      "evidence": ["test/workers/manager.test.ts", "test/workers/agent-view.test.ts"]
+    },
+    {
+      "id": "interaction/structured-question",
+      "owner": "pi",
+      "scope": "core",
+      "implementation": "complete",
+      "verification": "static",
+      "evidence": ["extensions/pstack/index.ts"]
+    },
+    {
+      "id": "interaction/autonomous-loop",
+      "owner": "pi",
+      "scope": "core",
+      "implementation": "complete",
+      "verification": "static",
+      "evidence": ["extensions/pstack/index.ts"],
+      "deviations": ["Pi uses a persisted predicate and bounded timer heartbeat."]
+    },
+    {
+      "id": "integration/herdr-control-cli",
+      "owner": "herdrdev/herdr",
+      "scope": "core",
+      "implementation": "complete",
+      "verification": "end-to-end",
+      "evidence": ["integrations.lock.json", "skills/control-cli/SKILL.md", "VERIFICATION.md"]
+    },
+    {
+      "id": "integration/chrome-devtools-axi-control-ui",
+      "owner": "kunchenguid/chrome-devtools-axi",
+      "scope": "core",
+      "implementation": "complete",
+      "verification": "end-to-end",
+      "evidence": ["integrations.lock.json", "skills/control-ui/SKILL.md", "VERIFICATION.md"]
+    },
+    {
+      "id": "workflow/playbooks-and-scripts",
+      "owner": "upstream-pstack",
+      "scope": "core",
+      "implementation": "complete",
+      "verification": "mechanical",
+      "evidence": ["skills/poteto-mode/playbooks", "skills/poteto-mode/scripts", "VERIFICATION.md"]
+    },
+    {
+      "id": "workflow/benny-automation-runtime",
+      "owner": "upstream-pstack",
+      "scope": "unsupported",
+      "implementation": "absent",
+      "verification": "static",
+      "evidence": ["automations/benny"],
+      "deviations": ["The complete sources are retained in the repository but excluded from the npm package because Pi has no equivalent automation trigger, credential, and authorization lifecycle."]
+    }
+  ]
+}

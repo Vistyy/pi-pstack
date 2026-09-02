@@ -1,14 +1,22 @@
-### Worktree and simulator cleanup
+### Worktree cleanup
 
-**You own the disk and the safety gate.** Prune merged or abandoned git worktrees and stale iOS simulators to reclaim space. Deletion is irreversible, so every step guards against deleting something in use or holding uncommitted work.
+**You own the disk and the safety gate.**
+Prune merged or abandoned Git worktrees without deleting active Pi sessions or uncommitted work.
 
-1. Snapshot and audit. Record `df -h /`, then run `scripts/worktree-audit.sh` (principle-build-the-lever). It reads paths from `git worktree list`, never hand-typed, since a hand-typed `myrepo-worktrees/x` misses one that lives at `.cursor/worktrees/myrepo/x` (principle-encode-lessons-in-structure). It classifies each worktree by size, age, merge state, uncommitted work, PR state, and the newest chat that touched it, then suggests a bucket. The transcript scan is slow, so background it.
-2. The bucket is advice, not permission. The pinned and active chats are the real artifact (principle-prove-it-works). Get that set from the user or sidebar and cross-check every candidate. The lever has marked `safe` a worktree the user had pinned, so the pinned set wins.
-3. Verify usage before deleting. For every `verify-recent-chat` row, or anything you doubt, fan subagents out to read the transcripts and report whether the chat is pinned or ongoing and which worktrees it touches (principle-guard-the-context-window, transcripts are bulk). A pinned chat spawns arena and repro trees into sibling worktrees via background subagents, and those are in use even when their names never hit the sidebar.
-4. Pause on irreversible loss. `wip:N` is N tracked uncommitted edits. Show the diff and get a decision first, since removing a clean worktree is recoverable from its branch but uncommitted work is gone. `scratch:N` is untracked throwaway, safe to drop, but name the files. Per Autonomy, clean and merged and not-in-use proceeds; `wip` and in-use pause.
-5. Prune the confirmed set. Per path, `git worktree remove --force <path>`; if the dir survives on ignored build artifacts, `rm -rf` it, then `git worktree prune`. Branch refs survive, so no commits are lost. Confirm with `df -h /` and re-list.
-6. Simulators and other reclaimers. Simulators are usually the next-biggest win. `xcrun simctl --set testing delete all` (XCTestDevices clones), `xcrun simctl delete unavailable`, and `xcrun simctl runtime list` then `runtime delete <id>` for old runtimes. More when needed: Xcode `DerivedData` and `iOS DeviceSupport`; `~/Library/Application Support/Cursor` (`state.vscdb.backup`, and `snapshots/roots/<root>` where a `<root>` named for a folder you opened as a workspace balloons); package caches (pnpm, uv, brew, yarn). Clear only caches the user has not said to keep.
+1. Snapshot disk usage with `df -h /` and derive candidates from `git worktree list --porcelain` or `herdr worktree list`.
+Never construct candidate paths from naming conventions.
+2. Call `list_agents` and inspect Herdr workspaces before classifying a worktree as unused.
+Use `pstack_sessions` when a saved Pi session must be reconciled with a candidate branch or path.
+3. For each candidate, record its branch, merge state, PR state, tracked changes, untracked files, owning Herdr workspace, and newest relevant Pi session.
+A clean merged branch with no live owner is removable.
+An active worker, open PR, uncertain ownership, or any uncommitted data is a hold.
+4. Show the exact diff and untracked file list before asking about irreversible loss.
+Do not treat untracked files as disposable without evidence.
+5. Prefer `herdr worktree remove --workspace <id>` for a Herdr-owned worktree because Herdr owns that workspace lifecycle.
+Use `git worktree remove <derived-path>` for an ordinary Git worktree.
+Use `--force` only after explicit confirmation that no uncommitted state must survive.
+6. Run `git worktree prune`, re-list the authoritative worktree state, and compare `df -h /` with the initial snapshot.
+7. Treat package-manager caches and build outputs as separate cleanup targets.
+Derive their exact paths from the owning tool, inspect their current use, and request confirmation before recursive deletion.
 
-This is the one playbook that deletes user state with no code review to catch a slip, so the gates above are the review.
-
-**Reply:** `df -h /` before and after with space reclaimed, the worktrees pruned, and a one-line reason for each held back (in-use by which chat, or uncommitted work).
+**Reply:** show disk usage before and after, every removed worktree with its authoritative owner and branch, and every held candidate with the reason.

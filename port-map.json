@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "rules": [
+    {
+      "prefix": "pstack/.cursor-plugin/",
+      "classification": "pi-owned-manifest",
+      "action": "Do not copy Cursor metadata. Review version and resource-registration changes against package.json."
+    },
+    {
+      "prefix": "pstack/assets/",
+      "classification": "copy",
+      "action": "Retain unchanged in the repository for provenance, but exclude it from the runtime npm package."
+    },
+    {
+      "prefix": "pstack/automations/",
+      "classification": "dormant-source",
+      "action": "Retain unchanged in the repository, exclude it from the runtime npm package, and do not claim an active Pi automation lifecycle."
+    },
+    {
+      "prefix": "pstack/docs/",
+      "classification": "source-documentation",
+      "action": "Retain unchanged as repository source documentation, exclude it from the runtime npm package, and keep Pi installation claims in the root README."
+    },
+    {
+      "prefix": "pstack/agents/",
+      "classification": "semantic-review",
+      "action": "Adapt agent metadata, background behavior, tool access, and model inheritance to the Pi subagent contract."
+    },
+    {
+      "exact": "pstack/skills/why/references/sources/code-archaeology.md",
+      "classification": "copy",
+      "action": "Retain the source-control playbook because git and gh are supported runtime mechanisms."
+    },
+    {
+      "prefix": "pstack/skills/why/references/sources/",
+      "classification": "unsupported-integration-examples",
+      "action": "Omit vendor-specific source playbooks and use the generic loaded-integration procedure instead."
+    },
+    {
+      "exact": "pstack/skills/make-bot-ui/SKILL.md",
+      "classification": "unsupported-integration",
+      "action": "Omit the Grok Bot webhook skill because Pi has no accepted requirement for that integration."
+    },
+    {
+      "exact": "pstack/skills/poteto-mode/references/bugbot-triage.md",
+      "classification": "unsupported-vendor-policy",
+      "action": "Omit the vendor-specific policy and use references/automated-review-triage.md for loaded automated reviewers."
+    },
+    {
+      "exact": "pstack/skills/poteto-mode/scripts/worktree-audit.sh",
+      "classification": "unsupported-host-script",
+      "action": "Omit the transcript-path-specific audit script and use the Pi and Herdr ownership checks in worktree-cleanup.md."
+    },
+    {
+      "prefix": "pstack/skills/poteto-mode/scripts/",
+      "classification": "runtime-review",
+      "action": "Port runtime dependencies and verify normal, cancellation, timeout, and failure behavior."
+    },
+    {
+      "prefix": "pstack/skills/",
+      "classification": "semantic-review",
+      "action": "Preserve workflow intent while translating every active host mechanism to a Pi-native tool, field, path, or lifecycle."
+    },
+    {
+      "exact": "pstack/LICENSE",
+      "classification": "copy",
+      "action": "Preserve upstream license and attribution."
+    },
+    {
+      "exact": "pstack/README.md",
+      "classification": "semantic-review",
+      "action": "Keep upstream claims separate from verified Pi-port behavior."
+    },
+    {
+      "prefix": "pstack/",
+      "classification": "unclassified",
+      "action": "Stop synchronization and assign an explicit owner before changing the port."
+    }
+  ]
+}

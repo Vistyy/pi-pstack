@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "name": "herdr",
+      "repository": "https://github.com/herdrdev/herdr.git",
+      "commit": "cc88b3b8e5bb9f7d9f23ed6ae85a52fd7b5b9ed6",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "source": "skills/herdr/SKILL.md",
+          "destination": "skills/herdr/SKILL.md",
+          "sha256": "237ad2ab2d8123e2bb37956d3a41eed141f2d22a7c36e415b7876c0397679099"
+        },
+        {
+          "source": "LICENSE",
+          "destination": "licenses/herdr.txt",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        }
+      ]
+    },
+    {
+      "name": "chrome-devtools-axi",
+      "repository": "https://github.com/kunchenguid/chrome-devtools-axi.git",
+      "commit": "351be6bb8665fda10168242d965a966596d66772",
+      "version": "0.1.33",
+      "license": "MIT",
+      "files": [
+        {
+          "source": "skills/chrome-devtools-axi/SKILL.md",
+          "destination": "skills/chrome-devtools-axi/SKILL.md",
+          "sha256": "e75b29300e0af202210bdd9d9e78bb2f943c4b2fb7c92265ce34c7e93c5ce19d"
+        },
+        {
+          "source": "LICENSE",
+          "destination": "licenses/chrome-devtools-axi.txt",
+          "sha256": "945016bd37e1ba7211622ef60ee1d23ab727896ba7710edd21e8fbe983863969"
+        }
+      ]
+    },
+    {
+      "name": "cursor-team-kit",
+      "repository": "https://github.com/cursor/plugins.git",
+      "commit": "23a56e2dac2efd54788056db8eced26e371d7b5e",
+      "version": "1.2.0",
+      "license": "MIT",
+      "files": [
+        {
+          "source": "cursor-team-kit/skills/deslop/SKILL.md",
+          "destination": "skills/deslop/SKILL.md",
+          "sha256": "2f7b7def74af7ed11f5b44b4d32f0f91fca8c5d1f92bf2171e8d12fd33a0f810"
+        },
+        {
+          "source": "cursor-team-kit/LICENSE",
+          "destination": "licenses/cursor-team-kit.txt",
+          "sha256": "702f5f331b56aff0e33d8c7826df5202559f894145eb70355c6477b55b5bb8a0"
+        }
+      ]
+    }
+  ],
+  "adaptations": [
+    {
+      "name": "control-cli-herdr",
+      "repository": "https://github.com/cursor/plugins.git",
+      "commit": "23a56e2dac2efd54788056db8eced26e371d7b5e",
+      "source": "cursor-team-kit/skills/control-cli/SKILL.md",
+      "destination": "skills/control-cli/SKILL.md",
+      "mechanism": "Replace tmux and generic PTY control with the separately pinned official Herdr skill and CLI."
+    },
+    {
+      "name": "control-ui-chrome-devtools-axi",
+      "repository": "https://github.com/cursor/plugins.git",
+      "commit": "23a56e2dac2efd54788056db8eced26e371d7b5e",
+      "source": "cursor-team-kit/skills/control-ui/SKILL.md",
+      "destination": "skills/control-ui/SKILL.md",
+      "mechanism": "Replace Playwright and generic CDP control with the separately pinned official chrome-devtools-axi skill and CLI."
+    }
+  ]
+}

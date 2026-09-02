@@ -472,19 +472,22 @@ function createProgram(io: Io): Command {
 
   const frontier = program
     .command("frontier")
-    .description("manage the Graphite stack frontier")
+    .description("manage the ordered GitHub pull-request frontier")
     .action(() => requireSubcommand(program));
-  leaf(frontier, "set", "discover the Graphite stack and set the frontier")
+  leaf(frontier, "set", "resolve the ordered GitHub pull requests and set the frontier")
     .addOption(
       new Option(
         "--repo <dir>",
         "repository directory (or ORCH_REPO)"
       ).env("ORCH_REPO")
     )
-    .option(
-      "--prs <n,...>",
-      "optional expected pull request order pin",
-      prList
+    .addOption(
+      new Option(
+        "--prs <n,...>",
+        "ordered pull request numbers from bottom to top"
+      )
+        .argParser(prList)
+        .makeOptionMandatory()
     )
     .action((options: FrontierSetOptions) =>
       runStore(

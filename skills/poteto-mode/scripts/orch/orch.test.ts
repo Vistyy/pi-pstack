@@ -102,54 +102,47 @@ async function makeGitStack(directory: string): Promise<{
   };
 }
 
-async function withFakeGt<T>({
+async function withFakeGh<T>({
   directory,
   operation,
-  output,
+  responses,
 }: {
   directory: string;
-  operation: (outputPath: string) => Promise<T>;
-  output: string;
+  operation: () => Promise<T>;
+  responses: Readonly<Record<number, object | string>>;
 }): Promise<T> {
   const bin = join(directory, "bin");
-  const outputPath = join(directory, "gt-output.txt");
+  const responsesDirectory = join(directory, "gh-responses");
   await mkdir(bin);
-  await writeFile(outputPath, output);
-  const gt = join(bin, "gt");
+  await mkdir(responsesDirectory);
+  for (const [pr, response] of Object.entries(responses)) {
+    await writeFile(
+      join(responsesDirectory, `${pr}.json`),
+      typeof response === "string" ? response : JSON.stringify(response)
+    );
+  }
+  const gh = join(bin, "gh");
   await writeFile(
-    gt,
+    gh,
     `#!/usr/bin/env bash
 set -euo pipefail
 if [ "$(pwd -P)" != "${realpathSync(join(directory, "repo"))}" ]; then
-  printf 'gt ran outside the fixture repo: %s\\n' "$(pwd -P)" >&2
+  printf 'gh ran outside the fixture repo: %s\\n' "$(pwd -P)" >&2
   exit 2
 fi
-case "$*" in
-  "--no-interactive log short --stack --reverse")
-    cat "${outputPath}"
-    ;;
-  "--no-interactive info stack/merged")
-    printf 'stack/merged\\nPR #10 (Merged) merged change\\n'
-    ;;
-  "--no-interactive info stack/closed")
-    printf 'stack/closed\\nPR #13 (Closed) closed change\\n'
-    ;;
-  "--no-interactive info stack/open")
-    printf 'stack/open\\nPR #11 (Needs approvals) open change\\n'
-    ;;
-  *)
-    printf 'unexpected gt arguments: %s\\n' "$*" >&2
-    exit 2
-    ;;
-esac
+if [ "$1 $2 $4 $5" != "pr view --json number,state,headRefName,headRefOid" ]; then
+  printf 'unexpected gh arguments: %s\\n' "$*" >&2
+  exit 2
+fi
+cat "${responsesDirectory}/$3.json"
 `
   );
-  await chmod(gt, 0o755);
+  await chmod(gh, 0o755);
 
   const originalPath = process.env.PATH;
   process.env.PATH = `${bin}:${originalPath ?? ""}`;
   try {
-    return await operation(outputPath);
+    return await operation();
   } finally {
     if (originalPath === undefined) {
       delete process.env.PATH;
@@ -406,91 +399,49 @@ describe("Store", () => {
     ]);
   });
 
-  it("resolves the ordered Graphite frontier and validates an optional pin", async () => {
+  it("resolves the ordered GitHub frontier from the required PR list", async () => {
     const { directory, store } = await initializedStore();
     const stack = await makeGitStack(directory);
-    const output = `◯ main
-◯ stack/merged
-◯ stack/closed
-◉ stack/open (current)
-`;
 
-    await withFakeGt({
+    await withFakeGh({
       directory,
-      output,
+      responses: {
+        10: { number: 10, state: "MERGED", headRefName: "stack/merged", headRefOid: stack.mergedSha },
+        13: { number: 13, state: "CLOSED", headRefName: "stack/closed", headRefOid: stack.closedSha },
+        11: { number: 11, state: "OPEN", headRefName: "stack/open", headRefOid: stack.openSha },
+      },
       operation: async () => {
-        expect(await store.frontier.set({ repo: stack.repo })).toEqual({
+        expect(await store.frontier.set({ repo: stack.repo, prs: [10, 13, 11] })).toEqual({
           generation: 1,
           prs: [
-            {
-              pr: 10,
-              branches: "stack/merged",
-              sha: stack.mergedSha,
-              state: "MERGED",
-            },
-            {
-              pr: 13,
-              branches: "stack/closed",
-              sha: stack.closedSha,
-              state: "CLOSED",
-            },
-            {
-              pr: 11,
-              branches: "stack/open",
-              sha: stack.openSha,
-              state: "OPEN",
-            },
+            { pr: 10, branches: "stack/merged", sha: stack.mergedSha, state: "MERGED" },
+            { pr: 13, branches: "stack/closed", sha: stack.closedSha, state: "CLOSED" },
+            { pr: 11, branches: "stack/open", sha: stack.openSha, state: "OPEN" },
           ],
           lowestUnmerged: 11,
         });
-        expect(
-          (
-            await store.frontier.set({
-              repo: stack.repo,
-              prs: [10, 13, 11],
-            })
-          ).generation
-        ).toBe(2);
-        expect((await store.frontier.show()).generation).toBe(2);
-        await expect(
-          store.frontier.set({
-            repo: stack.repo,
-            prs: [10, 11, 12],
-          })
-        ).rejects.toThrow(
-          "frontier pin mismatch: missing from gt: 12; extra in gt: 13"
+        expect((await store.frontier.show()).generation).toBe(1);
+        await expect(store.frontier.set({ repo: stack.repo })).rejects.toThrow(
+          "--prs is required for GitHub frontier resolution"
         );
         await expect(
-          store.frontier.set({
-            repo: stack.repo,
-            prs: [13, 10, 11],
-          })
-        ).rejects.toThrow(
-          "frontier pin mismatch: order differs: expected 13,10,11; gt 10,13,11"
-        );
-        await expect(
-          store.frontier.set({
-            repo: stack.repo,
-            prs: [10, 10],
-          })
+          store.frontier.set({ repo: stack.repo, prs: [10, 10] })
         ).rejects.toThrow("--prs must not contain duplicates");
       },
     });
   });
 
-  it("rejects unparseable Graphite output loudly", async () => {
+  it("rejects invalid GitHub frontier metadata loudly", async () => {
     const { directory, store } = await initializedStore();
     const stack = await makeGitStack(directory);
 
-    await withFakeGt({
+    await withFakeGh({
       directory,
-      output: "◯ main\nthis line is not Graphite output\n",
+      responses: { 10: "not-json" },
       operation: async () => {
         await expect(
-          store.frontier.set({ repo: stack.repo })
-        ).rejects.toThrow(
-          'gt log short output has an unparseable line 2: "this line is not Graphite output"'
-        );
+          store.frontier.set({ repo: stack.repo, prs: [10] })
+        ).rejects.toThrow("gh pr view 10 returned invalid JSON");
       },
     });
   });
@@ -586,6 +537,8 @@ describe("orch CLI", () => {
       directory,
       "frontier",
       "set",
+      "--prs",
+      "1",
     ]);
     expect(missingRepo.code).toBe(1);
     expect(missingRepo.stderr).toContain(
