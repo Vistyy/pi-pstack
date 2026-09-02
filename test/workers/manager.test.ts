@@ -65,6 +65,7 @@ class FakeHerdr {
   createCalls = 0;
   sessionFile = "";
   activeSessionFile = "";
+  reportedSessionFile: string | undefined;
   currentStatus: "idle" | "working" | "blocked" = "idle";
   interruptWaitError: Error | undefined;
   interruptFailureStatus: "idle" | "working" | "blocked" | undefined;
@@ -102,6 +103,7 @@ class FakeHerdr {
     if (sessionIndex >= 0) {
       this.activeSessionFile = args![sessionIndex + 1];
       if (this.sessionFile !== this.activeSessionFile) await copyFile(this.sessionFile, this.activeSessionFile);
+      if (this.reportedSessionFile && this.reportedSessionFile !== this.activeSessionFile) await copyFile(this.sessionFile, this.reportedSessionFile);
     }
     return {
       pane_id: "w1:p2",
@@ -109,6 +111,7 @@ class FakeHerdr {
       workspace_id: "w1",
       agent_status: "idle" as const,
       name: this.agentName,
+      ...(this.reportedSessionFile ? { agent_session: { value: this.reportedSessionFile } } : {}),
     };
   }
   async reportDisplayAgent(paneId: string, name: string) {
@@ -215,6 +218,25 @@ test("a start uses the explicitly selected identity", async () => {
   assert.equal(record.identity, "reviewer");
   const modelIndex = fake.startArgs.indexOf("--model");
   assert.equal(fake.startArgs[modelIndex + 1], "selected-model");
+});
+
+test("a start adopts the child session path reported by Herdr", async () => {
+  const fake = new FakeHerdr();
+  fake.sessionFile = await childSessionFile();
+  fake.reportedSessionFile = join(await mkdtemp(join(tmpdir(), "pi-reported-session-")), "actual.jsonl");
+  const manager = new AgentManager(
+    fake as unknown as HerdrClient,
+    testConfig(),
+    "w1",
+    dirname(fake.sessionFile),
+    "parent",
+    { provider: "test", model: "parent-model", thinking: "medium" },
+    { persist() {} },
+  );
+
+  const record = await manager.start({ name: "check", identityName: "reviewer", task: "Check it.", keepOpen: true, cwd: "/repo" });
+
+  assert.equal(record.sessionFile, fake.reportedSessionFile);
 });
 
 test("a start rejects an unknown selected identity", async () => {

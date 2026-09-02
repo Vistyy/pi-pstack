@@ -45,7 +45,7 @@ test("Pi cross-skill instructions point at packaged skill files", () => {
 test("worker identities preserve upstream behavior with only Pi host adaptations", () => {
   const upstreamPoteto = fs.readFileSync(path.join(root, "agents/poteto-agent.md"), "utf8");
   const workerPoteto = fs.readFileSync(path.join(root, "extensions/pstack-workers/identities/poteto-agent.md"), "utf8");
-  assert.equal(workerPoteto, upstreamPoteto);
+  assert.equal(workerPoteto, upstreamPoteto.replace("is_background: true\n", ""));
 
   const upstreamComment = fs.readFileSync(path.join(root, "agents/comment-sicko.md"), "utf8");
   const expectedComment = upstreamComment

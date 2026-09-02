@@ -6,7 +6,7 @@ Generated logs and disposable profiles remain under `.work/` and are not release
 ## Current no-model boundaries
 
 `pnpm port:verify` verified that `vendor/pstack` has the exact locked upstream tree and the required upstream commit and tree trailers.
-It passed 96 Pi boundary tests, 52 lifted upstream Bun tests, the root TypeScript check, and the upstream watch-pr TypeScript check.
+It passed 98 Pi boundary tests, 52 lifted upstream Bun tests, the root TypeScript check, and the upstream watch-pr TypeScript check.
 It verified all six pinned official files by SHA-256 digest.
 The generated port report records 99 exact files, 55 adapted files, four intentional omissions, six official integration files, and 66 Pi-owned files.
 The remaining omissions are the upstream plugin manifest, the unsupported Grok Bot skill, the vendor-specific automated-review policy, and the host-specific worktree audit.
@@ -22,6 +22,18 @@ The configured creator-equivalent model selectors were resolved through Pi's mod
 All four selected model IDs were available: `opencode-go/grok-4.6`, `openrouter/anthropic/claude-fable-5.1`, `openai-codex/gpt-5.6-sol`, and `openrouter/anthropic/claude-opus-5`.
 The no-model checks establish provenance, packaging, resource visibility, tool ownership, model routing shape, and process startup.
 They do not establish that a model follows the complete workflow or that the workflow improves task outcomes.
+
+## Current Luna conformance attempts
+
+The first bounded Luna attempt read the complete Poteto Mode skill, read the applicable playbooks, and initialized `pstack_todo`.
+Its Task call failed before a child model prompt because Pi rejected the upstream-only `is_background` identity field and had disabled `poteto-agent`.
+The runtime identity now removes that one Cursor-only field, and a boundary test loads every bundled identity through the real configuration parser.
+
+The second bounded Luna attempt again read the skill, initialized the todo list, and issued exactly one correctly shaped foreground Task call.
+Herdr started the child Pi process, but the manager rejected Herdr's reported child session path before submitting the child prompt.
+The parent therefore verified the fixture directly, so this attempt is not a conformance pass.
+The manager now adopts the session path reported by the successfully started Herdr child, and a boundary test verifies that ownership contract.
+A successful bounded rerun remains required before model conformance can advance beyond `unverified`.
 
 ## Historical Herdr transport boundary
 

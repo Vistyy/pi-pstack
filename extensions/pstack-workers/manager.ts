@@ -177,9 +177,7 @@ export class AgentManager {
       record.paneId = agent.pane_id;
       record.tabId = agent.tab_id;
       const reportedSessionFile = agent.agent_session?.value;
-      if (reportedSessionFile && reportedSessionFile !== record.sessionFile) {
-        throw new Error("Herdr reported a different child Pi session file.");
-      }
+      if (reportedSessionFile) record.sessionFile = reportedSessionFile;
       await this.herdr.reportDisplayAgent(agent.pane_id, options.name, signal);
 
       const prompted = await this.herdr.prompt(record.paneId, options.task.trim(), signal);

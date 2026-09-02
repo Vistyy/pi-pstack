@@ -3,7 +3,15 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { loadConfig } from "../../extensions/pstack-workers/config.js";
+import { getBuiltinAgentsDirectory, loadConfig } from "../../extensions/pstack-workers/config.js";
+
+test("loads every bundled worker identity", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-herdr-config-"));
+  await mkdir(join(root, "agents"));
+  const config = await loadConfig(root, getBuiltinAgentsDirectory());
+  assert.deepEqual(config.identities.map((identity) => identity.name), ["comment-sicko", "general-purpose", "poteto-agent"]);
+  assert.equal(config.warnings.some((warning) => warning.includes("bundled identity")), false);
+});
 
 test("loads defaults and valid identities while disabling only invalid identities", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-herdr-config-"));
