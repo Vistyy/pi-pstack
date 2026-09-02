@@ -14,12 +14,17 @@ const workRoot = path.join(runRoot, "workspaces");
 const answerRoot = path.join(runRoot, "answers");
 const reviewRoot = path.join(runRoot, "review");
 
-const models = [
+const defaultModels = [
   "opencode-go/muse-spark-1.3-contributor",
   "opencode-go/glm-5.3-flash",
   "opencode-go/deepseek-v4-flash",
   "opencode-go/qwen3.8-flash",
 ];
+const modelArgument = process.argv.indexOf("--models");
+const models = modelArgument === -1
+  ? defaultModels
+  : process.argv[modelArgument + 1]?.split(",").filter(Boolean) ?? [];
+if (models.length === 0) throw new Error("--models requires a comma-separated model list.");
 const labels = ["amber", "birch", "cedar", "dawn", "ember", "fern", "grove", "harbor", "iris", "juniper", "linden", "meadow"];
 const repetitions = 3;
 
@@ -231,7 +236,7 @@ for (const task of tasks) {
     await writeFile(path.join(target, "patch.diff"), result.patch || "(no changes)\n");
     if (result.check) await writeFile(path.join(target, "check.txt"), `exit=${result.check.code}\n${result.check.stdout}${result.check.stderr}`);
   }
-  const prompt = `Judge the twelve anonymized responses under responses/ against the implementation under source/. ${task.judge} Read every response fully. Score each response from 0 to 20. A qualifying response must score at least 15, contain no material factual error, and, for implementation work, pass the repository check. Return a table with label, score, qualifies yes or no, and decisive reason. Then rank qualifying responses by quality. Do not infer or discuss model identity.`;
+  const prompt = `Judge the anonymized responses under responses/ against the implementation under source/. ${task.judge} Read every response fully. Score each response from 0 to 20. A qualifying response must score at least 15, contain no material factual error, and, for implementation work, pass the repository check. Return a table with label, score, qualifies yes or no, and decisive reason. Then rank qualifying responses by quality. Do not infer or discuss model identity.`;
   const response = await run("pi", [
     "--no-extensions", "--no-skills", "--no-prompt-templates", "--tools", "read,bash",
     "--model", "openai-codex/gpt-5.6-sol", "--thinking", "high",
