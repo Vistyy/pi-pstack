@@ -104,9 +104,9 @@ export class AgentManager {
     this.persist();
   }
 
-  async createWorktree(cwd: string, branch: string, label: string, signal?: AbortSignal): Promise<CreatedWorktree> {
+  async createWorktree(cwd: string, branch: string, label: string, base = "HEAD", signal?: AbortSignal): Promise<CreatedWorktree> {
     this.assertRunning();
-    return this.herdr.createWorktree(cwd, branch, label, signal);
+    return this.herdr.createWorktree(cwd, branch, label, base, signal);
   }
 
   async start(options: {

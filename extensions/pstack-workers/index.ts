@@ -10,10 +10,11 @@ import {
   type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { taskBudgetFromEnvironment } from "./budget.js";
 import { getConfigDirectory, loadConfig } from "./config.js";
 import { OwnedAgentViewController } from "./agent-view.js";
 import { HerdrClient } from "./herdr.js";
-import { modelsForRole, readConfig as readPstackConfig } from "../pstack/config.js";
+import { targetsForRole, readConfig as readPstackConfig } from "../pstack/config.js";
 import { AgentManager } from "./manager.js";
 import { sendBatchCompletion } from "./notifications.js";
 import { discoverInheritedResources, resolveRuntimeSettings } from "./resources.js";
@@ -137,6 +138,7 @@ export default async function piHerdrAgents(pi: ExtensionAPI): Promise<void> {
 export function registerTools(pi: ExtensionAPI, config: ExtensionConfig, getManager: () => AgentManager): void {
   const identityNames = config.identities.map((identity) => identity.name);
   let taskSequence = 0;
+  const roleSequences = new Map<string, number>();
   const identityCatalog = config.identities.map((identity) => `${identity.name}: ${identity.description}`).join("\n");
 
   pi.registerTool({
@@ -150,9 +152,11 @@ export function registerTools(pi: ExtensionAPI, config: ExtensionConfig, getMana
       identity: Type.Optional(Type.String({ description: "Pi worker identity, such as general-purpose, poteto-agent, or comment-sicko." })),
       model: Type.Optional(Type.String({ description: "Pi provider/model selector." })),
       role: Type.Optional(Type.String({ description: "Configured pstack model role used when model is omitted." })),
-      readonly: Type.Optional(Type.Boolean({ description: "Restrict the worker to Pi read, grep, find, and ls tools." })),
+      thinking: Type.Optional(StringEnum(["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const, { description: "Pi thinking level override. The configured role level is used when omitted." })),
+      readonly: Type.Optional(Type.Boolean({ description: "Restrict the worker to Pi read, grep, find, ls, and pstack_todo tools." })),
       run_in_background: Type.Optional(Type.Boolean({ description: "Return immediately and wake the parent when the Task settles. Defaults to false." })),
       isolation: Type.Optional(StringEnum(["worktree", "current"] as const, { description: "Pi placement policy. Use worktree for an isolated local Git worktree or current for the current checkout." })),
+      base_branch: Type.Optional(Type.String({ description: "Git ref used as the worktree base. Applies only to worktree isolation and defaults to HEAD." })),
       cwd: Type.Optional(Type.String({ description: "Worker working directory. Defaults to the parent cwd." })),
     }),
     async execute(_id, params, signal, _onUpdate, ctx) {
@@ -163,23 +167,26 @@ export function registerTools(pi: ExtensionAPI, config: ExtensionConfig, getMana
         throw new Error(`Unknown Task identity ${JSON.stringify(identity)}. Available: general-purpose, poteto-agent, comment-sicko.`);
       }
       const availableModels = new Set(ctx.modelRegistry.getAvailable().map((model) => `${model.provider}/${model.id}`));
-      const roleModels = params.role ? modelsForRole(await readPstackConfig(), params.role) : [];
-      const configuredModel = roleModels.length > 0 ? roleModels[taskSequence % roleModels.length] : undefined;
-      const selectedModel = params.model ?? configuredModel;
+      const roleTargets = params.role ? targetsForRole(await readPstackConfig(), params.role) : [];
+      const roleSequence = params.role ? roleSequences.get(params.role) ?? 0 : 0;
+      const configuredTarget = roleTargets.length > 0 ? roleTargets[roleSequence % roleTargets.length] : undefined;
+      if (params.role) roleSequences.set(params.role, roleSequence + 1);
+      const selectedModel = params.model ?? configuredTarget?.model;
+      const selectedThinking = params.thinking ?? configuredTarget?.thinking;
       const requestedModel = selectedModel && selectedModel !== "inherit-parent" && selectedModel !== "auto" ? selectedModel : undefined;
-      const model = requestedModel && availableModels.has(requestedModel) ? requestedModel : undefined;
+      if (requestedModel && !availableModels.has(requestedModel)) throw new Error(`Unavailable Task model ${JSON.stringify(requestedModel)}.`);
+      const model = requestedModel;
       const [provider, modelId] = model?.split(/\/(.+)/) ?? [];
       const baseName = (params.description ?? identity).toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 20) || "task";
       taskSequence = Math.max(taskSequence, getManager().getRecords().length);
-      const configuredBudget = Number.parseInt(process.env.PSTACK_CHILD_BUDGET ?? "8", 10);
-      const budget = Number.isInteger(configuredBudget) ? Math.max(0, Math.min(configuredBudget, 64)) : 8;
-      if (taskSequence >= budget) throw new Error(`Pstack Task budget ${budget} exhausted for this parent session.`);
+      const budget = taskBudgetFromEnvironment();
+      if (budget !== undefined && taskSequence >= budget) throw new Error(`Pstack Task budget ${budget} exhausted for this parent session.`);
       taskSequence += 1;
       const name = `${baseName}-${taskSequence}`.slice(0, 29);
       const manager = getManager();
       const parentCwd = params.cwd ?? ctx.cwd;
       const placement = params.isolation === "worktree"
-        ? await manager.createWorktree(parentCwd, `pstack/${name}-${Date.now().toString(36)}`, name, signal)
+        ? await manager.createWorktree(parentCwd, `pstack/${name}-${Date.now().toString(36)}`, name, params.base_branch ?? "HEAD", signal)
         : undefined;
       const record = await manager.start({
         name,
@@ -191,19 +198,17 @@ export function registerTools(pi: ExtensionAPI, config: ExtensionConfig, getMana
         runtime: {
           provider,
           model: modelId,
-          tools: params.readonly ? ["read", "grep", "find", "ls"] : undefined,
+          ...(selectedThinking ? { thinking: selectedThinking } : {}),
+          tools: params.readonly ? ["read", "grep", "find", "ls", "pstack_todo"] : undefined,
         },
       }, signal);
-      const warning = requestedModel && !model
-        ? ` Requested unavailable model ${JSON.stringify(requestedModel)}; inherited the parent model.`
-        : "";
       if (params.run_in_background) {
         const batch = manager.batch([record]);
-        return batchToolResult(`Started background Task ${name} as ${identity}.${warning} Completion will wake the parent.`, [record], batch);
+        return batchToolResult(`Started background Task ${name} as ${identity}. Completion will wake the parent.`, [record], batch);
       }
       const settled = await manager.waitForSettlement(record.name, record.assignment, signal);
       const result = settled.lastResult?.trim() || `Task ${name} settled with status ${settled.status}.`;
-      return toolResult(`${warning.trim()}${warning ? "\n\n" : ""}${result}`, [settled]);
+      return toolResult(result, [settled]);
     },
   });
 

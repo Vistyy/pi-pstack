@@ -33,7 +33,7 @@ Spawn more only when the arena covers multiple design directions, and use repeat
 
 ## Phase B: Fan out
 
-Spawn all N subagents in one message with `run_in_background: true`, each with the task, the path to the shared grounding, its own output path, and instructions to produce both the artifact and a short rationale.
+Spawn one Task worker per configured panel entry in one message with `role: arena runners` and `run_in_background: true`, each with the task, the path to the shared grounding, its own output path, and instructions to produce both the artifact and a short rationale.
 
 The rationale is mandatory. Without it, the parent cannot tell whether a candidate's structure is principled or accidental, which makes Phase E grafting unreliable. Each rationale names the alternatives the candidate considered and what it rejected.
 
@@ -43,7 +43,7 @@ If a candidate fails to produce output, proceed with N-1 and note the dropout in
 
 After all Phase B candidates complete, call `pstack_config` with `action: get` and choose one available model from the `arena cross-judge pool`.
 Use the parent model when no explicit pool is configured, and prefer a different configured model family from the parent's when available.
-Spawn one readonly judge worker on that model. It sees the rubric and the candidates by path label, scores each criterion, and recommends a base with rationale. It runs in parallel with the parent's reading in Phase D, not with the candidates themselves. Spawning while candidates are still writing means the judge sees partial or empty outputs and reports them as dropouts.
+Spawn one readonly judge worker with the selected `model` and its configured `thinking` level. It sees the rubric and the candidates by path label, scores each criterion, and recommends a base with rationale. It runs in parallel with the parent's reading in Phase D, not with the candidates themselves. Spawning while candidates are still writing means the judge sees partial or empty outputs and reports them as dropouts.
 
 ## Phase D: Pick a base
 

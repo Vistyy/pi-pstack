@@ -127,7 +127,7 @@ Investigators must still avoid writes; that is a task constraint rather than a s
 
 Each investigator gets:
 1. The base prompt from `references/investigator-prompt.md`
-2. The generic loaded-integration procedure in `references/source-playbook.md`, adapted to the selected tool schema, plus `references/sources/code-archaeology.md` for the source-control investigator
+2. The generic loaded-integration procedure in `references/source-playbook.md`, the matching example under `references/sources/` when one exists, and `references/sources/code-archaeology.md` for the source-control investigator
 3. The code anchor from Step 2 (file paths, symbols, commit hashes, PR numbers, ticket IDs)
 4. The user's original question
 

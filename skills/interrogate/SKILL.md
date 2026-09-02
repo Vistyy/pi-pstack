@@ -33,8 +33,9 @@ Write one clear paragraph. Reviewers challenge whether the work achieves the int
 
 ## Step 3, Spawn Reviewers
 
-Launch all reviewers in a single message using the Task tool.
-Launch four reviewers labeled Reviewer A through Reviewer D.
+Call `pstack_config` with `action: get`, then launch one reviewer per configured `interrogate reviewers` entry in a single message using the Task tool.
+Label reviewers in panel order, extending or shrinking Reviewer A through Reviewer D to match the configured count.
+Alias entries such as `inherit-parent` still count toward the panel size.
 For each reviewer:
 - `identity`: `general-purpose`
 - `role`: `interrogate reviewers`

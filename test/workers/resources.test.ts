@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { discoverInheritedResources, resolveRuntimeSettings } from "../../extensions/pstack-workers/resources.js";
+import { discoverInheritedResources, isWorkerSafeExtension, resolveRuntimeSettings } from "../../extensions/pstack-workers/resources.js";
 import type { AgentIdentity } from "../../extensions/pstack-workers/types.js";
 
 function identity(overrides: Partial<AgentIdentity> = {}): AgentIdentity {
@@ -41,7 +41,7 @@ test("resource selectors apply defaults before identity filters", () => {
     },
     parent: { provider: "parent-provider", model: "parent-model", thinking: "high" },
     inherited,
-    activeTools: ["read", "edit", "start_agents"],
+    activeTools: ["read", "edit", "pstack_todo", "start_agents"],
   });
 
   assert.equal(resolved.provider, "parent-provider");
@@ -66,20 +66,28 @@ test("an empty resource list selects no inherited resources", () => {
   assert.deepEqual(resolved.skills, []);
 });
 
-test("delegation tools and skills are unavailable even when force-included", () => {
+test("worker-safe todo remains available while delegation tools and skills are excluded", () => {
   const resolved = resolveRuntimeSettings({
     identity: identity({
-      tools: ["+start_agents", "+send_agents", "+read"],
+      tools: ["+start_agents", "+send_agents", "+pstack_todo", "+read"],
       skills: ["+herdr", "+session-transfer", "+review"],
     }),
     defaults: { tools: [], skills: [] },
     parent: {},
     inherited,
-    activeTools: ["read", "start_agents", "send_agents", "close_agent"],
+    activeTools: ["read", "pstack_todo", "start_agents", "send_agents", "close_agent"],
   });
 
-  assert.deepEqual(resolved.tools, ["read"]);
+  assert.deepEqual(resolved.tools, ["pstack_todo", "read"]);
   assert.deepEqual(resolved.skills, ["/skills/review/SKILL.md"]);
+});
+
+test("only the package core extension crosses into workers", () => {
+  const packageRoot = "/package";
+  assert.equal(isWorkerSafeExtension("/external/example.ts", packageRoot), true);
+  assert.equal(isWorkerSafeExtension("/package/extensions/pstack/index.ts", packageRoot), true);
+  assert.equal(isWorkerSafeExtension("/package/extensions/pstack-workers/index.ts", packageRoot), false);
+  assert.equal(isWorkerSafeExtension("/package/extensions/pstack-fallback/index.ts", packageRoot), false);
 });
 
 test("Pi discovery supplies inherited resources and removes the delegation extension", async () => {

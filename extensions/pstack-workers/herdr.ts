@@ -163,7 +163,7 @@ function parseEnvelope<T>(result: CommandResult, operation: string): T {
 export class HerdrClient {
   constructor(private readonly run: CommandRunner) {}
 
-  async createWorktree(cwd: string, branch: string, label: string, signal?: AbortSignal): Promise<CreatedWorktree> {
+  async createWorktree(cwd: string, branch: string, label: string, base = "HEAD", signal?: AbortSignal): Promise<CreatedWorktree> {
     const result = parseEnvelope<Record<string, any>>(
       await this.run("herdr", [
         "worktree",
@@ -173,7 +173,7 @@ export class HerdrClient {
         "--branch",
         branch,
         "--base",
-        "HEAD",
+        base,
         "--label",
         label,
         "--no-focus",

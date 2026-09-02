@@ -1,5 +1,5 @@
 export const OWNED_AGENT_ENTRY = "pi-herdr-owned-agents";
-export const DEFAULT_MAX_AGENTS = 10;
+export const DEFAULT_MAX_AGENTS = 32;
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 export type OwnedAgentStatus = "starting" | "working" | "blocked" | "idle" | "closed" | "interrupted" | "failed";

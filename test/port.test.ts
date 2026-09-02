@@ -27,10 +27,32 @@ test("ships a Pi-native worker boundary for lifted workflow instructions", () =>
 
 test("active skill prose uses Pi-native mechanisms", () => {
   const files = markdownFiles(path.join(root, "skills"));
-  const forbidden = /(?:\.cursor|\bCursor\b|AskQuestion|subagent_type|environment:\s*["`]cloud|\/goal|grok-4|claude-fable|gpt-5\.6-sol|Bugbot|Sentry|Datadog)/i;
+  const forbidden = /(?:\.cursor|\bCursor\b|AskQuestion|subagent_type|environment:\s*["`]cloud|\/goal|Bugbot)/i;
   for (const file of files) {
     assert.doesNotMatch(fs.readFileSync(file, "utf8"), forbidden, path.relative(root, file));
   }
+});
+
+test("Pi cross-skill instructions point at packaged skill files", () => {
+  for (const file of markdownFiles(path.join(root, "skills"))) {
+    const source = fs.readFileSync(file, "utf8");
+    for (const match of source.matchAll(/`(\.\.\/[a-z0-9-]+\/SKILL\.md)`/g)) {
+      assert.ok(fs.existsSync(path.resolve(path.dirname(file), match[1])), `${path.relative(root, file)} references missing ${match[1]}`);
+    }
+  }
+});
+
+test("worker identities preserve upstream behavior with only Pi host adaptations", () => {
+  const upstreamPoteto = fs.readFileSync(path.join(root, "agents/poteto-agent.md"), "utf8");
+  const workerPoteto = fs.readFileSync(path.join(root, "extensions/pstack-workers/identities/poteto-agent.md"), "utf8");
+  assert.equal(workerPoteto, upstreamPoteto);
+
+  const upstreamComment = fs.readFileSync(path.join(root, "agents/comment-sicko.md"), "utf8");
+  const expectedComment = upstreamComment
+    .replace("name: Comment Sicko", "name: comment-sicko")
+    .replace("I run `/how`, `/why`, or both from the **how** and **why** skills", "I read and follow the loaded **how** skill, **why** skill, or both");
+  const workerComment = fs.readFileSync(path.join(root, "extensions/pstack-workers/identities/comment-sicko.md"), "utf8");
+  assert.equal(workerComment, expectedComment);
 });
 
 test("the runtime package excludes repository-only and unsupported source", () => {

@@ -1,4 +1,4 @@
-import { basename, dirname, relative, sep } from "node:path";
+import { basename, dirname, join, relative, sep } from "node:path";
 import {
   DefaultResourceLoader,
   SettingsManager,
@@ -9,7 +9,6 @@ import type { AgentIdentity, RuntimeSettings } from "./types.js";
 const DELEGATION_TOOLS = new Set([
   "Task",
   "pstack_question",
-  "pstack_todo",
   "pstack_loop",
   "pstack_sessions",
   "pstack_config",
@@ -51,7 +50,7 @@ export async function discoverInheritedResources(options: {
   await loader.reload();
 
   const extensions = loader.getExtensions().extensions
-    .filter((extension) => !isWithin(extension.resolvedPath, options.packageRoot))
+    .filter((extension) => isWorkerSafeExtension(extension.resolvedPath, options.packageRoot))
     .map((extension) => ({
       value: extension.resolvedPath,
       aliases: unique([
@@ -142,6 +141,11 @@ function matchesPattern(resource: SelectableResource, pattern: string): boolean 
 
 function matchesExact(resource: SelectableResource, value: string): boolean {
   return resource.aliases.includes(value);
+}
+
+export function isWorkerSafeExtension(path: string, packageRoot: string): boolean {
+  if (!isWithin(path, packageRoot)) return true;
+  return path === join(packageRoot, "extensions", "pstack", "index.ts");
 }
 
 function isWithin(path: string, root: string): boolean {

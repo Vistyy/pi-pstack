@@ -110,7 +110,8 @@ Run the full explain flow above (Steps 1-4). You must understand the architectur
 
 ### Step 2. Spawn Critics
 
-After the explanation is complete, spawn four architectural critics in a single message.
+After the explanation is complete, call `pstack_config` with `action: get`, then spawn one architectural critic per configured `how critics` entry in a single message.
+Alias entries such as `inherit-parent` still count toward the panel size.
 
 For each critic:
 - `identity`: `general-purpose`

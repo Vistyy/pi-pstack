@@ -23,7 +23,7 @@ Open a todolist with one entry per phase before launching anything.
 2. Choose the shape. Partition into slices, race N workers on identical briefs, or mix both. For a race or mixed shape, declare `first pass`, `rank all`, or `best-of` before spawning.
 3. Set N from the user or derive it from the shape. N is total workers, not the cloud concurrency limit.
 4. Use `role: swarm workers` for worker Tasks.
-For a deliberate model race, call `pstack_config` with `action: get`, use the configured panel entries, and name each arm's model up front.
+For a deliberate model race, call `pstack_config` with `action: list-models`, assign an available explicit `model` and `thinking` level to each arm, and name each arm's model up front.
 5. Give each worker its own writable output when it writes. Use a worktree, branch, or `/tmp/swarm-<slug>/worker-<n>/`.
 
 ## Phase B: Fan out
@@ -31,7 +31,7 @@ For a deliberate model race, call `pstack_config` with `action: get`, use the co
 Spawn all N workers in one message with `identity: general-purpose`, `isolation: worktree`, `run_in_background: true`, and `role: swarm workers`.
 Use `isolation: current` only for a read-only worker or when the worker must inspect state available only in the current checkout.
 
-When a worker must start from a non-default pushed branch, pass `cloud_base_branch`.
+When a worker must start from a non-default branch or ref, pass it as `base_branch` on the Task call.
 
 Every brief stands alone. Include the goal, scope, exact slice or race arm, how to verify, and what to report. Reports use `PASS`, `ISSUES`, or `BLOCKED` with evidence.
 

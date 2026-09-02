@@ -124,10 +124,14 @@ test("start and send results do not terminate the parent turn", async () => {
 
 test("Task maps Pi-native fields to one background persistent worker", async () => {
   let started: Record<string, unknown> | undefined;
+  let worktreeArgs: unknown[] | undefined;
   const current = record({ name: "bug-fix-1", identity: "general-purpose", status: "working", completedAssignment: 0 });
   const manager = {
     getRecords: () => [],
-    createWorktree: async () => ({ workspaceId: "worktree-ws", tabId: "worktree-tab", paneId: "worktree-pane", path: "/worktrees/bug-fix", branch: "pstack/bug-fix" }),
+    createWorktree: async (...args: unknown[]) => {
+      worktreeArgs = args;
+      return { workspaceId: "worktree-ws", tabId: "worktree-tab", paneId: "worktree-pane", path: "/worktrees/bug-fix", branch: "pstack/bug-fix" };
+    },
     start: async (options: Record<string, unknown>) => {
       started = options;
       return current;
@@ -142,9 +146,11 @@ test("Task maps Pi-native fields to one background persistent worker", async () 
       prompt: "Reproduce and fix the defect.",
       identity: "general-purpose",
       model: "openai-codex/gpt-5.6-luna",
+      thinking: "high",
       readonly: true,
       run_in_background: true,
       isolation: "worktree",
+      base_branch: "release/next",
     },
     new AbortController().signal,
     undefined,
@@ -156,6 +162,9 @@ test("Task maps Pi-native fields to one background persistent worker", async () 
     },
   );
 
+  assert.equal(worktreeArgs?.[0], "/repo");
+  assert.equal(worktreeArgs?.[2], "bug-fix-1");
+  assert.equal(worktreeArgs?.[3], "release/next");
   assert.deepEqual(started, {
     name: "bug-fix-1",
     identityName: "general-purpose",
@@ -172,10 +181,33 @@ test("Task maps Pi-native fields to one background persistent worker", async () 
     runtime: {
       provider: "openai-codex",
       model: "gpt-5.6-luna",
-      tools: ["read", "grep", "find", "ls"],
+      thinking: "high",
+      tools: ["read", "grep", "find", "ls", "pstack_todo"],
     },
   });
   assert.match(String((result.content as Array<{ text: string }>)[0].text), /Completion will wake the parent/);
+});
+
+test("Task rejects an unavailable explicit model before starting a worker", async () => {
+  let started = false;
+  const manager = {
+    getRecords: () => [],
+    start: async () => {
+      started = true;
+      return record();
+    },
+  } as unknown as AgentManager;
+  await assert.rejects(
+    tool(registeredTools(manager), "Task").execute(
+      "task-call",
+      { prompt: "Inspect this.", model: "missing/model" },
+      new AbortController().signal,
+      undefined,
+      { cwd: "/repo", modelRegistry: { getAvailable: () => [] } },
+    ),
+    /Unavailable Task model/,
+  );
+  assert.equal(started, false);
 });
 
 test("Task waits for a foreground worker and returns its final result", async () => {

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { getAgentDir, SessionManager, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { ROLE_NAMES, configPath, defaultConfig, readConfig, writeConfig } from "./config.ts";
+import { PANEL_ROLE_NAMES, ROLE_NAMES, configPath, readConfig, writeConfig, type RoleTarget, type ThinkingLevel } from "./config.ts";
 
 const MODE_ENTRY = "pstack-mode";
 const LOOP_ENTRY = "pstack-loop";
@@ -189,15 +189,52 @@ export default function (pi: ExtensionAPI) {
       const available = (ctx.scopedModels.length ? ctx.scopedModels.map((entry) => entry.model) : ctx.modelRegistry.getAvailable())
         .map((model) => `${model.provider}/${model.id}`);
       const choices = ["inherit-parent", ...new Set(available)];
+      const thinkingChoices: Array<"inherit-parent" | ThinkingLevel> = ["inherit-parent", "off", "minimal", "low", "medium", "high", "xhigh", "max"];
       if (!ctx.hasUI) {
-        await writeConfig(defaultConfig());
-        return;
+        throw new Error("/setup-pstack requires an interactive Pi session. Use pstack_config for non-interactive setup.");
       }
+      const selectTarget = async (title: string, current?: RoleTarget): Promise<RoleTarget | undefined> => {
+        const selectedModel = await ctx.ui.select(
+          `Model for ${title}`,
+          choices.map((model) => model === current?.model ? `${model} (current)` : model),
+        );
+        if (!selectedModel) return undefined;
+        const currentThinking = current?.thinking ?? "inherit-parent";
+        const selectedThinking = await ctx.ui.select(
+          `Thinking for ${title}`,
+          thinkingChoices.map((thinking) => thinking === currentThinking ? `${thinking} (current)` : thinking),
+        );
+        if (!selectedThinking) return undefined;
+        const thinking = selectedThinking.replace(/ \(current\)$/, "") as "inherit-parent" | ThinkingLevel;
+        return {
+          model: selectedModel.replace(/ \(current\)$/, ""),
+          ...(thinking === "inherit-parent" ? {} : { thinking }),
+        };
+      };
       for (const role of ROLE_NAMES) {
         const current = config.roles[role];
-        const selected = await ctx.ui.select(`Model for ${role}`, choices.map((model) => model === current ? `${model} (current)` : model));
+        if (PANEL_ROLE_NAMES.has(role)) {
+          const currentPanel = Array.isArray(current) ? current : [current];
+          const sizes = Array.from({ length: 8 }, (_, index) => String(index + 1));
+          const selectedSize = await ctx.ui.select(
+            `Worker count for ${role}`,
+            sizes.map((size) => Number(size) === currentPanel.length ? `${size} (current)` : size),
+          );
+          if (!selectedSize) break;
+          const panel = [];
+          for (let index = 0; index < Number.parseInt(selectedSize, 10); index += 1) {
+            const selected = await selectTarget(`${role} ${index + 1}`, currentPanel[index]);
+            if (!selected) break;
+            panel.push(selected);
+          }
+          if (panel.length !== Number.parseInt(selectedSize, 10)) break;
+          config.roles[role] = panel;
+          continue;
+        }
+        const currentTarget = Array.isArray(current) ? current[0] : current;
+        const selected = await selectTarget(role, currentTarget);
         if (!selected) break;
-        config.roles[role] = selected.replace(/ \(current\)$/, "");
+        config.roles[role] = selected;
       }
       await writeConfig(config);
       ctx.ui.notify(`Saved pstack model settings to ${configPath()}.`, "info");
@@ -283,7 +320,9 @@ export default function (pi: ExtensionAPI) {
       action: StringEnum(["get", "list-models", "set"] as const),
       role: Type.Optional(Type.String()),
       model: Type.Optional(Type.String()),
-      models: Type.Optional(Type.Array(Type.String(), { description: "Optional ordered model pool for a parallel review role." })),
+      models: Type.Optional(Type.Array(Type.String(), { description: "Ordered model panel for a parallel review role." })),
+      thinking: Type.Optional(StringEnum(["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const)),
+      thinkings: Type.Optional(Type.Array(StringEnum(["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const), { description: "Thinking levels aligned with models by array index." })),
     }),
     async execute(_id, params, _signal, _update, ctx) {
       if (params.action === "list-models") {
@@ -295,7 +334,13 @@ export default function (pi: ExtensionAPI) {
       if (params.action === "set") {
         if (!params.role || (!params.model && !params.models?.length)) throw new Error("pstack_config set requires role plus model or models.");
         if (!(ROLE_NAMES as readonly string[]).includes(params.role)) throw new Error(`Unknown pstack role ${JSON.stringify(params.role)}.`);
+        const panelRole = PANEL_ROLE_NAMES.has(params.role as (typeof ROLE_NAMES)[number]);
+        if (panelRole && !params.models?.length) throw new Error(`${params.role} is a panel role and requires models.`);
+        if (panelRole && params.thinking) throw new Error(`${params.role} requires thinkings aligned with models.`);
+        if (!panelRole && params.models) throw new Error(`${params.role} is a single-worker role and requires model.`);
+        if (!panelRole && params.thinkings) throw new Error(`${params.role} requires one thinking value.`);
         const selected = params.models?.length ? params.models : [params.model!];
+        if (params.thinkings && params.thinkings.length !== selected.length) throw new Error("thinkings must have the same length as models.");
         const available = new Set((ctx.scopedModels.length ? ctx.scopedModels.map((entry) => entry.model) : ctx.modelRegistry.getAvailable())
           .map((model) => `${model.provider}/${model.id}`));
         for (const model of selected) {
@@ -303,7 +348,11 @@ export default function (pi: ExtensionAPI) {
             throw new Error(`Unavailable pstack model ${JSON.stringify(model)}.`);
           }
         }
-        config.roles[params.role] = params.models?.length ? selected : selected[0];
+        const targets = selected.map((model, index) => ({
+          model,
+          ...(params.models ? params.thinkings?.[index] ? { thinking: params.thinkings[index] } : {} : params.thinking ? { thinking: params.thinking } : {}),
+        }));
+        config.roles[params.role] = panelRole ? targets : targets[0];
         await writeConfig(config);
       }
       return { content: [{ type: "text", text: JSON.stringify(config, null, 2) }], details: config };

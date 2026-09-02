@@ -16,6 +16,9 @@ reminder: New task? Playbook match or rigor needed -> apply /poteto-mode. Casual
 
 Remaining triggers:
 
+When a step names another packaged skill, read that skill's `SKILL.md` in full from the package `skills/` directory before following it.
+A `/skill:<name>` form is a human invocation command, not evidence that the named skill has been loaded.
+
 - Nontrivial change, architecture decision, or "are we sure?" → the **how** skill.
 - About to call `pstack_question` on a "which approach", "how should I", or "what should this do" fork → classify it before you ask. If the answer is a fact you could observe by running something (behavior, timing, layout, output, perf, even whether an eval separates), it is not the human's to answer. Sketch it via the Prototype playbook (`playbooks/prototype.md`) and let the result decide. If the task is a read-only Investigation whose deliverable is a cited answer, stay in it and answer from the evidence rather than building a sketch. Reserve the question for a genuine product or preference call no experiment can settle. The ask is the slow path. A throwaway probe usually answers faster, and it hands the human a result to react to instead of a decision to make.
 - Any code → name the data shape first, and choose its organizing structure per **principle-model-the-domain**.
@@ -117,7 +120,11 @@ Comments follow the same rule as the reply. Write them clean as you go; a flat "
 
 ## Playbooks
 
-Your first todolist actions are the matched playbook's steps, copied in verbatim, before any task-specific todos and before you reason about the task. The failure mode is reading a playbook then writing a bespoke plan that drops its named steps (`architect`, the throughput checkpoint). A step you choose not to do stays in the list with a one-line `skip: <reason>`; skipping silently is not allowed. Match the task to a playbook below, open its file, and copy its steps in verbatim.
+Resolve every `playbooks/...` path below relative to this `SKILL.md` directory.
+Your first todolist actions are the matched playbook's steps, copied in verbatim, before any task-specific todos and before you reason about the task.
+The failure mode is reading a playbook then writing a bespoke plan that drops its named steps (`architect`, the throughput checkpoint).
+A step you choose not to do stays in the list with a one-line `skip: <reason>`; skipping silently is not allowed.
+Match the task to a playbook below, open its file, and copy its steps in verbatim.
 
 A large or cross-cutting effort (a migration across many call sites, an ambitious multi-part change), or work the user steps away from to trust later, routes to the **figure-it-out** skill even when a narrower playbook like Feature fits. Use **figure-it-out** whenever no bundled playbook fits. It designs a bespoke, rigorous playbook for the task. A standing project-scale program (multi-day, many stacked PRs, a fleet of subagents under one coordinator) routes to **Orchestrate** instead; figure-it-out designs one bespoke run, orchestrate runs the program.
 

@@ -1,6 +1,6 @@
 {
   "name": "@vistyy/pi-pstack",
-  "version": "0.14.7-pi.0",
+  "version": "0.14.7-pi.1",
   "type": "module",
   "description": "Pi-native port of pstack workflows, agents, scripts, and local Herdr workers.",
   "license": "MIT",
