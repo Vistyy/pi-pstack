@@ -1,10 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, truncateHead } from "@earendil-works/pi-coding-agent";
 import type { AgentIdentity, ExtensionConfig, OwnedAgentCollection, OwnedAgentRecord, RuntimeSettings } from "./types.js";
 import { composeChildSystemPrompt } from "./child-prompt.js";
 import { buildPiArgs, HerdrClient, type CreatedWorktree } from "./herdr.js";
+import { assertPotetoBootstrapped, findPotetoSkill, POTETO_IDENTITY, potetoBootstrapPrompt } from "./poteto-bootstrap.js";
 import { readLatestAssistantResult } from "./session-result.js";
 
 const INTERRUPT_SETTLE_TIMEOUT_MS = 5_000;
@@ -163,7 +164,7 @@ export class AgentManager {
       };
       const instructionsFile = await this.writeInstructions(identity);
       record.sessionFile = join(this.sessionDir, `${randomUUID()}.jsonl`);
-      const agent = await this.herdr.startPi(
+      let agent = await this.herdr.startPi(
         makeHerdrAgentName(this.parentToken, options.name),
         tab.paneId,
         buildPiArgs({
@@ -174,11 +175,30 @@ export class AgentManager {
         }),
         signal,
       );
+      if (agent.pane_id !== tab.paneId) agent = await this.herdr.getAgent(tab.paneId, signal);
       record.paneId = agent.pane_id;
       record.tabId = agent.tab_id;
-      const reportedSessionFile = agent.agent_session?.value;
-      if (reportedSessionFile) record.sessionFile = reportedSessionFile;
+      if (agent.pane_id !== tab.paneId) {
+        throw new Error(`Herdr child identity mismatch: expected pane ${tab.paneId}, reported pane ${agent.pane_id}.`);
+      }
       await this.herdr.reportDisplayAgent(agent.pane_id, options.name, signal);
+
+      if (identity.name === POTETO_IDENTITY) {
+        const skillPath = findPotetoSkill(settings.skills);
+        const beforeBootstrap = await this.herdr.getAgent(record.paneId, signal);
+        await this.herdr.prompt(record.paneId, potetoBootstrapPrompt(skillPath), signal);
+        await this.herdr.waitForTurn(record.paneId, beforeBootstrap.state_change_seq ?? 0, signal, { settleTimeoutMs: 120_000 });
+        try {
+          await access(record.sessionFile);
+        } catch {
+          const settledAgent = await this.herdr.getAgent(record.paneId, signal);
+          const reportedSessionFile = settledAgent.agent_session?.value;
+          if (!reportedSessionFile) throw new Error("Herdr did not report the settled Poteto worker session file.");
+          await access(reportedSessionFile);
+          record.sessionFile = reportedSessionFile;
+        }
+        assertPotetoBootstrapped(record.sessionFile, skillPath);
+      }
 
       const prompted = await this.herdr.prompt(record.paneId, options.task.trim(), signal);
       record.status = "working";

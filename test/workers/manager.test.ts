@@ -66,6 +66,7 @@ class FakeHerdr {
   sessionFile = "";
   activeSessionFile = "";
   reportedSessionFile: string | undefined;
+  reportedPaneId: string | undefined;
   currentStatus: "idle" | "working" | "blocked" = "idle";
   interruptWaitError: Error | undefined;
   interruptFailureStatus: "idle" | "working" | "blocked" | undefined;
@@ -106,7 +107,7 @@ class FakeHerdr {
       if (this.reportedSessionFile && this.reportedSessionFile !== this.activeSessionFile) await copyFile(this.sessionFile, this.reportedSessionFile);
     }
     return {
-      pane_id: "w1:p2",
+      pane_id: this.reportedPaneId ?? "w1:p2",
       tab_id: "w1:t2",
       workspace_id: "w1",
       agent_status: "idle" as const,
@@ -155,7 +156,7 @@ class FakeHerdr {
   async getAgent() {
     if (this.getAgentGate) await this.getAgentGate;
     if (this.gateReconciliation && this.reconciliationGate) await this.reconciliationGate;
-    return { pane_id: "w1:p2", tab_id: "w1:t2", workspace_id: "w1", agent_status: this.currentStatus, state_change_seq: 1, name: this.agentName };
+    return { pane_id: "w1:p2", tab_id: "w1:t2", workspace_id: "w1", agent_status: this.currentStatus, state_change_seq: 1, name: this.agentName, agent_session: { value: this.activeSessionFile } };
   }
   async interrupt() {}
   async closeTab(tabId: string) {
@@ -220,10 +221,11 @@ test("a start uses the explicitly selected identity", async () => {
   assert.equal(fake.startArgs[modelIndex + 1], "selected-model");
 });
 
-test("a start adopts the child session path reported by Herdr", async () => {
+test("a start reconciles a stale Herdr start response against the created pane", async () => {
   const fake = new FakeHerdr();
   fake.sessionFile = await childSessionFile();
-  fake.reportedSessionFile = join(await mkdtemp(join(tmpdir(), "pi-reported-session-")), "actual.jsonl");
+  fake.reportedSessionFile = join(await mkdtemp(join(tmpdir(), "pi-reported-session-")), "stale.jsonl");
+  fake.reportedPaneId = "w1:stale";
   const manager = new AgentManager(
     fake as unknown as HerdrClient,
     testConfig(),
@@ -236,7 +238,7 @@ test("a start adopts the child session path reported by Herdr", async () => {
 
   const record = await manager.start({ name: "check", identityName: "reviewer", task: "Check it.", keepOpen: true, cwd: "/repo" });
 
-  assert.equal(record.sessionFile, fake.reportedSessionFile);
+  assert.equal(record.sessionFile, fake.activeSessionFile);
 });
 
 test("a start rejects an unknown selected identity", async () => {

@@ -32,6 +32,14 @@
       "evidence": ["test/workers/tool-contract.test.ts", "test/fallback.test.ts", "scripts/smoke-worker-resources.ts", "VERIFICATION.md"]
     },
     {
+      "id": "workers/poteto-bootstrap",
+      "owner": "pi",
+      "scope": "core",
+      "implementation": "complete",
+      "verification": "model",
+      "evidence": ["extensions/pstack-workers/poteto-bootstrap.ts", "test/workers/poteto-bootstrap.test.ts", "VERIFICATION.md"]
+    },
+    {
       "id": "workers/foreground-and-background",
       "owner": "pi",
       "scope": "core",

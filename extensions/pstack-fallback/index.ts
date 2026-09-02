@@ -11,6 +11,7 @@ import { taskBudgetFromEnvironment } from "../pstack-workers/budget.js";
 import { loadConfig } from "../pstack-workers/config.js";
 import { composeChildSystemPrompt } from "../pstack-workers/child-prompt.js";
 import { buildPiArgs } from "../pstack-workers/herdr.js";
+import { assertPotetoBootstrapped, findPotetoSkill, POTETO_IDENTITY, potetoBootstrapPrompt } from "../pstack-workers/poteto-bootstrap.js";
 import { discoverInheritedResources, resolveRuntimeSettings } from "../pstack-workers/resources.js";
 import type { RuntimeSettings } from "../pstack-workers/types.js";
 
@@ -223,6 +224,11 @@ export default function pstackFallback(pi: ExtensionAPI): void {
       }
       const run = async () => {
         try {
+          if (identityConfig.name === POTETO_IDENTITY) {
+            const skillPath = findPotetoSkill(runtime.skills);
+            await runPi({ record, task: potetoBootstrapPrompt(skillPath), settings: runtime, instructions, signal });
+            assertPotetoBootstrapped(record.sessionFile, skillPath);
+          }
           record.lastResult = await runPi({ record, task, settings: runtime, instructions, signal });
           record.status = "completed";
         } catch (error) {

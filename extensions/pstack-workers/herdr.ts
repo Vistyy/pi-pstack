@@ -292,8 +292,7 @@ export class HerdrClient {
       if (stateChanged) {
         if (agent.agent_status === "working" || agent.agent_status === "unknown") {
           if (options.settleTimeoutMs !== undefined) {
-            const remaining = Math.max(1, deadline - Date.now());
-            return this.waitForSettlement(target, Math.min(options.settleTimeoutMs, remaining), signal);
+            return this.waitForSettlement(target, options.settleTimeoutMs, signal);
           }
           return this.wait(target, signal);
         }

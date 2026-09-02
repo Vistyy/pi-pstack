@@ -6,7 +6,7 @@ Generated logs and disposable profiles remain under `.work/` and are not release
 ## Current no-model boundaries
 
 `pnpm port:verify` verified that `vendor/pstack` has the exact locked upstream tree and the required upstream commit and tree trailers.
-It passed 98 Pi boundary tests, 52 lifted upstream Bun tests, the root TypeScript check, and the upstream watch-pr TypeScript check.
+It passed 101 Pi boundary tests, 52 lifted upstream Bun tests, the root TypeScript check, and the upstream watch-pr TypeScript check.
 It verified all six pinned official files by SHA-256 digest.
 The generated port report records 99 exact files, 55 adapted files, four intentional omissions, six official integration files, and 66 Pi-owned files.
 The remaining omissions are the upstream plugin manifest, the unsupported Grok Bot skill, the vendor-specific automated-review policy, and the host-specific worktree audit.
@@ -18,22 +18,50 @@ The packed worker-resource smoke started a Pi RPC session without a prompt and c
 It confirmed that all 48 packaged skills and the core pstack extension crossed the worker boundary while delegation extensions, `Task`, and other delegation tools did not.
 It confirmed that `pstack_todo` remained available to the worker.
 
-The configured creator-equivalent model selectors were resolved through Pi's model runtime without sending prompts.
-All four selected model IDs were available: `opencode-go/grok-4.6`, `openrouter/anthropic/claude-fable-5.1`, `openai-codex/gpt-5.6-sol`, and `openrouter/anthropic/claude-opus-5`.
+The live model configuration remains on `inherit-parent` while the OpenAI Codex and OpenCode Go role map is selected.
+The configuration preserves four entries for every upstream four-member panel.
 The no-model checks establish provenance, packaging, resource visibility, tool ownership, model routing shape, and process startup.
 They do not establish that a model follows the complete workflow or that the workflow improves task outcomes.
 
-## Current Luna conformance attempts
+## Current Luna conformance
 
-The first bounded Luna attempt read the complete Poteto Mode skill, read the applicable playbooks, and initialized `pstack_todo`.
-Its Task call failed before a child model prompt because Pi rejected the upstream-only `is_background` identity field and had disabled `poteto-agent`.
-The runtime identity now removes that one Cursor-only field, and a boundary test loads every bundled identity through the real configuration parser.
+The bounded Luna sequence exposed four live-boundary defects before reaching a valid pass.
+Pi disabled the upstream `poteto-agent` identity because its frontmatter contained Cursor-only `is_background` metadata.
+Herdr's pre-prompt session metadata described the eventual default session path before that file existed, so startup validation had treated provisional metadata as committed state.
+A Poteto child could ignore its identity's required skill read and todo initialization when the assignment requested a terse result.
+The settlement helper also applied its five-second state-change window to model completion, causing valid longer turns to time out.
 
-The second bounded Luna attempt again read the skill, initialized the todo list, and issued exactly one correctly shaped foreground Task call.
-Herdr started the child Pi process, but the manager rejected Herdr's reported child session path before submitting the child prompt.
-The parent therefore verified the fixture directly, so this attempt is not a conformance pass.
-The manager now adopts the session path reported by the successfully started Herdr child, and a boundary test verifies that ownership contract.
-A successful bounded rerun remains required before model conformance can advance beyond `unverified`.
+The repaired boundary removes only the unsupported identity field, treats the created pane as the pre-prompt identity authority, and reconciles the session path after the first settled turn.
+It gives every Poteto worker a separate bootstrap turn and verifies from the child transcript that it read the exact packaged `poteto-mode/SKILL.md` and initialized `pstack_todo` before submitting the assignment.
+The settlement helper now gives an observed working turn its complete configured settlement timeout.
+
+The final `openai-codex/gpt-5.6-luna` run passed with one parent and one child session.
+The parent read Poteto Mode, initialized its todo list, and issued exactly one foreground readonly Task.
+The child transcript records the exact Poteto skill read, `pstack_todo` initialization, the assigned `README.md` read, and the expected marker response.
+No files changed and no additional workers started.
+The artifacts are under `.work/conformance-luna-20260902-222019/`.
+
+## OpenCode Go read-only calibration
+
+Four anonymized models answered the same organic architecture question against identical copies of a small configuration service.
+The prompt required complete runtime flow, ownership boundaries, exact citations, and identification of a closure that retained stale state after a successful reload.
+GPT-5.6 Sol judged all four answers in one blinded pass against the source and a five-part rubric.
+
+| Model | Score |
+| --- | ---: |
+| `opencode-go/deepseek-v4-flash` | 18/20 |
+| `opencode-go/glm-5.3-flash` | 17/20 |
+| `opencode-go/qwen3.8-flash` | 16/20 |
+| `opencode-go/muse-spark-1.2-contributor` | 15/20 |
+
+Independent review agreed with the ranking.
+DeepSeek gave the strongest complete flow and stale-state explanation but had inaccurate line citations.
+GLM gave the next strongest answer and overstated two ownership boundaries.
+Qwen emphasized the revision gate instead of the requested closure risk before mentioning the closure secondarily.
+Muse traced the flow and closure correctly but made the most ownership and validation overclaims.
+This one synthetic read-only task supports using DeepSeek and GLM as inexpensive review candidates and Muse as a low-risk bulk explorer behind synthesis.
+It does not establish code-generation quality, broad task quality, or that Muse Spark 1.3 will retain the same behavior as 1.2.
+The artifacts are under `.work/harbor-lantern-20260902-222255/`.
 
 ## Historical Herdr transport boundary
 
