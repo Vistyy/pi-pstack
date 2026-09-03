@@ -9,6 +9,9 @@ import { assertPotetoBootstrapped, findPotetoSkill, POTETO_IDENTITY, potetoBoots
 import { readLatestAssistantResult } from "./session-result.js";
 
 const INTERRUPT_SETTLE_TIMEOUT_MS = 5_000;
+const WORKER_BOOTSTRAP_PROMPT = "Return exactly PSTACK_WORKER_READY.";
+
+export class ChildSessionBootstrapError extends Error {}
 
 interface TurnState {
   assignment: number;
@@ -120,6 +123,25 @@ export class AgentManager {
     runtime?: RuntimeSettings;
     placement?: CreatedWorktree;
   }, signal?: AbortSignal): Promise<OwnedAgentRecord> {
+    const maximumAttempts = options.placement ? 1 : 3;
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await this.startOnce(options, signal);
+      } catch (error) {
+        if (!(error instanceof ChildSessionBootstrapError) || attempt >= maximumAttempts) throw error;
+      }
+    }
+  }
+
+  private async startOnce(options: {
+    name: string;
+    identityName: string;
+    task: string;
+    keepOpen: boolean;
+    cwd: string;
+    runtime?: RuntimeSettings;
+    placement?: CreatedWorktree;
+  }, signal?: AbortSignal): Promise<OwnedAgentRecord> {
     this.assertRunning();
     await this.reloadConfig();
     validateAgentName(options.name);
@@ -194,6 +216,15 @@ export class AgentManager {
           record.sessionFile = reportedSessionFile;
         }
         assertPotetoBootstrapped(record.sessionFile, skillPath);
+      } else {
+        try {
+          const beforeBootstrap = await this.herdr.getAgent(record.paneId, signal);
+          await this.herdr.prompt(record.paneId, WORKER_BOOTSTRAP_PROMPT, signal);
+          await this.herdr.waitForTurn(record.paneId, beforeBootstrap.state_change_seq ?? 0, signal, { settleTimeoutMs: 120_000 });
+          await access(record.sessionFile);
+        } catch (error) {
+          throw new ChildSessionBootstrapError(`Could not establish the requested child Pi session: ${(error as Error).message}`);
+        }
       }
 
       const sessionOffset = await sessionSize(record.sessionFile);

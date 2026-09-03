@@ -192,7 +192,7 @@ test("a settled temporary assignment retains its result and closes its tab", asy
   );
 
   await manager.start({ name: "review", identityName: "reviewer", task: "Review it.", keepOpen: false, cwd: "/repo" });
-  assert.equal(fake.prompts[0], "Review it.");
+  assert.deepEqual(fake.prompts, ["Return exactly PSTACK_WORKER_READY.", "Review it."]);
   fake.settled.resolve({
     pane_id: "w1:p2",
     tab_id: "w1:t2",
@@ -320,7 +320,7 @@ test("a frontmatter-only identity receives no appended child prompt", async () =
   await manager.start({ name: "fast", identityName: "reviewer", task: "Check it.", keepOpen: true, cwd: "/repo" });
 
   assert.equal(fake.startArgs.includes("--append-system-prompt"), false);
-  assert.equal(fake.prompts[0], "Check it.");
+  assert.deepEqual(fake.prompts, ["Return exactly PSTACK_WORKER_READY.", "Check it."]);
 });
 
 test("shared instructions precede identity instructions in the child prompt", async () => {
@@ -508,9 +508,9 @@ test("send steers active work without replacing its assignment or close behavior
 
   assert.equal(steered.assignment, 1);
   assert.equal(steered.status, "working");
-  assert.deepEqual(fake.prompts, ["Review.", "Focus on lifecycle races."]);
+  assert.deepEqual(fake.prompts, ["Return exactly PSTACK_WORKER_READY.", "Review.", "Focus on lifecycle races."]);
   assert.equal(fake.waitCalls, 2);
-  assert.equal(fake.waitForTurnCalls, 0);
+  assert.equal(fake.waitForTurnCalls, 1);
   assert.deepEqual(fake.closed, []);
 
   fake.settled.resolve({
