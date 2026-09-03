@@ -231,7 +231,7 @@ export function registerTools(
         name,
         identityName: identity,
         task,
-        keepOpen: false,
+        keepOpen: identity === POTETO_IDENTITY && !placement,
         cwd: placement?.path ?? parentCwd,
         placement,
         runtime,

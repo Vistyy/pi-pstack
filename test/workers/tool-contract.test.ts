@@ -262,11 +262,13 @@ test("Task does not resume a Poteto worker across a model or worktree boundary",
   });
   let sends = 0;
   let starts = 0;
+  const keepOpenValues: unknown[] = [];
   const manager = {
     getRecords: () => [reusable],
     createWorktree: async () => ({ workspaceId: "ws", tabId: "tab", paneId: "pane", path: "/worktree", branch: "branch" }),
-    start: async () => {
+    start: async (options: Record<string, unknown>) => {
       starts += 1;
+      keepOpenValues.push(options.keepOpen);
       return record({ name: `poteto-agent-${starts + 1}`, identity: "poteto-agent", status: "working", completedAssignment: 0 });
     },
     send: async () => {
@@ -293,6 +295,7 @@ test("Task does not resume a Poteto worker across a model or worktree boundary",
 
   assert.equal(sends, 0);
   assert.equal(starts, 2);
+  assert.deepEqual(keepOpenValues, [true, false]);
 });
 
 test("pstack_panel owns cardinality, slot expansion, serialized launch, concurrent execution, and collection", async () => {
