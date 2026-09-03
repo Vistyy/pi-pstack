@@ -34,7 +34,7 @@ Write one clear paragraph. Reviewers challenge whether the work achieves the int
 ## Step 3, Spawn Reviewers
 
 Call `pstack_panel` once with `role: interrogate reviewers`, `identity: general-purpose`, `readonly: true`, and the filled reviewer prompt.
-The panel boundary launches every configured reviewer concurrently, assigns models in panel order, labels the returned results, and reports dropouts.
+The panel boundary launches reviewer sessions sequentially, leaves accepted assignments running concurrently, assigns models in panel order, labels the returned results, and reports dropouts.
 Alias entries such as `inherit-parent` still count toward the panel size and inherit the parent model.
 
 Read `references/reviewer-prompt.md` and fill in the template with:

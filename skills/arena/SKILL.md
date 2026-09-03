@@ -37,7 +37,7 @@ N candidates writing to the same path is shared mutable state and fails the **se
 
 Call `pstack_panel` once with `role: arena runners`, `identity: general-purpose`, and the shared prompt template.
 The prompt includes the task, the path to the shared grounding, the candidate path template, and instructions to produce both the artifact and a short rationale.
-The tool starts every configured panel member concurrently, waits for the whole panel, and reports dropouts explicitly.
+The tool launches panel sessions sequentially to preserve Herdr session identity, leaves accepted assignments running concurrently, waits for the whole panel, and reports dropouts explicitly.
 
 The rationale is mandatory. Without it, the parent cannot tell whether a candidate's structure is principled or accidental, which makes Phase E grafting unreliable. Each rationale names the alternatives the candidate considered and what it rejected.
 

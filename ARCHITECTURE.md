@@ -60,7 +60,7 @@ The intended mechanism mappings are:
 | Cursor mechanism | Pi or local mechanism |
 | --- | --- |
 | `Task` | Herdr-owned persistent Pi worker, or persistent Pi subprocess session when Herdr is unavailable |
-| Fixed configured model panel | One `pstack_panel` call that owns cardinality, concurrent dispatch, model assignment, and dropout accounting |
+| Fixed configured model panel | One `pstack_panel` call that owns cardinality, serialized session launch, concurrent assignment execution, model assignment, and dropout accounting |
 | `isolation: "worktree"` | Worker in an isolated local worktree |
 | `/loop` | Completion wake plus a bounded heartbeat |
 | Cursor session resume | Persistent Pi session plus repository and process reconciliation |

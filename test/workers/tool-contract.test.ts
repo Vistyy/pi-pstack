@@ -295,12 +295,20 @@ test("Task does not resume a Poteto worker across a model or worktree boundary",
   assert.equal(starts, 2);
 });
 
-test("pstack_panel owns configured cardinality, slot expansion, concurrent dispatch, and collection", async () => {
+test("pstack_panel owns cardinality, slot expansion, serialized launch, concurrent execution, and collection", async () => {
   const starts: Array<Record<string, unknown>> = [];
+  let activeStarts = 0;
+  let maximumActiveStarts = 0;
+  let activeWaits = 0;
+  let maximumActiveWaits = 0;
   const manager = {
     getRecords: () => [],
     start: async (options: Record<string, unknown>) => {
       starts.push(options);
+      activeStarts += 1;
+      maximumActiveStarts = Math.max(maximumActiveStarts, activeStarts);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      activeStarts -= 1;
       return record({
         name: String(options.name),
         identity: String(options.identityName),
@@ -309,7 +317,13 @@ test("pstack_panel owns configured cardinality, slot expansion, concurrent dispa
         lastTask: String(options.task),
       });
     },
-    waitForSettlement: async (name: string) => record({ name, lastResult: `result from ${name}` }),
+    waitForSettlement: async (name: string) => {
+      activeWaits += 1;
+      maximumActiveWaits = Math.max(maximumActiveWaits, activeWaits);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      activeWaits -= 1;
+      return record({ name, lastResult: `result from ${name}` });
+    },
   } as unknown as AgentManager;
   const panel = tool(registeredTools(manager), "pstack_panel");
   const result = await panel.execute(
@@ -326,6 +340,8 @@ test("pstack_panel owns configured cardinality, slot expansion, concurrent dispa
   );
 
   assert.equal(starts.length, 4);
+  assert.equal(maximumActiveStarts, 1);
+  assert.equal(maximumActiveWaits, 4);
   assert.deepEqual(starts.map((start) => start.task), [
     "Review as slot 1 (A).",
     "Review as slot 2 (B).",

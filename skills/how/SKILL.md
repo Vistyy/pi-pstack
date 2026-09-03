@@ -111,7 +111,7 @@ Run the full explain flow above (Steps 1-4). You must understand the architectur
 ### Step 2. Spawn Critics
 
 After the explanation is complete, call `pstack_panel` once with `role: how critics`, `identity: general-purpose`, `readonly: true`, and the filled critic prompt.
-The panel boundary launches every configured critic concurrently, assigns models in panel order, labels the returned results, and reports dropouts.
+The panel boundary launches critic sessions sequentially, leaves accepted assignments running concurrently, assigns models in panel order, labels the returned results, and reports dropouts.
 Alias entries such as `inherit-parent` still count toward the panel size and inherit the parent model.
 
 Read `references/critic-prompt.md` for the prompt template. Each critic gets:

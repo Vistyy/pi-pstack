@@ -249,7 +249,7 @@ export function registerTools(
   pi.registerTool({
     name: "pstack_panel",
     label: "Pstack Panel",
-    description: "Run every configured member of one pstack fan-out panel exactly once and wait for the complete panel. The runtime owns cardinality, model assignment, concurrent dispatch, and dropout accounting.",
+    description: "Run every configured member of one pstack fan-out panel exactly once and wait for the complete panel. The runtime owns cardinality, model assignment, safe serialized launch, concurrent execution, and dropout accounting.",
     promptSnippet: "Run one complete configured pstack model panel",
     parameters: Type.Object({
       role: StringEnum([...FANOUT_PANEL_ROLE_NAMES] as [string, ...string[]], { description: "Configured fan-out panel role." }),
@@ -281,7 +281,7 @@ export function registerTools(
       }
       const manager = getManager();
       const parentCwd = params.cwd ?? ctx.cwd;
-      const starts = targets.map(async (target, index) => {
+      const starts = targets.map((target, index) => async () => {
         taskSequence += 1;
         const label = panelLabel(index);
         const baseName = `${params.role}-${label}`.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 20) || "panel";
@@ -309,7 +309,7 @@ export function registerTools(
           },
         }, signal);
       });
-      const started = await Promise.allSettled(starts);
+      const started = await settleSequentially(starts);
       const records = started.map((outcome, index) => outcome.status === "fulfilled"
         ? outcome.value
         : failedDispatchRecord(`${params.role}-${panelLabel(index)}`.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").slice(0, 29), identity, params.prompt, false, parentCwd, outcome.reason));
@@ -341,7 +341,7 @@ export function registerTools(
     async execute(_id, params, signal, _onUpdate, ctx) {
       assertUniqueNames(params.agents.map((agent) => agent.name));
       const manager = getManager();
-      const outcomes = await Promise.allSettled(params.agents.map((agent) => manager.start({
+      const outcomes = await settleSequentially(params.agents.map((agent) => () => manager.start({
         name: agent.name,
         identityName: agent.identity,
         task: agent.task,
@@ -522,6 +522,18 @@ function sameRuntime(left: OwnedAgentRecord["runtime"], right: OwnedAgentRecord[
     && left.model === right.model
     && left.thinking === right.thinking
     && JSON.stringify(left.tools ?? []) === JSON.stringify(right.tools ?? []);
+}
+
+async function settleSequentially<T>(operations: Array<() => Promise<T>>): Promise<Array<PromiseSettledResult<T>>> {
+  const outcomes: Array<PromiseSettledResult<T>> = [];
+  for (const operation of operations) {
+    try {
+      outcomes.push({ status: "fulfilled", value: await operation() });
+    } catch (reason) {
+      outcomes.push({ status: "rejected", reason });
+    }
+  }
+  return outcomes;
 }
 
 export function formatList(records: OwnedAgentRecord[]): string {

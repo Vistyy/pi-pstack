@@ -46,7 +46,7 @@
       "implementation": "complete",
       "verification": "mechanical",
       "evidence": ["extensions/pstack-workers/index.ts", "extensions/pstack-fallback/index.ts", "test/workers/tool-contract.test.ts"],
-      "deviations": ["Pi replaces repeated prompt-driven Task calls for fixed model panels with one pstack_panel operation that owns cardinality, concurrent dispatch, model assignment, placeholder expansion, collection, and dropout reporting."]
+      "deviations": ["Pi replaces repeated prompt-driven Task calls for fixed model panels with one pstack_panel operation that owns cardinality, serialized session launch, concurrent assignment execution, model assignment, placeholder expansion, collection, and dropout reporting."]
     },
     {
       "id": "workers/foreground-and-background",
