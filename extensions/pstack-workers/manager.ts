@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { access, mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, truncateHead } from "@earendil-works/pi-coding-agent";
 import type { AgentIdentity, ExtensionConfig, OwnedAgentCollection, OwnedAgentRecord, RuntimeSettings } from "./types.js";
@@ -14,6 +14,7 @@ interface TurnState {
   assignment: number;
   generation: number;
   controller: AbortController;
+  sessionOffset: number;
 }
 
 export interface ManagerCallbacks {
@@ -195,11 +196,12 @@ export class AgentManager {
         assertPotetoBootstrapped(record.sessionFile, skillPath);
       }
 
+      const sessionOffset = await sessionSize(record.sessionFile);
       const prompted = await this.herdr.prompt(record.paneId, options.task.trim(), signal);
       record.status = "working";
       record.updatedAt = Date.now();
       this.persist();
-      this.watchAfterPrompt(record, prompted);
+      this.watchAfterPrompt(record, prompted, undefined, sessionOffset);
       return cloneRecord(record);
     } catch (error) {
       if (tabId) {
@@ -259,12 +261,13 @@ export class AgentManager {
         const baseline = await this.herdr.getAgent(record.paneId!, signal);
         activeBaselineSequence = baseline.state_change_seq;
         this.assertRunning();
+        const sessionOffset = await sessionSize(record.sessionFile);
         const prompted = await this.herdr.prompt(record.paneId!, text, signal);
         this.assertRunning();
         record.status = "working";
         record.updatedAt = Date.now();
         this.persist();
-        this.watchAfterPrompt(record, prompted, activeTurn);
+        this.watchAfterPrompt(record, prompted, activeTurn, sessionOffset);
         restoreActiveWatch = false;
         return cloneRecord(record);
       }
@@ -282,9 +285,10 @@ export class AgentManager {
       record.updatedAt = Date.now();
       this.persist();
       try {
+        const sessionOffset = await sessionSize(record.sessionFile);
         const prompted = await this.herdr.prompt(record.paneId!, text, signal);
         this.assertRunning();
-        this.watchAfterPrompt(record, prompted);
+        this.watchAfterPrompt(record, prompted, undefined, sessionOffset);
       } catch (error) {
         this.reconcileNewAssignmentPromptFailure(record, baseline.state_change_seq, error);
         throw error;
@@ -582,9 +586,14 @@ export class AgentManager {
     if (this.callbacks.reloadConfig) this.config = await this.callbacks.reloadConfig();
   }
 
-  private watchAfterPrompt(record: OwnedAgentRecord, prompted: { agent_status?: string; state_change_seq?: number }, turn?: TurnState): void {
+  private watchAfterPrompt(
+    record: OwnedAgentRecord,
+    prompted: { agent_status?: string; state_change_seq?: number },
+    turn?: TurnState,
+    sessionOffset = turn?.sessionOffset ?? 0,
+  ): void {
     const stillWorking = prompted.agent_status === "working" || prompted.agent_status === "unknown";
-    this.watch(record, stillWorking ? undefined : prompted.state_change_seq, turn);
+    this.watch(record, stillWorking ? undefined : prompted.state_change_seq, turn, sessionOffset);
   }
 
   private pauseTurn(turn: TurnState): void {
@@ -592,7 +601,7 @@ export class AgentManager {
     turn.controller.abort();
   }
 
-  private watch(record: OwnedAgentRecord, baselineSequence?: number, existingTurn?: TurnState): void {
+  private watch(record: OwnedAgentRecord, baselineSequence?: number, existingTurn?: TurnState, sessionOffset = existingTurn?.sessionOffset ?? 0): void {
     const oldTurn = this.turns.get(record.name);
     if (oldTurn && oldTurn !== existingTurn) this.pauseTurn(oldTurn);
     const controller = new AbortController();
@@ -600,11 +609,13 @@ export class AgentManager {
     if (turn) {
       turn.controller.abort();
       turn.controller = controller;
+      turn.sessionOffset = sessionOffset;
     } else {
       turn = {
         assignment: record.assignment,
         generation: 0,
         controller,
+        sessionOffset,
       };
     }
     const generation = ++turn.generation;
@@ -640,7 +651,7 @@ export class AgentManager {
   private async settleCompleted(record: OwnedAgentRecord, turn = this.turns.get(record.name)): Promise<void> {
     try {
       if (!record.sessionFile) throw new Error("The child Pi session file is unavailable.");
-      const result = readLatestAssistantResult(record.sessionFile);
+      const result = await readSettledAssistantResult(record.sessionFile, turn?.sessionOffset ?? 0);
       record.lastResult = truncateResult(result.text, record.sessionFile);
       record.lastError = result.error;
       record.status = result.failed ? "failed" : "idle";
@@ -649,7 +660,6 @@ export class AgentManager {
       record.lastError = (error as Error).message;
       record.lastResult = `Could not read agent result: ${record.lastError}`;
     }
-    record.completedAssignment = record.assignment;
     record.updatedAt = Date.now();
     const shouldClose = !record.keepOpen;
     if (shouldClose) {
@@ -661,6 +671,7 @@ export class AgentManager {
       }
       return;
     }
+    record.completedAssignment = record.assignment;
     if (turn) this.finishTurn(record, turn);
     else this.finishSettledRecord(record);
   }
@@ -784,6 +795,28 @@ export class AgentManager {
 
   private persist(): void {
     this.callbacks.persist(this.getRecords(), this.getCollections());
+  }
+}
+
+async function sessionSize(sessionFile: string | undefined): Promise<number> {
+  if (!sessionFile) return 0;
+  try {
+    return (await stat(sessionFile)).size;
+  } catch {
+    return 0;
+  }
+}
+
+async function readSettledAssistantResult(sessionFile: string, afterByteOffset: number) {
+  const deadline = Date.now() + 2_000;
+  while (true) {
+    try {
+      const result = readLatestAssistantResult(sessionFile, afterByteOffset);
+      if (result.error !== "The child session has no assistant response." || Date.now() >= deadline) return result;
+    } catch (error) {
+      if (Date.now() >= deadline) throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }
 

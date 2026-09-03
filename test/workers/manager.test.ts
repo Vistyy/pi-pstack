@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { copyFile, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { appendFile, copyFile, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -122,6 +122,18 @@ class FakeHerdr {
   async prompt(_paneId?: string, message?: string) {
     if (message) this.prompts.push(message);
     if (this.promptError && !this.promptAcceptedOnError) throw this.promptError;
+    if (this.activeSessionFile && this.sessionFile) {
+      const lines = (await readFile(this.sessionFile, "utf8")).trim().split("\n");
+      const assistant = lines.reverse().find((line) => {
+        try {
+          const entry = JSON.parse(line) as { type?: string; message?: { role?: string } };
+          return entry.type === "message" && entry.message?.role === "assistant";
+        } catch {
+          return false;
+        }
+      });
+      if (assistant) await appendFile(this.activeSessionFile, `${assistant}\n`);
+    }
     this.currentStatus = "working";
     if (this.promptError) throw this.promptError;
     const gate = this.promptGate;
