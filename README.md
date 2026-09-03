@@ -8,7 +8,8 @@ The package preserves upstream pstack content unless Pi needs a different host m
 
 ## Pi runtime
 
-- `Task` starts a persistent Pi worker with `isolation: worktree` or `isolation: current`.
+- `Task` starts a persistent Pi worker with `isolation: worktree` or `isolation: current`, and compatible settled Poteto workers resume in the same checkout.
+- `pstack_panel` starts every configured member of a fan-out panel concurrently from one prompt template and returns one labeled result set.
 - In a Herdr workspace, workers run in owned background tabs with completion wakes, resumable Pi sessions, and Herdr-owned worktrees.
 - Outside Herdr, workers use persistent Pi session files, background completion wakes, and standard local Git worktrees.
 - Pi's `/loop` command and the `pstack_loop` tool own bounded autonomous predicates.

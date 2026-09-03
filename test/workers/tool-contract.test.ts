@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { defaultConfig } from "../../extensions/pstack/config.js";
 import { registerTools } from "../../extensions/pstack-workers/index.js";
 import type { AgentManager } from "../../extensions/pstack-workers/manager.js";
 import { formatBatchCompletion } from "../../extensions/pstack-workers/notifications.js";
@@ -56,11 +57,26 @@ function registeredTools(manager: AgentManager): RegisteredTool[] {
       name: "general-purpose",
       description: "General pstack worker.",
       sourcePath: "/package/identities/general-purpose.md",
+    }, {
+      name: "poteto-agent",
+      description: "Persistent Poteto worker.",
+      sourcePath: "/package/identities/poteto-agent.md",
     }],
     warnings: [],
   };
 
-  registerTools(pi, config, () => manager);
+  registerTools(pi, config, () => manager, {
+    readModelConfig: async () => {
+      const modelConfig = defaultConfig();
+      for (const role of Object.keys(modelConfig.roles)) {
+        const current = modelConfig.roles[role];
+        modelConfig.roles[role] = Array.isArray(current)
+          ? current.map(() => ({ model: "inherit-parent" }))
+          : { model: "inherit-parent" };
+      }
+      return modelConfig;
+    },
+  });
   return tools;
 }
 
@@ -186,6 +202,138 @@ test("Task maps Pi-native fields to one background persistent worker", async () 
     },
   });
   assert.match(String((result.content as Array<{ text: string }>)[0].text), /Completion will wake the parent/);
+});
+
+test("Task resumes a compatible settled Poteto worker in the same checkout", async () => {
+  const reusable = record({
+    name: "poteto-agent-1",
+    identity: "poteto-agent",
+    status: "closed",
+    cwd: "/repo",
+    runtime: { provider: "openai-codex", model: "gpt-5.6-luna", thinking: "high" },
+  });
+  const resumed = record({ ...reusable, status: "working", assignment: 2, completedAssignment: 1, lastTask: "Implement the follow-up." });
+  let started = false;
+  let sent: unknown[] | undefined;
+  const manager = {
+    getRecords: () => [reusable],
+    start: async () => {
+      started = true;
+      return resumed;
+    },
+    send: async (...args: unknown[]) => {
+      sent = args;
+      return resumed;
+    },
+    waitForSettlement: async () => record({ ...resumed, status: "closed", completedAssignment: 2, lastResult: "REUSED_OK" }),
+  } as unknown as AgentManager;
+  const result = await tool(registeredTools(manager), "Task").execute(
+    "task-call",
+    {
+      description: "Follow-up",
+      prompt: "Implement the follow-up.",
+      identity: "poteto-agent",
+      model: "openai-codex/gpt-5.6-luna",
+      thinking: "high",
+      run_in_background: false,
+      isolation: "current",
+    },
+    new AbortController().signal,
+    undefined,
+    {
+      cwd: "/repo",
+      modelRegistry: { getAvailable: () => [{ provider: "openai-codex", id: "gpt-5.6-luna" }] },
+    },
+  );
+
+  assert.equal(started, false);
+  assert.equal(sent?.[0], "poteto-agent-1");
+  assert.equal(sent?.[1], "Implement the follow-up.");
+  assert.equal((result.content as Array<{ text: string }>)[0].text, "REUSED_OK");
+});
+
+test("Task does not resume a Poteto worker across a model or worktree boundary", async () => {
+  const reusable = record({
+    name: "poteto-agent-1",
+    identity: "poteto-agent",
+    status: "closed",
+    cwd: "/repo",
+    runtime: { provider: "openai-codex", model: "gpt-5.6-luna", thinking: "high" },
+  });
+  let sends = 0;
+  let starts = 0;
+  const manager = {
+    getRecords: () => [reusable],
+    createWorktree: async () => ({ workspaceId: "ws", tabId: "tab", paneId: "pane", path: "/worktree", branch: "branch" }),
+    start: async () => {
+      starts += 1;
+      return record({ name: `poteto-agent-${starts + 1}`, identity: "poteto-agent", status: "working", completedAssignment: 0 });
+    },
+    send: async () => {
+      sends += 1;
+      return reusable;
+    },
+    batch: (records: OwnedAgentRecord[]) => collection(records[0]),
+  } as unknown as AgentManager;
+  const taskTool = tool(registeredTools(manager), "Task");
+  const context = {
+    cwd: "/repo",
+    modelRegistry: { getAvailable: () => [
+      { provider: "openai-codex", id: "gpt-5.6-luna" },
+      { provider: "openai-codex", id: "gpt-5.6-terra" },
+    ] },
+  };
+
+  await taskTool.execute("model-call", {
+    prompt: "Use Terra.", identity: "poteto-agent", model: "openai-codex/gpt-5.6-terra", thinking: "high", run_in_background: true,
+  }, new AbortController().signal, undefined, context);
+  await taskTool.execute("worktree-call", {
+    prompt: "Use a worktree.", identity: "poteto-agent", model: "openai-codex/gpt-5.6-luna", thinking: "high", run_in_background: true, isolation: "worktree",
+  }, new AbortController().signal, undefined, context);
+
+  assert.equal(sends, 0);
+  assert.equal(starts, 2);
+});
+
+test("pstack_panel owns configured cardinality, slot expansion, concurrent dispatch, and collection", async () => {
+  const starts: Array<Record<string, unknown>> = [];
+  const manager = {
+    getRecords: () => [],
+    start: async (options: Record<string, unknown>) => {
+      starts.push(options);
+      return record({
+        name: String(options.name),
+        identity: String(options.identityName),
+        status: "working",
+        completedAssignment: 0,
+        lastTask: String(options.task),
+      });
+    },
+    waitForSettlement: async (name: string) => record({ name, lastResult: `result from ${name}` }),
+  } as unknown as AgentManager;
+  const panel = tool(registeredTools(manager), "pstack_panel");
+  const result = await panel.execute(
+    "panel-call",
+    {
+      role: "interrogate reviewers",
+      prompt: "Review as slot {{PSTACK_PANEL_INDEX}} ({{PSTACK_PANEL_LABEL}}).",
+      identity: "general-purpose",
+      readonly: true,
+    },
+    new AbortController().signal,
+    undefined,
+    { cwd: "/repo", modelRegistry: { getAvailable: () => [] } },
+  );
+
+  assert.equal(starts.length, 4);
+  assert.deepEqual(starts.map((start) => start.task), [
+    "Review as slot 1 (A).",
+    "Review as slot 2 (B).",
+    "Review as slot 3 (C).",
+    "Review as slot 4 (D).",
+  ]);
+  assert.match((result.content as Array<{ text: string }>)[0].text, /## Panel A/);
+  assert.match((result.content as Array<{ text: string }>)[0].text, /## Panel D/);
 });
 
 test("Task rejects an unavailable explicit model before starting a worker", async () => {

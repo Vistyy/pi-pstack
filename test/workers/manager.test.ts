@@ -455,7 +455,14 @@ test("publishes the caller name as display metadata on start and reopen", async 
     { persist() {} },
   );
 
-  await manager.start({ name: "review", identityName: "reviewer", task: "Review it.", keepOpen: true, cwd: "/repo" });
+  await manager.start({
+    name: "review",
+    identityName: "reviewer",
+    task: "Review it.",
+    keepOpen: true,
+    cwd: "/repo",
+    runtime: { provider: "openai-codex", model: "gpt-5.6-luna", thinking: "high" },
+  });
   await manager.close("review");
   await manager.send("review", "Resume the review.");
 
@@ -464,6 +471,10 @@ test("publishes the caller name as display metadata on start and reopen", async 
     { paneId: "w1:p2", name: "review" },
   ]);
   assert.equal(fake.agentName, "oa-parent-review-c97a");
+  const providerIndex = fake.startArgs.indexOf("--provider");
+  assert.deepEqual(fake.startArgs.slice(providerIndex, providerIndex + 6), [
+    "--provider", "openai-codex", "--model", "gpt-5.6-luna", "--thinking", "high",
+  ]);
 });
 
 test("send steers active work without replacing its assignment or close behavior", async () => {

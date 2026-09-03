@@ -34,9 +34,9 @@ Skip Phase A only when the work is genuinely greenfield with no surrounding syst
 
 Run the **arena** skill with the design-sketch task and the Phase A grounding artifacts. Pass `references/runner-prompt.md` as each runner's prompt. Each candidate produces a design package shaped per `references/rationale-template.md`: the caller's usage written first, then the type sketch, function signatures, module map, and prose rationale derived from it.
 
-Call `pstack_config` with `action: get` and override Arena's candidate role with `architect runners` for this run.
-During Arena's candidate phase, launch one Task worker with `role: architect runners` for each configured `architect runners` entry.
-The configured panel length owns the candidate count, and alias entries such as `inherit-parent` still count.
+Override Arena's candidate role with `architect runners` for this run.
+During Arena's candidate phase, call `pstack_panel` once with `role: architect runners` and the candidate prompt template.
+The panel boundary owns the configured candidate count and model assignment, and alias entries such as `inherit-parent` still count.
 
 Design it twice. Require at least two structurally distinct candidates before synthesis, even when the first looks sufficient. This is the **exhaust-the-design-space** principle skill made concrete. Whole-shape alternatives, not point fixes inside one shape.
 

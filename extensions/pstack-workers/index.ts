@@ -14,9 +14,10 @@ import { taskBudgetFromEnvironment } from "./budget.js";
 import { getConfigDirectory, loadConfig } from "./config.js";
 import { OwnedAgentViewController } from "./agent-view.js";
 import { HerdrClient } from "./herdr.js";
-import { targetsForRole, readConfig as readPstackConfig } from "../pstack/config.js";
+import { FANOUT_PANEL_ROLE_NAMES, targetsForRole, readConfig as readPstackConfig } from "../pstack/config.js";
 import { AgentManager } from "./manager.js";
 import { sendBatchCompletion } from "./notifications.js";
+import { POTETO_IDENTITY } from "./poteto-bootstrap.js";
 import { discoverInheritedResources, resolveRuntimeSettings } from "./resources.js";
 import {
   OWNED_AGENT_ENTRY,
@@ -135,10 +136,17 @@ export default async function piHerdrAgents(pi: ExtensionAPI): Promise<void> {
   });
 }
 
-export function registerTools(pi: ExtensionAPI, config: ExtensionConfig, getManager: () => AgentManager): void {
+export function registerTools(
+  pi: ExtensionAPI,
+  config: ExtensionConfig,
+  getManager: () => AgentManager,
+  dependencies: { readModelConfig?: typeof readPstackConfig } = {},
+): void {
+  const readModelConfig = dependencies.readModelConfig ?? readPstackConfig;
   const identityNames = config.identities.map((identity) => identity.name);
   let taskSequence = 0;
   const roleSequences = new Map<string, number>();
+  const taskReservations = new Set<string>();
   const identityCatalog = config.identities.map((identity) => `${identity.name}: ${identity.description}`).join("\n");
 
   pi.registerTool({
@@ -167,7 +175,7 @@ export function registerTools(pi: ExtensionAPI, config: ExtensionConfig, getMana
         throw new Error(`Unknown Task identity ${JSON.stringify(identity)}. Available: general-purpose, poteto-agent, comment-sicko.`);
       }
       const availableModels = new Set(ctx.modelRegistry.getAvailable().map((model) => `${model.provider}/${model.id}`));
-      const roleTargets = params.role ? targetsForRole(await readPstackConfig(), params.role) : [];
+      const roleTargets = params.role ? targetsForRole(await readModelConfig(), params.role) : [];
       const roleSequence = params.role ? roleSequences.get(params.role) ?? 0 : 0;
       const configuredTarget = roleTargets.length > 0 ? roleTargets[roleSequence % roleTargets.length] : undefined;
       if (params.role) roleSequences.set(params.role, roleSequence + 1);
@@ -177,14 +185,45 @@ export function registerTools(pi: ExtensionAPI, config: ExtensionConfig, getMana
       if (requestedModel && !availableModels.has(requestedModel)) throw new Error(`Unavailable Task model ${JSON.stringify(requestedModel)}.`);
       const model = requestedModel;
       const [provider, modelId] = model?.split(/\/(.+)/) ?? [];
+      const runtime = {
+        provider,
+        model: modelId,
+        ...(selectedThinking ? { thinking: selectedThinking } : {}),
+        tools: params.readonly ? ["read", "grep", "find", "ls", "pstack_todo"] : undefined,
+      };
       const baseName = (params.description ?? identity).toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 20) || "task";
-      taskSequence = Math.max(taskSequence, getManager().getRecords().length);
+      const manager = getManager();
+      taskSequence = Math.max(taskSequence, manager.getRecords().length);
       const budget = taskBudgetFromEnvironment();
       if (budget !== undefined && taskSequence >= budget) throw new Error(`Pstack Task budget ${budget} exhausted for this parent session.`);
       taskSequence += 1;
-      const name = `${baseName}-${taskSequence}`.slice(0, 29);
-      const manager = getManager();
       const parentCwd = params.cwd ?? ctx.cwd;
+      const reusable = identity === POTETO_IDENTITY && params.isolation !== "worktree"
+        ? manager.getRecords().find((candidate) => candidate.identity === POTETO_IDENTITY
+          && candidate.cwd === parentCwd
+          && !candidate.worktree
+          && candidate.completedAssignment === candidate.assignment
+          && (candidate.status === "idle" || candidate.status === "closed")
+          && !taskReservations.has(candidate.name)
+          && sameRuntime(candidate.runtime, runtime))
+        : undefined;
+      if (reusable) {
+        taskReservations.add(reusable.name);
+        let record: OwnedAgentRecord;
+        try {
+          record = await manager.send(reusable.name, task, signal);
+        } finally {
+          taskReservations.delete(reusable.name);
+        }
+        if (params.run_in_background) {
+          const batch = manager.batch([record]);
+          return batchToolResult(`Resumed background Task ${record.name} as ${identity}. Completion will wake the parent.`, [record], batch);
+        }
+        const settled = await manager.waitForSettlement(record.name, record.assignment, signal);
+        const result = settled.lastResult?.trim() || `Task ${record.name} settled with status ${settled.status}.`;
+        return toolResult(result, [settled]);
+      }
+      const name = `${baseName}-${taskSequence}`.slice(0, 29);
       const placement = params.isolation === "worktree"
         ? await manager.createWorktree(parentCwd, `pstack/${name}-${Date.now().toString(36)}`, name, params.base_branch ?? "HEAD", signal)
         : undefined;
@@ -195,12 +234,7 @@ export function registerTools(pi: ExtensionAPI, config: ExtensionConfig, getMana
         keepOpen: false,
         cwd: placement?.path ?? parentCwd,
         placement,
-        runtime: {
-          provider,
-          model: modelId,
-          ...(selectedThinking ? { thinking: selectedThinking } : {}),
-          tools: params.readonly ? ["read", "grep", "find", "ls", "pstack_todo"] : undefined,
-        },
+        runtime,
       }, signal);
       if (params.run_in_background) {
         const batch = manager.batch([record]);
@@ -209,6 +243,85 @@ export function registerTools(pi: ExtensionAPI, config: ExtensionConfig, getMana
       const settled = await manager.waitForSettlement(record.name, record.assignment, signal);
       const result = settled.lastResult?.trim() || `Task ${name} settled with status ${settled.status}.`;
       return toolResult(result, [settled]);
+    },
+  });
+
+  pi.registerTool({
+    name: "pstack_panel",
+    label: "Pstack Panel",
+    description: "Run every configured member of one pstack fan-out panel exactly once and wait for the complete panel. The runtime owns cardinality, model assignment, concurrent dispatch, and dropout accounting.",
+    promptSnippet: "Run one complete configured pstack model panel",
+    parameters: Type.Object({
+      role: StringEnum([...FANOUT_PANEL_ROLE_NAMES] as [string, ...string[]], { description: "Configured fan-out panel role." }),
+      prompt: Type.String({ description: "Shared assignment. Use {{PSTACK_PANEL_INDEX}} for the one-based slot and {{PSTACK_PANEL_LABEL}} for A, B, C, and later labels." }),
+      identity: Type.Optional(Type.String({ description: "Worker identity. Defaults to general-purpose." })),
+      readonly: Type.Optional(Type.Boolean({ description: "Restrict every panel worker to read-only tools." })),
+      isolation: Type.Optional(StringEnum(["worktree", "current"] as const)),
+      base_branch: Type.Optional(Type.String()),
+      cwd: Type.Optional(Type.String()),
+    }),
+    async execute(_id, params, signal, _onUpdate, ctx) {
+      const identity = params.identity ?? "general-purpose";
+      if (!identityNames.includes(identity)) throw new Error(`Unknown panel identity ${JSON.stringify(identity)}.`);
+      const config = await readModelConfig();
+      const targets = targetsForRole(config, params.role);
+      if (!FANOUT_PANEL_ROLE_NAMES.has(params.role as never) || targets.length === 0) {
+        throw new Error(`${params.role} is not a configured fan-out panel role.`);
+      }
+      const budget = taskBudgetFromEnvironment();
+      taskSequence = Math.max(taskSequence, getManager().getRecords().length);
+      if (budget !== undefined && taskSequence + targets.length > budget) {
+        throw new Error(`Pstack panel requires ${targets.length} Tasks but only ${Math.max(0, budget - taskSequence)} remain in this parent session's budget.`);
+      }
+      const availableModels = new Set(ctx.modelRegistry.getAvailable().map((model) => `${model.provider}/${model.id}`));
+      for (const target of targets) {
+        if (!["auto", "inherit-parent"].includes(target.model) && !availableModels.has(target.model)) {
+          throw new Error(`Unavailable panel model ${JSON.stringify(target.model)} for role ${JSON.stringify(params.role)}.`);
+        }
+      }
+      const manager = getManager();
+      const parentCwd = params.cwd ?? ctx.cwd;
+      const starts = targets.map(async (target, index) => {
+        taskSequence += 1;
+        const label = panelLabel(index);
+        const baseName = `${params.role}-${label}`.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 20) || "panel";
+        const name = `${baseName}-${taskSequence}`.slice(0, 29);
+        const task = params.prompt
+          .replaceAll("{{PSTACK_PANEL_INDEX}}", String(index + 1))
+          .replaceAll("{{PSTACK_PANEL_LABEL}}", label);
+        const placement = params.isolation === "worktree"
+          ? await manager.createWorktree(parentCwd, `pstack/${name}-${Date.now().toString(36)}`, name, params.base_branch ?? "HEAD", signal)
+          : undefined;
+        const requestedModel = ["auto", "inherit-parent"].includes(target.model) ? undefined : target.model;
+        const [provider, model] = requestedModel?.split(/\/(.+)/) ?? [];
+        return manager.start({
+          name,
+          identityName: identity,
+          task,
+          keepOpen: false,
+          cwd: placement?.path ?? parentCwd,
+          placement,
+          runtime: {
+            provider,
+            model,
+            ...(target.thinking ? { thinking: target.thinking } : {}),
+            tools: params.readonly ? ["read", "grep", "find", "ls", "pstack_todo"] : undefined,
+          },
+        }, signal);
+      });
+      const started = await Promise.allSettled(starts);
+      const records = started.map((outcome, index) => outcome.status === "fulfilled"
+        ? outcome.value
+        : failedDispatchRecord(`${params.role}-${panelLabel(index)}`.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").slice(0, 29), identity, params.prompt, false, parentCwd, outcome.reason));
+      const settled = await Promise.all(records.map(async (record, index) => {
+        if (started[index].status === "rejected") return record;
+        return manager.waitForSettlement(record.name, record.assignment, signal);
+      }));
+      const text = settled.map((record, index) => {
+        const result = record.lastResult?.trim() || record.lastError?.trim() || `Panel member settled with status ${record.status}.`;
+        return `## Panel ${panelLabel(index)}\n\n${result}`;
+      }).join("\n\n");
+      return toolResult(text, settled);
     },
   });
 
@@ -391,6 +504,24 @@ function failedDispatchRecord(
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function panelLabel(index: number): string {
+  let value = index;
+  let label = "";
+  do {
+    label = String.fromCharCode(65 + (value % 26)) + label;
+    value = Math.floor(value / 26) - 1;
+  } while (value >= 0);
+  return label;
+}
+
+function sameRuntime(left: OwnedAgentRecord["runtime"], right: OwnedAgentRecord["runtime"]): boolean {
+  if (!left || !right) return false;
+  return left.provider === right.provider
+    && left.model === right.model
+    && left.thinking === right.thinking
+    && JSON.stringify(left.tools ?? []) === JSON.stringify(right.tools ?? []);
 }
 
 export function formatList(records: OwnedAgentRecord[]): string {

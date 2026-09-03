@@ -40,6 +40,15 @@
       "evidence": ["extensions/pstack-workers/poteto-bootstrap.ts", "test/workers/poteto-bootstrap.test.ts", "VERIFICATION.md"]
     },
     {
+      "id": "workers/deterministic-panel-dispatch",
+      "owner": "pi",
+      "scope": "core",
+      "implementation": "complete",
+      "verification": "mechanical",
+      "evidence": ["extensions/pstack-workers/index.ts", "extensions/pstack-fallback/index.ts", "test/workers/tool-contract.test.ts"],
+      "deviations": ["Pi replaces repeated prompt-driven Task calls for fixed model panels with one pstack_panel operation that owns cardinality, concurrent dispatch, model assignment, placeholder expansion, collection, and dropout reporting."]
+    },
+    {
       "id": "workers/foreground-and-background",
       "owner": "pi",
       "scope": "core",
@@ -54,7 +63,7 @@
       "implementation": "complete",
       "verification": "end-to-end",
       "evidence": ["test/workers/manager.test.ts", "VERIFICATION.md"],
-      "deviations": ["The non-Herdr fallback cannot reattach to a subprocess whose completion raced a parent crash, but it preserves the child session file and recorded state."]
+      "deviations": ["Compatible settled Poteto workers resume in the same checkout. Worktree-isolated, concurrent, or runtime-incompatible Tasks use distinct sessions. The non-Herdr fallback cannot reattach to a subprocess whose completion raced a parent crash, but it preserves the child session file and recorded state."]
     },
     {
       "id": "workers/worktree-isolation",

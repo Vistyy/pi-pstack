@@ -18,8 +18,8 @@ The packed worker-resource smoke started a Pi RPC session without a prompt and c
 It confirmed that all 48 packaged skills and the core pstack extension crossed the worker boundary while delegation extensions, `Task`, and other delegation tools did not.
 It confirmed that `pstack_todo` remained available to the worker.
 
-The live model configuration remains on `inherit-parent` while the OpenAI Codex and OpenCode Go role map is selected.
-The configuration preserves four entries for every upstream four-member panel.
+The live model configuration routes routine implementation to GPT-5.6 Luna, high-volume exploration to Muse Spark 1.3, difficult execution to GPT-5.6 Terra, judgment and synthesis to GPT-5.6 Sol, and panel diversity to Sol, Terra, GLM-5.3-Flash, and DeepSeek V4 Flash.
+The configuration preserves four entries for every upstream four-member panel and excludes the unavailable Qwen3.8 Flash route.
 The no-model checks establish provenance, packaging, resource visibility, tool ownership, model routing shape, and process startup.
 They do not establish that a model follows the complete workflow or that the workflow improves task outcomes.
 
@@ -92,7 +92,8 @@ The artifacts are under `.work/muse-concurrency-20260902T234142/`.
 ## Current remaining conformance boundary
 
 The current live conformance run proves one foreground readonly Poteto child under a Luna parent.
-It does not yet prove configured multi-model routing, background panel fan-out, grouped completion, worktree execution, synthesis ordering, or the repaired non-Herdr fallback in one current model-backed workflow.
+Mechanical checks additionally prove fail-closed parsing for malformed model configuration, compatible Poteto session selection, persisted runtime overrides across Herdr reopen, and deterministic configured panel planning.
+They do not yet prove configured multi-model routing, live panel fan-out, grouped completion, worktree execution, synthesis ordering, or the repaired non-Herdr fallback in one current model-backed workflow.
 The historical transport runs below establish narrower older mechanisms and must not be combined into a claim of current full-workflow conformance.
 
 ## Historical Herdr transport boundary

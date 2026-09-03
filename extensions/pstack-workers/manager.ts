@@ -138,6 +138,7 @@ export class AgentManager {
         path: options.placement.path,
         branch: options.placement.branch,
       } : undefined,
+      runtime: options.runtime ? cloneRuntime(options.runtime) : undefined,
       assignment: 1,
       lastTask: options.task,
       updatedAt: Date.now(),
@@ -155,13 +156,7 @@ export class AgentManager {
       this.persist();
 
       const inheritedSettings = await this.runtimeSettings(identity, options.cwd);
-      const settings = {
-        ...inheritedSettings,
-        ...options.runtime,
-        tools: options.runtime?.tools ?? inheritedSettings.tools,
-        extensions: options.runtime?.extensions ?? inheritedSettings.extensions,
-        skills: options.runtime?.skills ?? inheritedSettings.skills,
-      };
+      const settings = mergeRuntime(inheritedSettings, record.runtime);
       const instructionsFile = await this.writeInstructions(identity);
       record.sessionFile = join(this.sessionDir, `${randomUUID()}.jsonl`);
       let agent = await this.herdr.startPi(
@@ -534,7 +529,7 @@ export class AgentManager {
         makeHerdrAgentName(this.parentToken, record.name),
         tab.paneId,
         buildPiArgs({
-          settings: await this.runtimeSettings(identity, record.cwd),
+          settings: mergeRuntime(await this.runtimeSettings(identity, record.cwd), record.runtime),
           instructions: instructionsFile,
           sessionFile: record.sessionFile,
           sessionName: record.name,
@@ -820,8 +815,27 @@ function truncateResult(text: string, sessionFile: string): string {
   return `${truncated.content}\n\n[Result truncated. Full response remains in child session: ${sessionFile}]`;
 }
 
+function mergeRuntime(inherited: RuntimeSettings, overrides: RuntimeSettings | undefined): RuntimeSettings {
+  return {
+    ...inherited,
+    ...overrides,
+    tools: overrides?.tools ?? inherited.tools,
+    extensions: overrides?.extensions ?? inherited.extensions,
+    skills: overrides?.skills ?? inherited.skills,
+  };
+}
+
+function cloneRuntime(runtime: RuntimeSettings): RuntimeSettings {
+  return {
+    ...runtime,
+    tools: runtime.tools ? [...runtime.tools] : undefined,
+    extensions: runtime.extensions ? [...runtime.extensions] : undefined,
+    skills: runtime.skills ? [...runtime.skills] : undefined,
+  };
+}
+
 function cloneRecord(record: OwnedAgentRecord): OwnedAgentRecord {
-  return { ...record };
+  return { ...record, runtime: record.runtime ? cloneRuntime(record.runtime) : undefined };
 }
 
 function cloneCollection(collection: OwnedAgentCollection): OwnedAgentCollection {

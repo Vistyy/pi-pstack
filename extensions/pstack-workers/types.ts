@@ -42,6 +42,7 @@ export interface OwnedAgentRecord {
     path: string;
     branch: string;
   };
+  runtime?: RuntimeSettings;
   assignment: number;
   completedAssignment?: number;
   lastTask: string;

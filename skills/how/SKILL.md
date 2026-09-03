@@ -110,13 +110,9 @@ Run the full explain flow above (Steps 1-4). You must understand the architectur
 
 ### Step 2. Spawn Critics
 
-After the explanation is complete, call `pstack_config` with `action: get`, then spawn one architectural critic per configured `how critics` entry in a single message.
-Alias entries such as `inherit-parent` still count toward the panel size.
-
-For each critic:
-- `identity`: `general-purpose`
-- `role`: `how critics`
-- `readonly`: `true`
+After the explanation is complete, call `pstack_panel` once with `role: how critics`, `identity: general-purpose`, `readonly: true`, and the filled critic prompt.
+The panel boundary launches every configured critic concurrently, assigns models in panel order, labels the returned results, and reports dropouts.
+Alias entries such as `inherit-parent` still count toward the panel size and inherit the parent model.
 
 Read `references/critic-prompt.md` for the prompt template. Each critic gets:
 1. The explanation from Step 1 (so they don't re-explore)

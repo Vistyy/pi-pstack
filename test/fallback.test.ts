@@ -17,12 +17,12 @@ function registrations(): Tool[] {
   return tools;
 }
 
-test("registers the persistent Task fallback outside Herdr", () => {
+test("registers persistent Task and deterministic panel fallback outside Herdr", () => {
   const previous = { environment: process.env.HERDR_ENV, workspace: process.env.HERDR_WORKSPACE_ID };
   delete process.env.HERDR_ENV;
   delete process.env.HERDR_WORKSPACE_ID;
   try {
-    assert.deepEqual(registrations().map((tool) => tool.name), ["Task"]);
+    assert.deepEqual(registrations().map((tool) => tool.name), ["Task", "pstack_panel"]);
   } finally {
     if (previous.environment === undefined) delete process.env.HERDR_ENV;
     else process.env.HERDR_ENV = previous.environment;

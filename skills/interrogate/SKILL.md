@@ -33,15 +33,9 @@ Write one clear paragraph. Reviewers challenge whether the work achieves the int
 
 ## Step 3, Spawn Reviewers
 
-Call `pstack_config` with `action: get`, then launch one reviewer per configured `interrogate reviewers` entry in a single message using the Task tool.
-Label reviewers in panel order, extending or shrinking Reviewer A through Reviewer D to match the configured count.
-Alias entries such as `inherit-parent` still count toward the panel size.
-For each reviewer:
-- `identity`: `general-purpose`
-- `role`: `interrogate reviewers`
-- `readonly`: `true`
-
-The Task boundary selects configured models in panel order and inherits the parent model when the role has no explicit model.
+Call `pstack_panel` once with `role: interrogate reviewers`, `identity: general-purpose`, `readonly: true`, and the filled reviewer prompt.
+The panel boundary launches every configured reviewer concurrently, assigns models in panel order, labels the returned results, and reports dropouts.
+Alias entries such as `inherit-parent` still count toward the panel size and inherit the parent model.
 
 Read `references/reviewer-prompt.md` and fill in the template with:
 1. The stated intent

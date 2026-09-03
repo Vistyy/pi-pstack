@@ -31,6 +31,13 @@ export interface RoleTarget {
 }
 export type RoleValue = RoleTarget | RoleTarget[];
 
+export const FANOUT_PANEL_ROLE_NAMES = new Set<RoleName>([
+  "how critics",
+  "arena runners",
+  "architect runners",
+  "interrogate reviewers",
+]);
+
 export const PANEL_ROLE_NAMES = new Set<RoleName>([
   "how critics",
   "arena runners",
@@ -113,18 +120,40 @@ function parseValue(value: unknown): RoleValue | undefined {
   return parseTarget(value);
 }
 
-export async function readConfig(): Promise<PstackConfig> {
-  try {
-    const parsed = JSON.parse(await fs.readFile(configPath(), "utf8")) as { roles?: unknown };
-    if (!parsed.roles || typeof parsed.roles !== "object" || Array.isArray(parsed.roles)) return defaultConfig();
-    const roles: Record<string, RoleValue> = { ...defaultConfig().roles };
-    for (const [role, value] of Object.entries(parsed.roles)) {
-      const accepted = parseValue(value);
-      if (accepted) roles[role] = accepted;
+export function parseConfig(value: unknown): PstackConfig {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Pstack model configuration must be an object.");
+  const parsed = value as { version?: unknown; roles?: unknown };
+  if (parsed.version !== 2) throw new Error("Pstack model configuration requires version 2.");
+  if (!parsed.roles || typeof parsed.roles !== "object" || Array.isArray(parsed.roles)) {
+    throw new Error("Pstack model configuration requires a roles object.");
+  }
+  const roles: Record<string, RoleValue> = { ...defaultConfig().roles };
+  for (const [role, roleValue] of Object.entries(parsed.roles)) {
+    if (!(ROLE_NAMES as readonly string[]).includes(role)) throw new Error(`Unknown pstack role ${JSON.stringify(role)}.`);
+    const accepted = parseValue(roleValue);
+    if (!accepted) throw new Error(`Invalid pstack model target for role ${JSON.stringify(role)}.`);
+    const panel = PANEL_ROLE_NAMES.has(role as RoleName);
+    if (panel !== Array.isArray(accepted)) {
+      throw new Error(panel ? `${role} requires a non-empty model panel.` : `${role} requires one model target.`);
     }
-    return { version: 2, roles };
-  } catch {
-    return defaultConfig();
+    roles[role] = accepted;
+  }
+  return { version: 2, roles };
+}
+
+export async function readConfig(): Promise<PstackConfig> {
+  const target = configPath();
+  let source: string;
+  try {
+    source = await fs.readFile(target, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return defaultConfig();
+    throw new Error(`Could not read pstack model configuration ${target}: ${(error as Error).message}`);
+  }
+  try {
+    return parseConfig(JSON.parse(source));
+  } catch (error) {
+    throw new Error(`Invalid pstack model configuration ${target}: ${(error as Error).message}`);
   }
 }
 

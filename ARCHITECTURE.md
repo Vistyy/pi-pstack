@@ -60,6 +60,7 @@ The intended mechanism mappings are:
 | Cursor mechanism | Pi or local mechanism |
 | --- | --- |
 | `Task` | Herdr-owned persistent Pi worker, or persistent Pi subprocess session when Herdr is unavailable |
+| Fixed configured model panel | One `pstack_panel` call that owns cardinality, concurrent dispatch, model assignment, and dropout accounting |
 | `isolation: "worktree"` | Worker in an isolated local worktree |
 | `/loop` | Completion wake plus a bounded heartbeat |
 | Cursor session resume | Persistent Pi session plus repository and process reconciliation |
@@ -67,6 +68,8 @@ The intended mechanism mappings are:
 | `control-cli` | Herdr-backed terminal control adapter |
 | `control-ui` | chrome-devtools-axi-backed browser control adapter |
 
+A compatible settled Poteto worker resumes in the same checkout when its model, thinking level, tools, extensions, and skills still match.
+A worktree-isolated Task starts a distinct session because its checkout is a separate ownership boundary.
 A worker starts with resource discovery disabled and then receives an explicit allowlist.
 The allowlist contains inherited skills, the package's non-delegating core extension, safe external extensions, and `pstack_todo`.
 It excludes `Task`, other delegation tools, recursive delegation extensions, and delegation skills so one parent owns the worker graph.
