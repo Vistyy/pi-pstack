@@ -6,9 +6,9 @@ Generated logs and disposable profiles remain under `.work/` and are not release
 ## Current no-model boundaries
 
 `pnpm port:verify` verified that `vendor/pstack` has the exact locked upstream tree and the required upstream commit and tree trailers.
-It passed 101 Pi boundary tests, 52 lifted upstream Bun tests, the root TypeScript check, and the upstream watch-pr TypeScript check.
+It passed 108 Pi boundary tests, 52 lifted upstream Bun tests, the root TypeScript check, and the upstream watch-pr TypeScript check.
 It verified all six pinned official files by SHA-256 digest.
-The generated port report records 99 exact files, 55 adapted files, four intentional omissions, six official integration files, and 72 Pi-owned files.
+The generated port report records 99 exact files, 55 adapted files, four intentional omissions, six official integration files, and 73 Pi-owned files.
 The remaining omissions are the upstream plugin manifest, the unsupported Grok Bot skill, the vendor-specific automated-review policy, and the host-specific worktree audit.
 The report gives every upstream file a `port-map.json` classification and action, and no upstream file is unclassified.
 
@@ -89,12 +89,40 @@ The workers made 54 provider requests and processed 341,259 total tokens in 7.0 
 This establishes a successful burst of ten concurrent workers, not a sustained throughput limit or equivalence with Meta's direct provider.
 The artifacts are under `.work/muse-concurrency-20260902T234142/`.
 
-## Current remaining conformance boundary
+## Current routed conformance boundary
 
-The current live conformance run proves one foreground readonly Poteto child under a Luna parent.
-Mechanical checks additionally prove fail-closed parsing for malformed model configuration, compatible Poteto session selection, persisted runtime overrides across Herdr reopen, and deterministic configured panel planning.
-They do not yet prove configured multi-model routing, live panel fan-out, grouped completion, worktree execution, synthesis ordering, or the repaired non-Herdr fallback in one current model-backed workflow.
+A combined model-backed run under a Sol parent passed configured multi-model routing, a complete four-member review panel, background completion, current-checkout Poteto reuse, and isolated worktree execution.
+The panel child transcripts record Sol, Terra, GLM-5.3-Flash, and DeepSeek V4 Flash as the actual models, in configured order, and returned all four expected labels.
+A background Muse Spark 1.3 child completed and woke the parent.
+Two sequential foreground Tasks used one live Luna Poteto worker, advanced it to assignment 2, and returned `REUSE_FIRST_OK` followed by `REUSE_SECOND_OK` from the same conversation.
+A distinct Luna worktree worker created and committed `worker-proof.txt`, passed `npm run check`, and left the parent checkout clean and unmerged.
+The artifacts are under `.work/routed-acceptance-20260903T005445/`.
+
+Earlier acceptance attempts exposed lifecycle races rather than being counted as passes.
+Long-lived Herdr waits and child launches had shared Pi's command-execution adapter, settled results could become visible before automatic closure completed, and result collection could read the preceding assignment while the new JSONL response was still flushing.
+The repaired worker boundary gives Herdr commands independent subprocesses, anchors a general worker's requested session before sending its assignment, correlates results to the session byte boundary recorded before each prompt, and keeps reusable current-checkout Poteto workers live between assignments.
+A focused rerun under `.work/routed-focus-20260903T004638/` passed all four panel members and both reuse assignments before the combined run.
+
+This evidence does not yet prove workflow synthesis ordering, the repaired non-Herdr fallback, broad reliability across repeated runs, or improved task outcomes relative to clean Sol.
 The historical transport runs below establish narrower older mechanisms and must not be combined into a claim of current full-workflow conformance.
+
+## Current bounded efficacy comparison
+
+Clean GPT-5.6 Sol and a GPT-5.6 Sol pstack parent independently implemented the same `LeasePool` contract in identical disposable repositories.
+The contract covered FIFO capacity leases, abort removal and listener cleanup, resizing across active usage, idempotent release, and idempotent closure.
+Both implementations passed the two public tests and all four withheld deterministic tests without human intervention.
+The clean run changed only the implementation, while pstack also added a broader public test suite.
+
+| Condition | Outcome | Sessions | Total tokens | Wall time |
+| --- | --- | ---: | ---: | ---: |
+| Clean Sol | Public and withheld tests passed | 1 | 56,549 | 135.432 s |
+| Pstack with Sol parent | Public and withheld tests passed | 8 | 3,328,320 | 837.851 s |
+
+Pstack used one parent plus seven recorded child sessions across Luna, Terra, Sol, GLM, and DeepSeek roles.
+It used 58.9 times the tokens and 6.2 times the wall time without changing the task outcome.
+The additional tests are useful produced work, but this single bounded task is not solid evidence that pstack improves coding outcomes over clean Sol.
+Under the accepted decision rule, this result does not justify further parity work solely on an efficacy claim.
+The artifacts are under `.work/efficacy-sol-20260903T010148/`.
 
 ## Historical Herdr transport boundary
 

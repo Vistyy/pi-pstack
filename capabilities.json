@@ -139,7 +139,7 @@
       "implementation": "complete",
       "verification": "model",
       "evidence": ["VERIFICATION.md", "benchmarks/worker-value-20260902.md", "benchmarks/worker-value-codex-20260902.md"],
-      "deviations": ["A current Luna parent and Poteto child passed the enforced skill-loading and todo bootstrap path. Current multi-model panels, background fan-out, worktree execution, synthesis ordering, and the repaired fallback path remain without one combined model-backed conformance run."]
+      "deviations": ["A combined current run passed enforced Poteto bootstrap, configured multi-model panel routing, background completion, same-session Poteto reuse, and isolated worktree execution. Workflow synthesis ordering and the repaired fallback path remain without current combined model-backed conformance evidence."]
     },
     {
       "id": "workflow/benny-automation-runtime",
