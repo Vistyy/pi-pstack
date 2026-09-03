@@ -652,17 +652,17 @@ export class AgentManager {
     record.completedAssignment = record.assignment;
     record.updatedAt = Date.now();
     const shouldClose = !record.keepOpen;
-    if (shouldClose) this.closures.add(record.name);
-    if (turn) this.finishTurn(record, turn);
-    else this.finishSettledRecord(record);
-
     if (shouldClose) {
+      this.closures.add(record.name);
       try {
         await this.closeRecord(record, record.status === "failed" ? "failed" : "closed");
       } finally {
         this.closures.delete(record.name);
       }
+      return;
     }
+    if (turn) this.finishTurn(record, turn);
+    else this.finishSettledRecord(record);
   }
 
   private finishTurn(record: OwnedAgentRecord, turn: TurnState): void {
