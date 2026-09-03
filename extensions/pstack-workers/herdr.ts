@@ -1,5 +1,6 @@
-import { createConnection, type Socket } from "node:net";
+import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { createConnection, type Socket } from "node:net";
 import type { RuntimeSettings, HerdrAgent } from "./types.js";
 
 export interface CommandResult {
@@ -14,6 +15,26 @@ export type CommandRunner = (
   args: string[],
   options?: { signal?: AbortSignal; timeout?: number },
 ) => Promise<CommandResult>;
+
+export const runCommand: CommandRunner = (command, args, options = {}) => new Promise((resolve, reject) => {
+  execFile(command, args, {
+    encoding: "utf8",
+    maxBuffer: 1024 * 1024,
+    signal: options.signal,
+    timeout: options.timeout,
+  }, (error, stdout, stderr) => {
+    if (options.signal?.aborted) {
+      reject(options.signal.reason instanceof Error ? options.signal.reason : new Error("Operation cancelled."));
+      return;
+    }
+    resolve({
+      stdout,
+      stderr,
+      code: typeof error?.code === "number" ? error.code : error ? 1 : 0,
+      killed: error?.killed,
+    });
+  });
+});
 
 interface HerdrEnvelope<T> {
   result?: T;

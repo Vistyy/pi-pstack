@@ -13,7 +13,7 @@ import { Type } from "typebox";
 import { taskBudgetFromEnvironment } from "./budget.js";
 import { getConfigDirectory, loadConfig } from "./config.js";
 import { OwnedAgentViewController } from "./agent-view.js";
-import { HerdrClient } from "./herdr.js";
+import { HerdrClient, runCommand } from "./herdr.js";
 import { FANOUT_PANEL_ROLE_NAMES, targetsForRole, readConfig as readPstackConfig } from "../pstack/config.js";
 import { AgentManager } from "./manager.js";
 import { sendBatchCompletion } from "./notifications.js";
@@ -63,7 +63,7 @@ export default async function piHerdrAgents(pi: ExtensionAPI): Promise<void> {
 
     const parentSessionId = ctx.sessionManager.getSessionId();
     const parentToken = createHash("sha256").update(parentSessionId).digest("hex").slice(0, 8);
-    const herdr = new HerdrClient((command, args, options) => pi.exec(command, args, options));
+    const herdr = new HerdrClient(runCommand);
     const inheritedResources = new Map<string, ReturnType<typeof discoverInheritedResources>>();
     acceptsCompletions = true;
     manager = new AgentManager(
