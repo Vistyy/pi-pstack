@@ -128,9 +128,9 @@
       "owner": "upstream-pstack",
       "scope": "core",
       "implementation": "complete",
-      "verification": "unverified",
-      "evidence": ["VERIFICATION.md"],
-      "deviations": ["No model-backed conformance or effectiveness run has been performed after repairing identity, skill-loading, thinking-level, panel, and fallback-resource boundaries."]
+      "verification": "model",
+      "evidence": ["VERIFICATION.md", "benchmarks/worker-value-20260902.md", "benchmarks/worker-value-codex-20260902.md"],
+      "deviations": ["A current Luna parent and Poteto child passed the enforced skill-loading and todo bootstrap path. Current multi-model panels, background fan-out, worktree execution, synthesis ordering, and the repaired fallback path remain without one combined model-backed conformance run."]
     },
     {
       "id": "workflow/benny-automation-runtime",

@@ -8,7 +8,7 @@ Generated logs and disposable profiles remain under `.work/` and are not release
 `pnpm port:verify` verified that `vendor/pstack` has the exact locked upstream tree and the required upstream commit and tree trailers.
 It passed 101 Pi boundary tests, 52 lifted upstream Bun tests, the root TypeScript check, and the upstream watch-pr TypeScript check.
 It verified all six pinned official files by SHA-256 digest.
-The generated port report records 99 exact files, 55 adapted files, four intentional omissions, six official integration files, and 66 Pi-owned files.
+The generated port report records 99 exact files, 55 adapted files, four intentional omissions, six official integration files, and 72 Pi-owned files.
 The remaining omissions are the upstream plugin manifest, the unsupported Grok Bot skill, the vendor-specific automated-review policy, and the host-specific worktree audit.
 The report gives every upstream file a `port-map.json` classification and action, and no upstream file is unclassified.
 
@@ -62,6 +62,38 @@ Muse traced the flow and closure correctly but made the most ownership and valid
 This one synthetic read-only task supports using DeepSeek and GLM as inexpensive review candidates and Muse as a low-risk bulk explorer behind synthesis.
 It does not establish code-generation quality, broad task quality, or that Muse Spark 1.3 will retain the same behavior as 1.2.
 The artifacts are under `.work/harbor-lantern-20260902-222255/`.
+
+## Current worker-value calibration
+
+Three repeated moderate workloads compared Muse Spark 1.3, GLM-5.3-Flash, DeepSeek V4 Flash, Qwen3.8 Flash, GPT-5.6 Luna, and GPT-5.6 Terra as individual workers.
+The workloads covered architecture tracing, evidence-backed diagnosis, and bounded implementation with deterministic checks.
+GPT-5.6 Sol judged anonymized responses against a qualification threshold requiring a score of at least 15, no material factual error, and passing implementation checks when applicable.
+
+Muse Spark 1.3 qualified on all nine runs with an 18.22 mean score, and all three implementations passed.
+GLM-5.3-Flash qualified on eight of nine runs with a 17.78 mean score and the lowest recorded OpenCode Go cost per qualifying run.
+DeepSeek V4 Flash qualified on eight of nine runs with an 18.11 mean score and materially higher recorded cost.
+GPT-5.6 Luna qualified on all nine runs with a 19.00 mean score, and GPT-5.6 Terra qualified on all nine with an 18.67 mean score.
+Under the user's approximate assumption that Codex subscription usage provides 12 times the recorded API value, Luna had the lowest estimated cost per qualifying run.
+The provider has not confirmed that divisor as its model-specific subscription accounting rule.
+
+Qwen3.8 Flash later failed before inference on nine repeated attempts with an HTTP 404 response from the OpenCode endpoint.
+That failure establishes an unavailable route, not model quality.
+The reports are `benchmarks/worker-value-20260902.md` and `benchmarks/worker-value-codex-20260902.md`.
+The complete local artifacts are under `.work/lantern-field-20260902T225735/` and `.work/lantern-field-20260902T232151/`.
+
+## Current Muse concurrency boundary
+
+Ten independent Muse Spark 1.3 Pi workers performed concurrent multi-turn read-only repository inspections through OpenCode Go.
+All ten completed without an HTTP 429 response or process failure.
+The workers made 54 provider requests and processed 341,259 total tokens in 7.0 to 25.6 seconds per worker.
+This establishes a successful burst of ten concurrent workers, not a sustained throughput limit or equivalence with Meta's direct provider.
+The artifacts are under `.work/muse-concurrency-20260902T234142/`.
+
+## Current remaining conformance boundary
+
+The current live conformance run proves one foreground readonly Poteto child under a Luna parent.
+It does not yet prove configured multi-model routing, background panel fan-out, grouped completion, worktree execution, synthesis ordering, or the repaired non-Herdr fallback in one current model-backed workflow.
+The historical transport runs below establish narrower older mechanisms and must not be combined into a claim of current full-workflow conformance.
 
 ## Historical Herdr transport boundary
 
