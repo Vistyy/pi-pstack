@@ -8,6 +8,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { Check } from "typebox/value";
+import type { Profile } from "./child-session.js";
 import { installExecutor } from "./executor.js";
 import { availableModels, ModelsInput, modelState, parseRoles, saveModels } from "./models.js";
 
@@ -45,23 +46,34 @@ function result(text: string) {
   return { content: [{ type: "text" as const, text }], details: {} };
 }
 
-async function resources() {
+async function resources(profile?: Profile) {
   const [mode, host, setup] = await Promise.all([
     readFile(join(skillsDir, "poteto-mode/SKILL.md"), "utf8"),
     readFile(join(root, "instructions/pi-host.md"), "utf8"),
     readFile(join(skillsDir, "setup-pstack/SKILL.md"), "utf8"),
   ]);
 
-  return { mode: stripFrontmatter(mode).trim(), host, roles: parseRoles(setup) };
+  const identity =
+    profile !== undefined && profile !== "generalPurpose"
+      ? stripFrontmatter(
+          await readFile(
+            join(
+              root,
+              "content/pstack/agents",
+              profile === "poteto-agent" ? "poteto-agent.md" : "comment-sicko.md",
+            ),
+            "utf8",
+          ),
+        ).trim()
+      : "";
+
+  return { mode: stripFrontmatter(mode).trim(), identity, host, roles: parseRoles(setup) };
 }
 
-export function createRuntime(
-  pi: ExtensionAPI,
-  options?: { profile: "generalPurpose" | "poteto-agent" | "Comment Sicko" },
-): void {
-  if (options === undefined) installExecutor(pi, undefined, createRuntime);
+export function createRuntime(pi: ExtensionAPI, options?: { profile: Profile }): void {
+  if (options === undefined) installExecutor(pi, createRuntime);
   let loaded: ReturnType<typeof resources> | undefined;
-  const source = () => (loaded ??= resources());
+  const source = () => (loaded ??= resources(options?.profile));
 
   const persistMode = (enabled: boolean, ctx: ExtensionContext) => {
     if (modeEnabled(ctx) !== enabled) pi.appendEntry(modeType, { enabled });
@@ -90,26 +102,13 @@ export function createRuntime(
       projection = `Invalid PStack role configuration: ${String(error)}. Use /setup-pstack to replace it.`;
     }
 
-    const identity =
-      options?.profile && options.profile !== "generalPurpose"
-        ? stripFrontmatter(
-            await readFile(
-              join(
-                root,
-                "content/pstack/agents",
-                options.profile === "poteto-agent" ? "poteto-agent.md" : "comment-sicko.md",
-              ),
-              "utf8",
-            ),
-          )
-        : "";
     const mode =
       options?.profile === "poteto-agent" || (options === undefined && modeEnabled(ctx))
         ? `\n\n${content.mode}`
         : "";
 
     return {
-      systemPrompt: `${event.systemPrompt}\n\n${identity}${mode}\n\nPackaged PStack skills directory: ${skillsDir}\n\n${content.host}\n\n## PStack role map\n${projection}`,
+      systemPrompt: `${event.systemPrompt}\n\n${content.identity}${mode}\n\nPackaged PStack skills directory: ${skillsDir}\n\n${content.host}\n\n## PStack role map\n${projection}`,
     };
   });
   pi.registerCommand("poteto-mode", {

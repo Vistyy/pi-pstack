@@ -12,6 +12,7 @@ import {
   InMemoryCredentialStore,
 } from "@earendil-works/pi-ai";
 import {
+  type AgentSession,
   createAgentSession,
   DefaultResourceLoader,
   ModelRuntime,
@@ -25,12 +26,25 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 
 await test("native child receives a fresh conversation and returns the entire final result", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "pstack-child-"));
-  const before = process.env["PI_CODING_AGENT_DIR"];
-  process.env["PI_CODING_AGENT_DIR"] = dir;
+  const agentDirKey = "PI_CODING_AGENT_DIR";
+  const before = process.env[agentDirKey];
+  const gates: Array<() => void> = [];
+  let ownedSession: AgentSession | undefined;
+  process.env[agentDirKey] = dir;
   t.after(async () => {
-    if (before === undefined) delete process.env["PI_CODING_AGENT_DIR"];
-    else process.env["PI_CODING_AGENT_DIR"] = before;
-    await rm(dir, { recursive: true, force: true });
+    for (const release of gates) release();
+
+    try {
+      if (ownedSession) {
+        await ownedSession.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
+        await ownedSession.abort();
+        ownedSession.dispose();
+      }
+    } finally {
+      if (before === undefined) delete process.env[agentDirKey];
+      else process.env[agentDirKey] = before;
+      await rm(dir, { recursive: true, force: true });
+    }
   });
   const project = join(dir, "project");
   await mkdir(project);
@@ -104,7 +118,7 @@ export default (pi) => {
     sessionManager: SessionManager.inMemory(project),
   });
 
-  t.after(() => session.dispose());
+  ownedSession = session;
   await session.bindExtensions({ mode: "rpc" });
   let childPrompt = "";
   let childContext = 0;
@@ -178,6 +192,7 @@ export default (pi) => {
 
   const childGate = new Promise<void>((resolve) => {
     releaseChild = resolve;
+    gates.push(resolve);
   });
 
   let resolveReceipt: (() => void) | undefined;
@@ -336,10 +351,13 @@ export default (pi) => {
   assert.match(resumedHistory, /child evidence/);
   assert.doesNotMatch(resumedHistory, /Parent secret/);
 
-  let potetoContext = "";
+  let systemText = "";
   nestedProvider.setResponses([
     (context) => {
-      potetoContext = JSON.stringify(context.messages);
+      systemText = getCurrentSystemPrompt(context.messages);
+      const user = context.messages.findLast((message) => message.role === "user");
+      assert.ok(user?.role === "user");
+      assert.deepEqual(user.content, [{ type: "text", text: "Poteto assignment" }]);
 
       return fauxAssistantMessage("poteto result");
     },
@@ -357,22 +375,14 @@ export default (pi) => {
     fauxAssistantMessage("parent finished Poteto"),
   ]);
   await session.prompt("Delegate Poteto");
-  const potetoMessages = JSON.parse(potetoContext) as Array<{
-    role: string;
-    content: string | Array<{ type: string; text?: string }>;
-  }>;
-  const potetoSystem = potetoMessages.find((message) => message.role === "system");
-  assert.ok(potetoSystem && typeof potetoSystem.content === "string");
-  const systemText = potetoSystem.content;
+  const potetoResult = session.messages.findLast((item) => item.role === "toolResult");
+  assert.ok(potetoResult?.role === "toolResult" && !potetoResult.isError);
   assert.ok(
     systemText.includes(
       "# Poteto subagent\n\nYou are operating as poteto-mode's full agent style. Read the `poteto-mode` skill's `SKILL.md` in full before doing any work, including its inline Principles index. Navigate to a leaf `principle-*` skill whenever you apply that principle.",
     ),
   );
   assert.doesNotMatch(systemText, /Poteto assignment/);
-  const potetoUser = potetoMessages.find((message) => message.role === "user");
-  assert.ok(potetoUser && Array.isArray(potetoUser.content));
-  assert.deepEqual(potetoUser.content, [{ type: "text", text: "Poteto assignment" }]);
   assert.match(systemText, /Packaged PStack skills directory/);
   assert.doesNotMatch(systemText, /Parent secret/);
 
@@ -381,6 +391,7 @@ export default (pi) => {
 
   const barrier = new Promise<void>((resolve) => {
     bothStarted = resolve;
+    gates.push(resolve);
   });
 
   const simultaneous = async (label: string) => {
@@ -445,6 +456,8 @@ export default (pi) => {
   await session.prompt("Start work before shutdown");
   await entered;
   await session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
+  session.dispose();
+  ownedSession = undefined;
   assert.equal(session.isStreaming, false);
   assert.doesNotMatch(JSON.stringify(session.messages), /aborted response/);
   assert.match(await readFile(join(dir, "integration-lifecycle"), "utf8"), /shutdown/);

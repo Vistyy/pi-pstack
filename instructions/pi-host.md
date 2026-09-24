@@ -28,7 +28,7 @@ Children share the working directory unless `cwd` selects another existing direc
 
 To continue a specific child, pass its returned ID as `resume` with the follow-up `prompt`. Its conversation, profile, model, and working directory are retained. For an independent assignment or consolidated fresh brief, start a new child. Use `pstack_tasks` to list children, inspect an exact child's status and transcript, or cancel it and its descendants. Cancellation does not undo edits.
 
-Children belong to the live parent branch. Leaving that branch, reloading, or exiting stops active children; retained transcripts are inspection evidence, not durable background jobs. The root and its direct children can delegate; grandchildren cannot launch another level.
+Children belong to the live parent branch. Starting branch navigation, reloading, or exiting stops active children; cancelling navigation does not revive them. Retained transcripts are inspection evidence, not durable background jobs. The root and its direct children can delegate; grandchildren cannot launch another level.
 
 ## Current support boundary
 

@@ -30,10 +30,12 @@ PStack owns the workflow, verification, and review. The private executor supplie
 Requires Node 24+, pnpm 11, Git, and `tar`. SDK versions are pinned in `package.json` and `pnpm-lock.yaml`.
 
 ```sh
-pnpm install --frozen-lockfile --ignore-scripts
+pnpm install --frozen-lockfile --ignore-scripts --config.strict-dep-builds=false
 pnpm source:generate
 pnpm check
 ```
+
+The install command keeps dependency build scripts disabled without treating that choice as an installation error. Run it in a checkout with its own `node_modules`, not a symlink into another checkout.
 
 Runtime verification uses real Pi sessions and Pi's scripted Faux provider without network model calls. Source CLI tests exercise replay, drift detection, and update preparation. These checks establish host mechanics, not whether an LLM consistently follows the upstream methodology.
 
@@ -68,14 +70,14 @@ Real targets use `provider/model:thinking`. Cursor slugs remain source defaults,
 
 ## Child execution
 
-`pstack_task` runs the source `generalPurpose`, `poteto-agent`, and `Comment Sicko` assignments. Each child starts with its own conversation, project context, and selected model/thinking. Poteto children receive the full source mode; ordinary children do not inherit the parent's Poteto mode or conversation.
+`pstack_task` runs the source `generalPurpose`, `poteto-agent`, and `Comment Sicko` assignments. Each child starts with its own conversation, project `AGENTS.md` context, and selected model/thinking. Ambient system-prompt overrides, prompt templates, and skill catalogs are not inherited. Poteto children receive the full source mode; ordinary children do not inherit the parent's Poteto mode or conversation.
 
 Foreground calls return their results and can run in parallel. Background calls return an ID and deliver completion automatically. A child awaiting its own children remains active until their results and its subsequent response settle. Resuming an eligible ID preserves the child's conversation and configuration. `pstack_tasks` lists, inspects, and cancels owned children; transcripts support inspection without retaining every intermediate tool result in the parent context.
 
-The root can delegate to children, and children to grandchildren; grandchildren cannot delegate further. Read-only assignments restrict tools and preserve that restriction through descendants. They are not operating-system sandboxes. Writable children need their actual configured integrations for workflows such as `why`; runtime-only tools are not assumed to be transferable to a new session.
+The root can delegate to children, and children to grandchildren; grandchildren cannot delegate further. Read-only assignments restrict tools and preserve that restriction through descendants. They are not operating-system sandboxes. Writable children reload the file-backed extensions supplying the parent's active tools, including configured integrations for workflows such as `why`. An active runtime-only tool without a reconstructable extension source causes an explicit startup error, rather than being silently dropped. Read-only children do not load those integration extensions.
 
 Child sessions run in the parent's process. They share the filesystem and use the supplied working directory. Candidate worktrees or directories must be prepared and managed by the PStack workflow, not by the executor. Cancellation does not undo external effects or edits.
 
-Children belong to the live parent branch. Normal exit, reload, or leaving the branch cancels active owned work and prevents late results from entering another conversation. Continuation is not a cross-session job-recovery mechanism. Transcripts may remain for inspection, but there is no persistent worker service or crash-recovery guarantee.
+Children belong to the live parent branch. Normal exit, reload, or starting branch navigation cancels active owned work and prevents late results from entering another conversation. Navigation cancellation or an extension veto does not disable subsequent delegation, but does not revive the cancelled children. Extension startup and shutdown hooks are awaited; an uncooperative integration hook can delay teardown in this shared process. Continuation is not a cross-session job-recovery mechanism. Transcripts may remain for inspection, but there is no persistent worker service or crash-recovery guarantee.
 
 A normal Pi configuration switch is separate from developing this package. Validate it in an isolated Pi agent directory first, including child instructions, configured integrations and model selection, nested completion ordering, and cancellation. Do not combine it with the old Pi-PStack or Workgraph runtime while evaluating the replacement.
