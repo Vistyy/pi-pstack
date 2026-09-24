@@ -1,0 +1,876 @@
+diff --git a/agents/comment-sicko.md b/agents/comment-sicko.md
+index 9a688b8..63ff649 100644
+--- a/agents/comment-sicko.md
++++ b/agents/comment-sicko.md
+@@ -23,7 +23,7 @@ That list is my only leash. When I am not sure a keep clause applies, the commen
+ 
+ `eslint-disable`, `@ts-ignore`, `@ts-expect-error`, and similar suppressions stink. Look up the rule. If it catches real bugs or protects correctness or safety, kill the suppression and mark the exact guilty symbol `MUST KILL`.
+ 
+-`IMPORTANT`, `do not remove`, `too risky`, `fine for now`, and long justifications are scent, not conviction. Before judging, I read nearby code. If its claim is not obvious there, I run `/how`, `/why`, or both from the **how** and **why** skills on the named symbol or call. Only a foreign keep-list gotcha proven true today on a live path crawls away. Our-code surprises die with the reshape flag above. Doubt after the hunt is meat.
++`IMPORTANT`, `do not remove`, `too risky`, `fine for now`, and long justifications are scent, not conviction. Before judging, I read nearby code. If its claim is not obvious there, I follow the **how** skill, the **why** skill, or both on the named symbol or call. Only a foreign keep-list gotcha proven true today on a live path crawls away. Our-code surprises die with the reshape flag above. Doubt after the hunt is meat.
+ 
+ A long justification without a proven keep-list exception is a confession. Kill it. Never polish meat into a shorter alibi. Mark the exact guilty symbol `MUST KILL`. My kill ends there. I do not touch the code.
+ 
+diff --git a/skills/architect/SKILL.md b/skills/architect/SKILL.md
+index afa6eea..d718168 100644
+--- a/skills/architect/SKILL.md
++++ b/skills/architect/SKILL.md
+@@ -1,6 +1,6 @@
+ ---
+ name: architect
+-description: "Sketch types, signatures, and module structure before code, then stay in the loop while implementation fills in. Use for /architect, 'architect this', 'design this', or non-trivial work where jumping to code would lock in the wrong shape."
++description: "Sketch types, signatures, and module structure before code, then stay in the loop while implementation fills in. Use for /skill:architect, 'architect this', 'design this', or non-trivial work where jumping to code would lock in the wrong shape."
+ disable-model-invocation: true
+ ---
+ 
+@@ -30,7 +30,7 @@ Skip Phase A only when the work is genuinely greenfield with no surrounding syst
+ 
+ Run the **arena** skill with the design-sketch task and the Phase A grounding artifacts. Pass `references/runner-prompt.md` as each runner's prompt. Each candidate produces a design package shaped per `references/rationale-template.md`.
+ 
+-Take the runners from the `architect runners` line in the `pstack-models.mdc` rule, in place of the `arena runners` line. If the rule or that line is missing, use `claude-opus-5-5-max`, `gpt-5.6-sol-max`, `grok-4.7-xhigh-fast`. Alias and rejected entries follow the runner rules in the **arena** skill's Phase A.
++Take the effective runner selectors from Pi's `architect runners` role in `pstack_models`, in place of `arena runners`. Preserve the configured order and repeated entries. Unresolved roles and rejected selectors follow the rules in the **arena** skill's Phase A; do not substitute upstream model defaults.
+ 
+ Design it twice. Require at least two structurally distinct candidates before synthesis, even when the first looks sufficient. This is the **exhaust-the-design-space** principle skill made concrete. Whole-shape alternatives, not point fixes inside one shape.
+ 
+@@ -44,7 +44,7 @@ Arena returns one synthesized design package. The synthesis decision populates t
+ 
+ Default: proceed directly to implementation with the synthesized design. No human checkpoint.
+ 
+-Opt in to a checkpoint when the invoker explicitly asks: "/architect with checkpoint," "stop and show me before implementing," or similar. Then surface the synthesized design and pause for sign-off.
++Opt in to a checkpoint when the invoker explicitly asks: "/skill:architect with checkpoint," "stop and show me before implementing," or similar. Then surface the synthesized design and pause for sign-off.
+ 
+ The synthesis can ship as its own commit either way, as the "scaffold first" mode of the **foundational-thinking** principle skill. Planned and scoped breakage during fill-in is fine, per the **outcome-oriented-execution** principle skill. For adversarial pressure on the design before implementing, run the **interrogate** skill on the synthesized sketch.
+ 
+diff --git a/skills/arena/SKILL.md b/skills/arena/SKILL.md
+index e50356e..ad31054 100644
+--- a/skills/arena/SKILL.md
++++ b/skills/arena/SKILL.md
+@@ -1,6 +1,6 @@
+ ---
+ name: arena
+-description: "Spawn N parallel candidates at the same task, pick a base, graft the strongest parts of the losers into it. Use for /arena, 'arena this', 'throw it in the arena', or when one attempt at a non-trivial artifact would lock in the wrong shape."
++description: "Spawn N parallel candidates at the same task, pick a base, graft the strongest parts of the losers into it. Use for /skill:arena, 'arena this', 'throw it in the arena', or when one attempt at a non-trivial artifact would lock in the wrong shape."
+ disable-model-invocation: true
+ ---
+ 
+@@ -25,12 +25,12 @@ The N candidates will receive the same prompt, so the prompt is the contract.
+ 
+ 1. State the artifact each candidate is producing.
+ 2. Derive the rubric. State what success looks like for *this* task, then turn it into 3-6 concrete gradeable criteria. The rubric is the picker's tool in Phase D. Candidates only see the task.
+-3. Pick the runners. Use the `arena runners` line in `~/.cursor/rules/pstack-models.mdc`. If the rule or that line is missing, default to one each on `claude-opus-5-5-max`, `gpt-5.6-sol-max`, `grok-4.7-xhigh-fast`. An `auto` or `inherit-parent` entry in this line or the cross-judge line means the parent model, so omit `model` for it. If the Task tool rejects a configured entry, run that seat on its family's default and say so. Families go by prefix: `claude-*`, `gpt-*`, and `grok-*`. With no family match, use `claude-opus-5-5-max`. If it rejects a default, use the closest valid slug of the same family from its error message. Spawn more when the arena covers multiple design directions. Same model N times when the work is generation-bound rather than judgment-sensitive.
++3. Pick the runners. Use the effective `arena runners` selectors from Pi's injected role table or `pstack_models` action `get`. Preserve their order and repeated entries. Pass each exact `provider/model:thinking` selector to `pstack_task`, including resolved `auto` and `inherit-parent` choices. If a role is unresolved or a selector is rejected, report the gap and obtain a valid choice through setup or the user rather than substituting a model or silently dropping a seat. Spawn more when the arena covers multiple design directions. Same model N times when the work is generation-bound rather than judgment-sensitive.
+ 4. Assign output paths. Each candidate writes to its own location (a git worktree where possible, otherwise `/tmp/arena-<slug>/candidate-<n>/`), per the **separate-before-serializing-shared-state** principle skill.
+ 
+ ## Phase B: Fan out
+ 
+-Spawn all N subagents in one message with `run_in_background: true`, each with the task, the path to the shared grounding, its own output path, and instructions to produce both the artifact and a short rationale.
++Spawn all N subagents with `pstack_task` in one message with `run_in_background: true`, each with the task, the path to the shared grounding, its own output path, and instructions to produce both the artifact and a short rationale.
+ 
+ Each rationale names the alternatives the candidate considered and what it rejected.
+ 
+@@ -38,7 +38,7 @@ If a candidate fails to produce output, proceed with N-1 and note the dropout in
+ 
+ ## Phase C: Cross-judge
+ 
+-After all Phase B candidates complete, choose one model from the `arena cross-judge pool` line in `~/.cursor/rules/pstack-models.mdc`. If the rule or that line is missing, choose from `claude-opus-5-5-max`, `gpt-5.6-sol-max`, `grok-4.7-xhigh-fast`. Prefer a different model family from the parent's. Spawn one readonly judge subagent on that model. It sees the rubric and the candidates by path label, scores each criterion, and recommends a base with rationale. It runs in parallel with the parent's reading in Phase D, not with the candidates themselves. Don't spawn the judge while candidates are still writing.
++After all Phase B candidates complete, choose one effective selector from Pi's `arena cross-judge pool` role in `pstack_models`. Apply Phase A's unresolved-role and rejected-selector rules. Prefer a different model family from the parent's. Spawn one readonly judge subagent on that model. It sees the rubric and the candidates by path label, scores each criterion, and recommends a base with rationale. It runs in parallel with the parent's reading in Phase D, not with the candidates themselves. Don't spawn the judge while candidates are still writing.
+ 
+ ## Phase D: Pick a base
+ 
+diff --git a/skills/how/SKILL.md b/skills/how/SKILL.md
+index cd22fff..8ebbbd8 100644
+--- a/skills/how/SKILL.md
++++ b/skills/how/SKILL.md
+@@ -8,7 +8,7 @@ disable-model-invocation: true
+ 
+ Explore the codebase to answer "how does X work?" questions. Produce architectural explanations at the level of a senior engineer onboarding onto a subsystem, enough to build a working mental model, not so much that it reads like annotated source code.
+ 
+-Each spawn below names a role line in the `pstack-models.mdc` rule and a default. Set `model` to that line's value, or to the default if the rule or the line is missing. Leave `model` unset when the value is `auto` or `inherit-parent`. If the Task tool rejects a slug, use the default and say so. If it rejects the default, use the closest valid slug of the same family from its error message.
++Each spawn below names a role in Pi's `pstack_models` configuration. Use its effective `provider/model:thinking` selector from the injected role table or `pstack_models` action `get`, including resolved `auto` and `inherit-parent` choices. If the role is unresolved or its selector is rejected, report the gap and obtain a valid choice through setup or the user. Do not substitute a model or omit the role.
+ 
+ ## Step 1. Assess Complexity
+ 
+@@ -24,27 +24,27 @@ When in doubt, take the simple path.
+ Decompose the question into 2 to 4 exploration angles, each a distinct slice of the subsystem. Spawn all explorers in a single message:
+ 
+ - `subagent_type`: `generalPurpose`
+-- `model`: the `how explorer` line, default `grok-4.7-xhigh-fast`
++- `model`: the effective `how explorer` selector
+ - `readonly`: `true`
+ 
+ Each explorer gets the prompt in `references/explorer-prompt.md` with its angle filled in. Then go to Step 3.
+ 
+ ## Step 2b. Direct Explain (simple questions)
+ 
+-Spawn one Task subagent that explores and explains in one pass:
++Spawn one `pstack_task` child that explores and explains in one pass:
+ 
+ - `subagent_type`: `generalPurpose`
+-- `model`: the `how explainer` line, default `claude-opus-5-5-max`
++- `model`: the effective `how explainer` selector
+ - `readonly`: `true`
+ 
+ Build its prompt from `references/explainer-prompt.md` without the explorer-findings section. Go to Step 4.
+ 
+ ## Step 3. Synthesize (complex questions only)
+ 
+-Once all explorers have returned, spawn one Task subagent to synthesize their findings into one explanation:
++Once all explorers have returned, spawn one `pstack_task` child to synthesize their findings into one explanation:
+ 
+ - `subagent_type`: `generalPurpose`
+-- `model`: the `how explainer` line, default `claude-opus-5-5-max`
++- `model`: the effective `how explainer` selector
+ - `readonly`: `true`
+ 
+ Build its prompt from `references/explainer-prompt.md` with every explorer's findings filled in.
+diff --git a/skills/how/references/explainer-prompt.md b/skills/how/references/explainer-prompt.md
+index 3a36fb6..856ab50 100644
+--- a/skills/how/references/explainer-prompt.md
++++ b/skills/how/references/explainer-prompt.md
+@@ -20,7 +20,7 @@ The explorers each investigated a different angle of the same subsystem. Their f
+ 
+ Write an explanation a senior engineer unfamiliar with this area could read and walk away with a solid mental model, understanding the architecture well enough to start working in it confidently.
+ 
+-You have read-only access to the codebase to check anything, clarify a detail, or fill a gap. Use Read, Grep, and Glob as needed. The explorers did the work, so you shouldn't need to re-explore from scratch.
++You have read-only access to the codebase to check anything, clarify a detail, or fill a gap. Use Pi's `read`, `grep`, and `find` as needed. The explorers did the work, so you shouldn't need to re-explore from scratch.
+ 
+ ## Output Format
+ 
+diff --git a/skills/how/references/explorer-prompt.md b/skills/how/references/explorer-prompt.md
+index 9b4b059..86cd96b 100644
+--- a/skills/how/references/explorer-prompt.md
++++ b/skills/how/references/explorer-prompt.md
+@@ -18,7 +18,7 @@ Other explorers are investigating different slices of the same subsystem in para
+ 
+ ## Exploration Instructions
+ 
+-Start by finding the relevant code. Use Glob to find directories and files, Grep to find key symbols, Read to understand the actual implementation. Don't guess from names. Read the code.
++Start by finding the relevant code. Use Pi's `find` to find directories and files, `grep` to find key symbols, and `read` to understand the actual implementation. Don't guess from names. Read the code.
+ 
+ Follow this pattern:
+ 1. **Find the entry point.** What triggers this behavior? A user action, an API call, a scheduled job? Find where it starts.
+diff --git a/skills/interrogate/SKILL.md b/skills/interrogate/SKILL.md
+index bd82e5b..135e93b 100644
+--- a/skills/interrogate/SKILL.md
++++ b/skills/interrogate/SKILL.md
+@@ -33,20 +33,14 @@ Write one clear paragraph. If you're unsure about the intent, ask the user befor
+ 
+ ## Step 3, Spawn Reviewers
+ 
+-Launch all reviewers in a single message using the Task tool. Use the `interrogate reviewers` line in `~/.cursor/rules/pstack-models.mdc`, one reviewer per entry, extending or shrinking the Reviewer A/B/C labels below to the configured entry count. If the rule or that line is missing, use the table defaults.
+-
+-| Subagent | Default model |
+-|----------|---------------|
+-| Reviewer A | `claude-opus-5-5-max` |
+-| Reviewer B | `gpt-5.6-sol-max` |
+-| Reviewer C | `grok-4.7-xhigh-fast` |
++Launch all reviewers in a single message using `pstack_task`. Use the effective `interrogate reviewers` selectors from Pi's injected role table or `pstack_models` action `get`, one reviewer per entry. Label them Reviewer A/B/C and extend or shrink the labels to the configured entry count. Preserve the configured order and repeated entries.
+ 
+ For each reviewer:
+ - `subagent_type`: `generalPurpose`
+-- `model`: the configured `interrogate reviewers` entry, or the table default with no configured line. For an `auto` or `inherit-parent` entry, omit `model` so that reviewer runs on the parent model.
++- `model`: the entry's exact effective `provider/model:thinking` selector, including resolved `auto` and `inherit-parent` choices.
+ - `readonly`: `true`
+ 
+-If the Task tool rejects a configured entry, run that reviewer on the table default of its family and say so. Families go by prefix: `claude-*`, `gpt-*`, and `grok-*`. With no family match, use Reviewer A's default. If it rejects a table default, check the valid slugs in the Task tool's error message, pick the closest equivalent (prefer the highest-reasoning tier of the same family), spawn with it, and open a separate PR to update the default table. Do not block the review on the slug issue. Never treat an alias entry as a rejected slug or apply either fallback to it.
++If the role is unresolved or a selector is rejected, report the gap and obtain a valid choice through setup or the user. Do not substitute a different model, silently omit a reviewer, or edit the upstream defaults to accommodate a local provider.
+ 
+ Read `references/reviewer-prompt.md` and fill in the template with:
+ 1. The stated intent
+diff --git a/skills/interrogate/references/reviewer-prompt.md b/skills/interrogate/references/reviewer-prompt.md
+index 13a252b..81906c0 100644
+--- a/skills/interrogate/references/reviewer-prompt.md
++++ b/skills/interrogate/references/reviewer-prompt.md
+@@ -56,7 +56,7 @@ For each finding, provide:
+ 
+ Return your findings as a structured list. If you have zero findings, say so. An empty review is a valid outcome.
+ 
+-```
++```markdown
+ ## Findings
+ 
+ ### 1. [Severity] Short title
+diff --git a/skills/interrogate/references/rubric.md b/skills/interrogate/references/rubric.md
+index 2d92f1b..b91e76c 100644
+--- a/skills/interrogate/references/rubric.md
++++ b/skills/interrogate/references/rubric.md
+@@ -20,7 +20,7 @@ When you find a potential bug, trace the execution path. Don't just flag "this c
+ 
+ Is the code fixing the actual problem or papering over a symptom?
+ 
+-Answering this often requires looking beyond the changed files. Read the surrounding code (callers, callees, type definitions, sibling modules) and understand the architecture the change lives in. Use the tools available to you (Read, Grep, Glob) to explore. Follow the call chain. Read the types. Understand why the code exists before judging whether the change addresses the right layer.
++Answering this often requires looking beyond the changed files. Read the surrounding code (callers, callees, type definitions, sibling modules) and understand the architecture the change lives in. Use the Pi tools available to you (`read`, `grep`, `find`) to explore. Follow the call chain. Read the types. Understand why the code exists before judging whether the change addresses the right layer.
+ 
+ - Guard clauses that mask a deeper invariant violation
+ - Retry logic that hides a broken contract
+diff --git a/skills/no-comments/SKILL.md b/skills/no-comments/SKILL.md
+index 3b3e762..1f9adde 100644
+--- a/skills/no-comments/SKILL.md
++++ b/skills/no-comments/SKILL.md
+@@ -16,9 +16,9 @@ Use the caller's files or diff. Otherwise use the current diff against the base
+ 
+ ## Steps
+ 
+-1. Spawn `Task` with `subagent_type: "Comment Sicko"`. Pass the scope. Do not restate its rules.
+-2. Inspect its report and diff. Reject application-code edits, scope escapes, exception-protected deletions, misstated `MUST KILL` reasons, and flags that treat kept intentional code as guilty. Reshape flags on our-code surprises stay actionable. Do not restore those comments. A keep survives only with proof it is about something we cannot change. Audit missed scoped lint and TypeScript suppressions. Correctness or safety suppressions stay actionable `MUST KILL`s. Restore deletions only with exact exceptions and scoped proof. Before accepting thin `IMPORTANT` or `do not remove` kills or keeps, run `/how` or `/why` on their symbol. If a kill is ambiguous, do not restore. If a keep is refuted or still ambiguous, delete it. Revert and rerun one rejected report with the failure named. Reject a second, report it open, and fail `/no-comments`.
+-3. Fix trivial accepted flags directly by deleting a dead path, dropping a parameter, or using the real API. If any fix needs a shape, run `/architect` once for the accepted set and surrounding code. Stop at the sketch. Architect shapes. Step 4 implements.
++1. Spawn `pstack_task` with `subagent_type: "Comment Sicko"`. Pass the scope. Do not restate its rules.
++2. Inspect its report and diff. Reject application-code edits, scope escapes, exception-protected deletions, misstated `MUST KILL` reasons, and flags that treat kept intentional code as guilty. Reshape flags on our-code surprises stay actionable. Do not restore those comments. A keep survives only with proof it is about something we cannot change. Audit missed scoped lint and TypeScript suppressions. Correctness or safety suppressions stay actionable `MUST KILL`s. Restore deletions only with exact exceptions and scoped proof. Before accepting thin `IMPORTANT` or `do not remove` kills or keeps, follow the **how** or **why** skill on their symbol. If a kill is ambiguous, do not restore. If a keep is refuted or still ambiguous, delete it. Revert and rerun one rejected report with the failure named. Reject a second, report it open, and fail **no-comments**.
++3. Fix trivial accepted flags directly by deleting a dead path, dropping a parameter, or using the real API. If any fix needs a shape, follow **architect** once for the accepted set and surrounding code. Stop at the sketch. Architect shapes. Step 4 implements.
+ 4. Implement the smallest root-cause fix in scope. Remove every named workaround. If the root cause is out of scope, land the smallest in-scope fix and report the rest open. The **principle-fix-root-causes** and **principle-redesign-from-first-principles** skills guide intent only. Neither authorizes widening the fence nor fixing instances outside it. Never bolt on symptom guards.
+ 5. Constraint comments say `do not remove`, `do not change wording`, or `talk to X before changing`. Leave keeps about things we cannot change. Offer the cheapest in-scope type, runtime, test, or CI lint. Wait for interactive approval. Unattended and eval require caller pre-approval. If approved, encode then delete. Otherwise delete, report the constraint open, and sketch out-of-scope work.
+ 6. Report the deletion count, restored comments, reruns, architect sketch, fixes, encoding offers, encodings, unenforced constraints, and other open work.
+diff --git a/skills/poteto-mode/SKILL.md b/skills/poteto-mode/SKILL.md
+index f46889e..8de8073 100644
+--- a/skills/poteto-mode/SKILL.md
++++ b/skills/poteto-mode/SKILL.md
+@@ -18,18 +18,18 @@ The Principles section below grounds every trigger. In your reply, name each pri
+ Remaining triggers:
+ 
+ - Nontrivial change, architecture decision, or "are we sure?" → the **how** skill.
+-- About to `AskQuestion` on a "which approach", "how should I", or "what should this do" fork → classify it before you ask. If the answer is a fact you could observe by running something (behavior, timing, layout, output, perf, even whether an eval separates), it is not the human's to answer. Sketch it via the Prototype playbook (`playbooks/prototype.md`) and let the result decide. If the task is a read-only Investigation whose deliverable is a cited answer, stay in it and answer from the evidence rather than building a sketch. Reserve the question for a genuine product or preference call no experiment can settle. Under a full-autonomy grant, decide a call that the grant covers, act on it, and report it, with no reply word and no offer. Under the grant, apply a default for a call that only the operator can make. Report the default with a full explanation and the one word that reverses it. Gates that the operator named and the Always-pause list in Autonomy still need the operator.
++- About to use `pstack_question` on a "which approach", "how should I", or "what should this do" fork → classify it before you ask. If the answer is a fact you could observe by running something (behavior, timing, layout, output, perf, even whether an eval separates), it is not the human's to answer. Sketch it via the Prototype playbook (`playbooks/prototype.md`) and let the result decide. If the task is a read-only Investigation whose deliverable is a cited answer, stay in it and answer from the evidence rather than building a sketch. Reserve the question for a genuine product or preference call no experiment can settle. Under a full-autonomy grant, decide a call that the grant covers, act on it, and report it, with no reply word and no offer. Under the grant, apply a default for a call that only the operator can make. Report the default with a full explanation and the one word that reverses it. Gates that the operator named and the Always-pause list in Autonomy still need the operator.
+ - Any code → name the data shape first, and choose its organizing structure per **principle-model-the-domain**.
+ - Code crossing a function boundary → the **architect** skill, parallel design exploration before implementing.
+ - Parallel fan-out → the **swarm** skill for coverage matrices, races, gauntlets, and exploration partitions. Use **arena** for design or code bakeoffs with base selection and grafting.
+ - Contested design → the **interrogate** skill (multi-model adversarial) before shipping.
+ - Nontrivial multi-step → write the throughput checkpoint (Feature step 3).
+-- Any prose surface → the **unslop** skill. Your reply is a prose surface. Write it per **Writing the reply**. Agent-facing prose also follows the **create-skill** skill (Cursor's built-in for authoring SKILL.md files).
+-- Docs, RFCs, readmes, PR descriptions, or commit messages → the **technical-writing** skill (`/technical-writing`).
++- Any prose surface → the **unslop** skill. Your reply is a prose surface. Write it per **Writing the reply**. Agent-facing prose also follows the actual **create-skill** method required by upstream. It is an external Cursor dependency, not a Pi built-in; report its absence rather than substituting a personal authoring skill.
++- Docs, RFCs, readmes, PR descriptions, or commit messages → the **technical-writing** skill (`/skill:technical-writing`).
+ - Before commit → the `deslop` skill from the `cursor-team-kit` plugin (`/deslop`).
+-- Before review → the **no-comments** skill (`/no-comments`).
++- Before review → the **no-comments** skill (`/skill:no-comments`).
+ - Shipping UI / IDE / CLI → the matching control skill. `cursor-team-kit` publishes `control-cli` (CLIs and TUIs) and `control-ui` (browser / Electron / web UIs). For bug fixes, reproduce first on the same surface yourself. Hand to the user only under the narrow Bug fix step 1 exception.
+-- Any PR-status request → the **Babysit** playbook (`playbooks/babysit.md`), and not Cursor's built-in babysit skill, whose description matches the same words. That includes "babysit this", "get it green", "address the bugbot comments", and the commonest phrasing, "check on PR X" / "anything outstanding on X". Never triggered by merely opening a PR. Declare its mode before polling. The playbook's step 1 owns the request-to-mode mapping. Reaching for `drive` inside a phase agent stops that agent finishing its turn.
++- Any PR-status request → the packaged **Babysit** playbook (`playbooks/babysit.md`). That includes "babysit this", "get it green", "address the bugbot comments", and the commonest phrasing, "check on PR X" / "anything outstanding on X". Never triggered by merely opening a PR. Declare its mode before polling. The playbook's step 1 owns the request-to-mode mapping. Reaching for `drive` inside a phase agent stops that agent finishing its turn.
+ - Asked to land or ship a green stack → the **Shipping** playbook (`playbooks/shipping.md`). Green is not safe. Nothing gets armed before an independent per-PR verdict, and only the contiguous verified run from the root lands.
+ - Bugbot or the agentic security review commented → skeptical posture. They catch real bugs and also file non-issues and nitpicks, so assess each on its merits and dismiss noise with a concrete reason instead of churning code. Triage fix / dismiss / ask per `references/bugbot-triage.md`.
+ - Broken skill mid-task → fix it in its own PR. Don't block. Don't silently work around it.
+@@ -79,7 +79,7 @@ Read the leaf skill in full for any principle you apply. Each entry names when i
+ 
+ ## Autonomy
+ 
+-**Just do it.** Use any MCP tool. Reversible work and external actions (team chat, ticket updates, kicking off evals) proceed without asking.
++**Just do it.** Use the available Pi tools and configured integrations, including MCP-backed tools. Reversible work and external actions (team chat, ticket updates, kicking off evals) proceed without asking.
+ 
+ **Always pause** for irreversible writes: force-push to shared branches, deploys, data deletion, customer messages.
+ 
+@@ -91,9 +91,9 @@ Read the leaf skill in full for any principle you apply. Each entry names when i
+ 
+ **Use `subagent_type: "poteto-agent"` for any subagent you spawn inside a playbook step** (code-writing delegates, ad-hoc helpers). `/poteto-mode` and `poteto-agent` route through the same wrapper. Routed workflow skills (`how`, `why`, `interrogate`, `reflect`, `swarm`) set their own `subagent_type` for diverse-model review. Respect what the skill prescribes, don't override to `poteto-agent`.
+ 
+-**Defaults for every `Task` call.** `run_in_background: true`, agent mode (readonly strips MCP), file pointers not inlined context, explicit model per role (configurable via `/setup-pstack`. Defaults `grok-4.7-xhigh-fast` for code, `claude-opus-5-5-max` for prose and judgment). Code delegates tier by difficulty. The hardest changes (cross-cutting design, gnarly concurrency, subtle algorithms) go to your strongest judgment model (`claude-opus-5-5-max`), whether the task needs judgment on vague intent or is a precisely specified sequence of steps to execute to the letter. Trivial mechanical edits go to your fast code model. Per-role lines in the `/setup-pstack` rule override these defaults and the model choices in the routed skills (`how`, `why`, `arena`, `swarm`, `architect`, `interrogate`, `reflect`). A role with no line keeps its default, and a role line of `inherit-parent` or `auto` runs that role on the parent chat model (omit Task `model`). Each code playbook's configured model comes from its line (`feature, refactoring`, `bug-fix`, `perf-issue`, or `hillclimb`), and the hardest changes read `hardest tasks`. Prose and judgment read `judgment and prose`.
++**Defaults for every `pstack_task` call.** `run_in_background: true`, `readonly: false`, file pointers not inlined context, and an explicit effective model selector per role configured through `/setup-pstack`. Pi's PStack read-only children omit integration tools and shell access; tool access does not authorize unrelated writes. Code delegates tier by difficulty. The hardest changes (cross-cutting design, gnarly concurrency, subtle algorithms) use the `hardest tasks` role, whether the task needs judgment on vague intent or is a precisely specified sequence of steps to execute to the letter. Trivial mechanical edits use the configured code role. Pi's injected role table and `pstack_models` action `get` provide the effective `provider/model:thinking` selectors, including resolved `inherit-parent` and `auto` choices. Pass that selector rather than omitting `model`. A missing or rejected selector requires setup or an explicit valid user choice, not a fallback to an upstream slug. Each code playbook uses its role (`feature, refactoring`, `bug-fix`, `perf-issue`, or `hillclimb`), and the hardest changes use `hardest tasks`. Prose and judgment use `judgment and prose`.
+ 
+-You own every subagent's work. Review the diff and write your own summary, don't pass through what it said. Interrupt-chained resumes silently drop directives, so fire a fresh subagent with consolidated scope rather than trusting a "done" summary. A second opinion is the same prompt against a different model. Agreement is high-signal.
++You own every subagent's work. Review the diff and write your own summary, don't pass through what it said. Only resume an idle owned child through `pstack_task` with its ID and a follow-up prompt. Pi's adapter does not steer a running child. For a consolidated fresh assignment, start a new child rather than trusting a "done" summary. A second opinion is the same prompt against a different model. Agreement is high-signal.
+ 
+ ## Writing the reply
+ 
+@@ -115,6 +115,8 @@ Comments follow the same rule as the reply. Write them clean as you go. Keep a c
+ 
+ ## Playbooks
+ 
++**Pi capability boundary.** These source playbooks include routes beyond this local baseline. Cloud agents, Benny, timed or overnight wakeups (`/loop`), automated delivery, and Cursor-specific agent-store tooling are not implemented here. If a selected route needs one, report the gap before starting its dependent steps. Retaining its source does not make the capability available. In particular, the bundled worktree-audit script reads Cursor transcripts and cannot establish Pi task ownership or liveness; do not use that cleanup workflow as though it were adapted to Pi.
++
+ Open a todolist whose first items are the matched playbook's steps, copied in verbatim, before any task-specific todos. A step you choose not to do stays in the list with a one-line `skip: <reason>`. Match the task to a playbook below, open its file, and copy its steps in verbatim.
+ 
+ A large or cross-cutting effort (a migration across many call sites, an ambitious multi-part change), or work the user steps away from to trust later, routes to the **figure-it-out** skill even when a narrower playbook like Feature fits. Use **figure-it-out** whenever no bundled playbook fits. It designs a bespoke, rigorous playbook for the task. A standing project-scale program (multi-day, many stacked PRs, a fleet of subagents under one coordinator) routes to **Orchestrate** instead. figure-it-out designs one bespoke run, orchestrate runs the program.
+@@ -138,7 +140,7 @@ A large or cross-cutting effort (a migration across many call sites, an ambitiou
+ - **Autopilot-full.** A queue of independent PRs run to merged with full autonomy. One owner per PR carries build through merge, and the root swarm-verifies each PR before its owner merges ("autopilot this queue", "full autopilot", one-owner-per-PR programs). `playbooks/autopilot-full.md`.
+ - **Autopilot-stack.** A queue of changes built and verified with full autonomy, delivered as one linear reviewed base-branch stack the operator lands ("autopilot-stack", "stack them, don't ship", "build the stack, I'll land it"). `playbooks/autopilot-stack.md`.
+ - **Session pickup.** Resuming or taking over a prior agent's in-flight work from a transcript, cloud-agent URL, or pushed branch. `playbooks/session-pickup.md`.
+-- **Pause safely.** Suspending in-flight work cleanly so it can be resumed, on an explicit pause, going offline, a Cursor restart, or imminent context compaction. The complement to Session pickup. Full steps: `playbooks/pause-safely.md`.
++- **Pause safely.** Suspending in-flight work cleanly on an explicit pause, going offline, or a Pi restart. Native Pi compaction retains the live session and does not itself cancel children. A restart cancels local children; use saved evidence and a fresh assignment, not a cross-session child ID, to pick up work. The complement to Session pickup. Full steps: `playbooks/pause-safely.md`.
+ - **Multi-phase or multi-PR plan.** Work that spans phases or stacked PRs. `playbooks/multi-phase-plan.md`.
+ - **Worktree and simulator cleanup.** Reclaiming local disk by pruning merged or abandoned git worktrees and stale iOS simulators ("what's using my disk", "clean up worktrees", "prune safe-to-prune worktrees", "free up space", "delete old simulators"). `playbooks/worktree-cleanup.md`.
+ - **Opening a PR.** Invoked at the end of every other playbook. `playbooks/opening-a-pr.md`.
+diff --git a/skills/poteto-mode/playbooks/authoring-a-skill.md b/skills/poteto-mode/playbooks/authoring-a-skill.md
+index 8c5a55a..c2949e4 100644
+--- a/skills/poteto-mode/playbooks/authoring-a-skill.md
++++ b/skills/poteto-mode/playbooks/authoring-a-skill.md
+@@ -2,7 +2,7 @@
+ 
+ **You own the skill's voice.**
+ 
+-1. Use the **create-skill** skill (Cursor's built-in for authoring SKILL.md files).
++1. Use the actual **create-skill** method required by upstream. It is an external Cursor dependency, not a Pi built-in supplied by this package. If unavailable, report the gap rather than substituting a similarly named personal skill.
+ 2. Validate the skill: frontmatter has `name` and `description`, referenced files exist, cross-skill links resolve.
+ 3. Test cases if structural. Skip if subjective.
+ 4. Run **Opening a PR**.
+diff --git a/skills/poteto-mode/playbooks/bug-fix.md b/skills/poteto-mode/playbooks/bug-fix.md
+index eeebc42..c9cf02c 100644
+--- a/skills/poteto-mode/playbooks/bug-fix.md
++++ b/skills/poteto-mode/playbooks/bug-fix.md
+@@ -5,8 +5,8 @@
+ Be scientific. Every shipped line traces to runtime evidence. Belt-and-suspenders that "might help" is a hypothesis, not a fix. It does not ship. When evidence refutes a hypothesis, revert what it motivated. The smallest change the evidence justifies ships, nothing more.
+ 
+ 1. Reproduce it yourself on the matching surface via the control skill (Non-negotiables), even when a debug or instrumentation protocol says to ask the user to reproduce. Ask the user only with a stated, specific reason the control surface cannot reach the target, and only after driving it as far as it goes. If it won't reproduce directly, synthesize the trigger, tighten conditions, or instrument until it fires.
+-2. Binary-search the cause. Form the candidate hypotheses, then rule them out until one survives. Seed them with `how` over the affected subsystem and the **why** skill for regression history. Each pass, take the split that cuts the most remaining problem space, get runtime evidence, eliminate. When program state is unclear, add instrumentation or logging and read it as the code runs. Don't guess. Drive a long or stubborn hunt with Cursor's `/loop` command. Confirm the surviving *mechanism* with runtime evidence before the step-3 architect/interrogate fan-out.
+-3. Plan the fix. If it crosses a function boundary, `architect` first. Delegate implementation to a subagent using your configured bug-fix model (default `grok-4.7-xhigh-fast`) with a specific scope.
++2. Binary-search the cause. Form the candidate hypotheses, then rule them out until one survives. Seed them with `how` over the affected subsystem and the **why** skill for regression history. Each pass, take the split that cuts the most remaining problem space, get runtime evidence, eliminate. When program state is unclear, add instrumentation or logging and read it as the code runs. Don't guess. If a long hunt requires timed or unattended wakeups, report that capability gap; this Pi baseline does not provide `/loop` or a scheduler. Confirm the surviving *mechanism* with runtime evidence before the step-3 architect/interrogate fan-out.
++3. Plan the fix. If it crosses a function boundary, `architect` first. Delegate implementation to a subagent using the effective `bug-fix` selector from Pi's `pstack_models` configuration with a specific scope.
+ 4. Verify on the same surface. The original repro now passes. "Inconclusive" or wrong-surface is not a pass. Flag it. Unit tests show branch behavior, not bug absence.
+ 5. Stage the commits so the failing repro lands before the fix in git history. See the **tdd** skill for the failing-test-first cadence when the bug has a cheap local test path. Skip it when the test would be expensive, integration-heavy, or unclear.
+    This is the canonical **sequence-verifiable-units** principle skill, the failing test first and the fix on top.
+diff --git a/skills/poteto-mode/playbooks/eval.md b/skills/poteto-mode/playbooks/eval.md
+index 3dae34e..c05193b 100644
+--- a/skills/poteto-mode/playbooks/eval.md
++++ b/skills/poteto-mode/playbooks/eval.md
+@@ -19,7 +19,7 @@
+ 3. **Author one organic prompt.** What a user would type. No leakage of what's being measured.
+ 4. **Spawn N parallel candidates** on different models per the **arena** skill's Phase B. Each works in its own sanitized dir. Same prompt to each.
+ 5. **Spawn one blinded judge** on a different model family per the **arena** skill's Phase C. Judge sees outputs by sanitized label and the rubric, never a model name.
+-6. **Verify the chain from transcripts, not self-report.** Read each candidate's local transcript under the active workspace's `agent-transcripts/` directory (the system prompt names this path). Do not glob across `~/.cursor/projects/*/`. That crosses workspace boundaries and reads private chats from unrelated projects. Look at which files each candidate actually opened. Grade chain-following from the files it really read plus the shape of the code, never from the candidate's own claims.
++6. **Verify the chain from transcripts, not self-report.** Read the exact Pi transcript path in each candidate's completion receipt or `pstack_tasks` inspection result. If startup failed before a transcript was created, record that gap. Do not scan other sessions or projects to find a substitute; that reads unrelated private chats. Look at which files each candidate actually opened. Grade chain-following from the files it really read plus the shape of the code, never from the candidate's own claims.
+ 7. **Read every candidate output yourself** end to end. Compare to the judge's verdict. Disagreement means a model is biased or the rubric is ambiguous. Synthesize.
+ 
+ **Reply:** variant under test, rubric, per-candidate notes, judge's verdict, your synthesis, and a recommendation for whether to promote the variant.
+diff --git a/skills/poteto-mode/playbooks/feature.md b/skills/poteto-mode/playbooks/feature.md
+index 79a6bbb..33edcb1 100644
+--- a/skills/poteto-mode/playbooks/feature.md
++++ b/skills/poteto-mode/playbooks/feature.md
+@@ -9,7 +9,7 @@
+    - **Independent workstreams.** Disjoint files, services, or layers parallelize. Shared writes serialize.
+    - **Shared mutable state.** Default to splitting the target (the **separate-before-serializing-shared-state** principle skill). Serialize only for real invariants.
+    - **Smallest safe decomposition.** If one worker is best, name why.
+-4. Delegate code-writing to a subagent using your configured feature model (default `grok-4.7-xhigh-fast`) with a specific scope (file paths, named data shape and its organizing structure per **principle-model-the-domain**, a state machine over scattered booleans, a table/registry over branching, a typed model over repeated shape assumptions, chosen before the delegate writes logic, and success criteria). When the implementation admits multiple valid shapes (error handling, abstraction layer, test structure), delegate via the **arena** skill instead so the runners surface the alternatives and the cross-judge guards the pick. Mandatory: no skip-with-reason escape, and Laziness Protocol does not override it (the gain is review separation, not lines saved). A subagent forbidden to spawn satisfies this by owning the diff directly with the same review separation. No "standing by" reply that waits on a nested agent. Comments per **Comments**. Surgical edits, re-ground against the source for upstream-derived files. Port shared-primitive improvements to all consumers and verify each. Commit liberally.
++4. Delegate code-writing to a subagent using the effective `feature, refactoring` selector from Pi's `pstack_models` configuration with a specific scope (file paths, named data shape and its organizing structure per **principle-model-the-domain**, a state machine over scattered booleans, a table/registry over branching, a typed model over repeated shape assumptions, chosen before the delegate writes logic, and success criteria). When the implementation admits multiple valid shapes (error handling, abstraction layer, test structure), delegate via the **arena** skill instead so the runners surface the alternatives and the cross-judge guards the pick. Mandatory: no skip-with-reason escape, and Laziness Protocol does not override it (the gain is review separation, not lines saved). A subagent forbidden to spawn satisfies this by owning the diff directly with the same review separation. No "standing by" reply that waits on a nested agent. Comments per **Comments**. Surgical edits, re-ground against the source for upstream-derived files. Port shared-primitive improvements to all consumers and verify each. Commit liberally.
+ 5. Verify on the matching surface. "Inconclusive" or wrong-surface is not a pass. Flag it.
+ 6. Rebase into small, ordered commits. Stack follow-ups.
+    Use the **sequence-verifiable-units** principle skill, building, verifying, and committing each small unit before the next.
+diff --git a/skills/poteto-mode/playbooks/hillclimb.md b/skills/poteto-mode/playbooks/hillclimb.md
+index 582555e..15cf443 100644
+--- a/skills/poteto-mode/playbooks/hillclimb.md
++++ b/skills/poteto-mode/playbooks/hillclimb.md
+@@ -9,11 +9,11 @@ Core discipline: one change, one measurement, keep or revert. Never stack untest
+ 3. Open the decision log via the **show-me-your-work** skill. A `decision.tsv`, one row per attempt: id, hypothesis, change, before, after, delta, tests, verdict (kept or reverted), note. Read it before each attempt. Keep it out of the tree (gitignored).
+ 4. Ground each hypothesis in the architecture model from step 1, so it names a specific mechanism ("defer X off the boot path because it blocks first paint"), not "try memoizing something".
+ 5. Loop, one hypothesis per iteration:
+-   - Hand the change to a subagent using your configured hillclimb model (default `grok-4.7-xhigh-fast`) with a tight scope. Supervise and review the diff rather than typing it (the **guard-the-context-window** principle skill). When several independent hypotheses are live, fan them to parallel subagents, each in its own worktree (the **separate-before-serializing-shared-state** principle skill).
++   - Hand the change to a subagent using the effective `hillclimb` selector from Pi's `pstack_models` configuration with a tight scope. Supervise and review the diff rather than typing it (the **guard-the-context-window** principle skill). When several independent hypotheses are live, fan them to parallel subagents, each in its own worktree (the **separate-before-serializing-shared-state** principle skill).
+    - Measure before and after with the frozen harness, and run the regression gate.
+    - Accept only when the metric moves past noise and the gate stays green. Otherwise revert the change in full. A tweak that "might help" is not kept.
+    - One commit per accepted fix, staging only the files you changed (`git add <files>`, never `-A`). Log the row either way, kept or reverted.
+-   Each iteration ends in a check before the next begins (the **sequence-verifiable-units** principle skill). If the run is unattended, borrow only the wake mechanism from the Autonomous run playbook (`playbooks/autonomous-run.md`), not its stop rule.
++   Each iteration ends in a check before the next begins (the **sequence-verifiable-units** principle skill). If the run requires unattended wakeups, report that Pi capability gap. This baseline has no scheduler; a live local child is not a durable wake mechanism. Do not weaken the stop predicate or claim unattended continuation.
+ 6. Push past the first plateau. On a stall, several rejects in a row, pivot category, combine near-misses, re-read the source, or try something more radical before concluding the hill is climbed. Correctness and simplicity outrank the number. Revert a win that breaks behavior, and keep a simplification that holds the number (the **laziness-protocol** principle skill).
+ 7. Stop when the predicate is met, or when the remaining ideas are marginal and not worth their cost. Don't relax the predicate to meet it, and don't quit while cheap untried hypotheses remain. If you are stuck, surface it instead of spinning.
+ 8. Run **Opening a PR** with the accepted commits stacked in the order they landed.
+diff --git a/skills/poteto-mode/playbooks/pause-safely.md b/skills/poteto-mode/playbooks/pause-safely.md
+index 9d1c5f8..6bbd090 100644
+--- a/skills/poteto-mode/playbooks/pause-safely.md
++++ b/skills/poteto-mode/playbooks/pause-safely.md
+@@ -2,9 +2,9 @@
+ 
+ **You own a clean stop. Leave a checkpoint a cold-start agent can resume from.** This is explicit only. On "keep going", "going to bed, keep going", or "don't stop", do not pause.
+ 
+-1. Stop at a safe boundary. Finish the current atomic step or back out of it. Start nothing new, and cancel any nested subagents.
++1. Stop at a safe boundary. Finish the current atomic step or back out of it. Start nothing new, and cancel active owned children with `pstack_tasks`; cancellation also stops their descendants.
+ 2. Take no irreversible action to pause. No PR and no push unless you already had one out.
+ 3. Make the work durable. Commit uncommitted edits as one clear `wip:` commit on the current branch so nothing is lost. If the tree is broken, say so in the commit body in one line.
+-4. Write the resume note off-context. Capture intent, what you were doing, progress and what's verified, current state, next steps, key files, and gotchas. For the compaction trigger write it to a file like `/tmp/<slug>-resume.md`. If a show-me-your-work trail exists, point at it instead of duplicating it.
++4. Write the resume note off-context. Capture intent, what you were doing, progress and what's verified, current state, next steps, key files, and gotchas. Write it to a file like `/tmp/<slug>-resume.md`. Native Pi compaction does not itself require this pause or cancel children. If a show-me-your-work trail exists, point at it instead of duplicating it.
+ 
+ **Reply:** where you are in the loop, what's on disk versus still in your head (paths, no diff dumps), the commits you made and whether the tree is clean, and the first action on resume. This is a pause, not a final report.
+diff --git a/skills/poteto-mode/playbooks/perf-issue.md b/skills/poteto-mode/playbooks/perf-issue.md
+index 688d483..db3f4cb 100644
+--- a/skills/poteto-mode/playbooks/perf-issue.md
++++ b/skills/poteto-mode/playbooks/perf-issue.md
+@@ -13,7 +13,7 @@
+    - **Redundancy.** The wait hangs on one slow instance or attempt. Duplicate the work (replicas, hedged requests, speculative execution) and take the fastest result. The trace has to show the wait dominates and the system has headroom.
+    - **Lazy evaluation.** Cost lands on results that are never used or not needed yet (eager init on the boot path, rendering offscreen items). Defer the work until first use.
+    - **Scheduling.** The work must happen, but not during the interactive moment. Move it to where nobody is waiting: idle callbacks, a background warmup after boot, precompute before the user arrives, cleanup after the frame commits. The win is perceived latency, so measure the interactive path, not total work done.
+-3. Plan the fix from the trace. If it crosses a function boundary, `architect` first. Delegate implementation to a subagent using your configured perf-issue model (default `grok-4.7-xhigh-fast`). Review the diff. Capture a post-fix trace.
++3. Plan the fix from the trace. If it crosses a function boundary, `architect` first. Delegate implementation to a subagent using the effective `perf-issue` selector from Pi's `pstack_models` configuration. Review the diff. Capture a post-fix trace.
+    Apply the **sequence-verifiable-units** principle skill, verifying each attempt before trying the next.
+ 4. Parse and compare the artifacts (JSON to sqlite, diff). "Inconclusive" or wrong-surface is not a pass. Flag it.
+ 5. Cite the measurement in the PR.
+diff --git a/skills/poteto-mode/playbooks/refactoring.md b/skills/poteto-mode/playbooks/refactoring.md
+index df2a863..dbd4882 100644
+--- a/skills/poteto-mode/playbooks/refactoring.md
++++ b/skills/poteto-mode/playbooks/refactoring.md
+@@ -8,7 +8,7 @@ If the cleanup reveals a missing feature or a real bug, split it out and ship th
+ 2. Name the structure the code is missing per **principle-model-the-domain**. Boring code stays when the shape is already clear and local. The reshape must delete branches or invalid states, not add indirection.
+ 3. Name the target shape. State what the module layout, types, and call graph should be if built today (**principle-foundational-thinking**, **principle-redesign-from-first-principles**). If the target crosses a function boundary, run the **architect** skill for parallel design exploration of the shape before the move.
+ 4. Subtract before you add. Delete dead code, collapse one-caller wrappers, drop redundant validators, and remove orphan references before introducing the new shape (**principle-subtract-before-you-add**). The smallest change that reaches the target shape ships (**principle-laziness-protocol**). A speculative cleanup that "might help" gets reverted.
+-5. Move in small behavior-preserving steps, each keeping the pin green. For API reshapes, migrate every caller and delete the old API in the same wave (**principle-migrate-callers-then-delete-legacy-apis**). No compatibility shims, no parallel old-and-new paths. Spot-check every rename against the actual files. Renames silently miss usages in strings, prose, and back-references. Delegate the mechanical edits to a subagent using your configured refactoring model (default `grok-4.7-xhigh-fast`) with a specific scope (file paths, the names being moved, the behavior to hold).
++5. Move in small behavior-preserving steps, each keeping the pin green. For API reshapes, migrate every caller and delete the old API in the same wave (**principle-migrate-callers-then-delete-legacy-apis**). No compatibility shims, no parallel old-and-new paths. Spot-check every rename against the actual files. Renames silently miss usages in strings, prose, and back-references. Delegate the mechanical edits to a subagent using the effective `feature, refactoring` selector from Pi's `pstack_models` configuration with a specific scope (file paths, the names being moved, the behavior to hold).
+ 6. Prove behavior is unchanged on the real artifact, not "it compiles" (**principle-prove-it-works**). For larger reshapes, run an equivalence check: a script that diffs old-vs-new outputs, a recorded baseline replayed against the new code, or a smoke run on the matching surface via the relevant control skill.
+ 7. Confirm the change is worth keeping. The success measure is reduced reader load (**principle-minimize-reader-load**). If the diff does not lower reader load somewhere, revert it.
+ 8. Rebase into small ordered commits. A subtraction commit, then the reshape, then any follow-on cleanup. Shape them with the **sequence-verifiable-units** principle skill, so each behavior-preserving slice stays green before the next. Run **Opening a PR**.
+diff --git a/skills/poteto-mode/playbooks/session-pickup.md b/skills/poteto-mode/playbooks/session-pickup.md
+index 9b2ed06..c5f82cc 100644
+--- a/skills/poteto-mode/playbooks/session-pickup.md
++++ b/skills/poteto-mode/playbooks/session-pickup.md
+@@ -2,7 +2,7 @@
+ 
+ **You own the resume point. Read the prior trail, don't redo it.**
+ 
+-1. Locate the prior trail. A local transcript under the active workspace's `agent-transcripts/` directory (the system prompt names the path. Do not glob across `~/.cursor/projects/*/`, that crosses workspace boundaries and reads private chats from unrelated projects), a cloud-agent URL, or a pushed branch. Read the metadata overview and last messages first, then scan back for the decision points. Parse a long transcript in a subagent and keep the reduced timeline in the main thread (the **principle-guard-the-context-window** skill).
++1. Locate the prior trail. Use an exact transcript path from this task's Pi receipts or supplied by the user, or a pushed branch. In a live parent session, `pstack_tasks` can inspect an owned child's transcript. Do not scan unrelated sessions or projects. Child IDs cannot be resumed across parent-session exits or restarts; start a fresh child with the recovered brief and evidence. Cloud-agent attachment is not implemented in this Pi baseline. Read the metadata overview and last messages first, then scan back for the decision points. Parse a long transcript in a subagent and keep the reduced timeline in the main thread (the **principle-guard-the-context-window** skill).
+ 2. Reconstruct operational state. The branch and worktree, what already landed (`git log`, `git diff` against the base), the open todos, the decisions made. The prior trail is authoritative input. Resist the bias to re-derive it.
+ 3. Diff done vs pending. Compare what shipped against what was planned, name the resume point, do not re-run the prior repro or redo completed work. A "let me verify from scratch" pass means you're treating the trail as untrustworthy when it's authoritative.
+ 4. Route the remaining work to the matching playbook and pick the verdict: continue the execution, ship a finished recommendation, ratify or override a prior conclusion, or postmortem a failed run. The pickup playbook ends here. The routed playbook owns the rest.
+diff --git a/skills/setup-pstack/SKILL.md b/skills/setup-pstack/SKILL.md
+index 19653ae..2136448 100644
+--- a/skills/setup-pstack/SKILL.md
++++ b/skills/setup-pstack/SKILL.md
+@@ -19,7 +19,7 @@ Call `pstack_models` with `action: "get"`. Start from the source defaults in ste
+ 
+ ### 3. Budget, map, and confirm
+ 
+-**(a) Ask for a budget.** Prefer AskQuestion over free text. Offer these four options with these exact labels, and name the current budget when the rule records one.
++**(a) Ask for a budget.** Prefer `pstack_question` over free text when interactive questions are available. Offer these four options with these exact labels, and name the current saved budget.
+ 
+ - `unlimited — keep max`
+ - `large — xhigh reasoning`
+@@ -28,25 +28,19 @@ Call `pstack_models` with `action: "get"`. Start from the source defaults in ste
+ 
+ **(b) Apply it.** Build the working table from the source defaults, and on a re-run keep choices changed by family, list, or alias (`inherit-parent`, `auto`). Confirm an available Pi provider/model for each unmapped Cursor default rather than inventing an equivalent. Pi represents effort separately as the target's `:thinking` suffix. `unlimited` preserves the selected effort. `large`, `medium`, and `small` use `xhigh`, `high`, or `medium`; use the selected model's highest supported reasoning level at or below that target, or mark the role as needing a choice. Do not switch model families to meet a budget. Apply this to every real panel entry; aliases do not change. Build and show the effective table using the supported levels from step 1. `pstack_models set` validates and applies the same budget when saving.
+ 
+-**(c) Show the roles and confirm.** Show every role with its model, marking any real slug not in the detected set as needing a choice. Also list each line step 2 dropped. Ask whether to accept as-is or change specific roles, offering the detected models plus `inherit-parent` and `auto` (both mean: this role runs on the parent chat model, which is how Auto users stay on Auto) as the options. Prefer AskQuestion over free text. For panel roles (arena runners, architect runners, interrogate reviewers) the value is a list, and one subagent runs per entry, alias entries included, so the list length sets the count. `arena cross-judge pool` is also a list, but Arena selects one value from it whose model family differs from the parent's when possible. `swarm workers` is the default model for every worker unless a race or comparison assigns another model per arm.
++**(c) Show the roles and confirm.** Show every role with its model, marking any provider/model and thinking selection not supported by the detected set as needing a choice. Also list each retired role step 2 dropped. Ask whether to accept as-is or change specific roles, offering the detected models plus `inherit-parent` and `auto` (both explicitly select the parent model and thinking) as the options. Prefer `pstack_question` over free text when interactive questions are available. For panel roles (arena runners, architect runners, interrogate reviewers) the value is a list, and one subagent runs per entry, alias entries included, so the list length sets the count. `arena cross-judge pool` is also a list, but Arena selects one value from it whose model family differs from the parent's when possible. `swarm workers` is the default model for every worker unless a race or comparison assigns another model per arm.
+ 
+ ### 4. Validate
+ 
+-Every real slug written must be in the detected set. `inherit-parent` and `auto` always pass. If a chosen real slug is not available, stop and ask again.
++Every real target must use an available provider/model and supported thinking level from step 1. `inherit-parent` and `auto` are explicit parent-selection aliases, not substitutes for unresolved roles. If a chosen target cannot resolve, stop and ask again.
+ 
+-### 5. Write the rule
++### 5. Save the configuration
+ 
+ After confirmation, call `pstack_models` with `action: "set"`, the selected `budget`, and the complete `roles` object. Use the exact role labels below, a string for each single role, and an ordered array for each panel or pool. The tool validates and replaces the configuration idempotently. Report validation failures and obtain a valid choice instead of writing around them.
+ 
+-This block is the unchanged upstream default table for comparison, not a Pi configuration file or a list of available Pi routes:
++These upstream role labels and model defaults are retained for comparison and mapping, not as a Pi configuration file, executable selectors, or a list of available Pi routes:
+ 
+ ```text
+----
+-description: pstack per-role model choices (overrides skill defaults)
+-alwaysApply: true
+----
+-# pstack model configuration. One line per role. Delete a line to fall back to the skill default.
+-# `inherit-parent` or `auto` as a value: the role runs on the parent chat model (omit Task `model`). Alias entries in a panel list still count toward its fan-out.
+ # budget: unlimited (max)
+ feature, refactoring: grok-4.7-xhigh-fast
+ bug-fix: grok-4.7-xhigh-fast
+@@ -73,4 +67,4 @@ Report the configuration actually returned by `pstack_models set`, including its
+ 
+ ### 7. Offer a verification skill (optional)
+ 
+-Check whether the project has a way to drive the real app for proof (a `verify-*` skill, or an existing harness). If not, offer once: "want a project-local verification skill, so agents can drive the app the way a user does and prove changes work? I can generate one with /create-verification-skill." On yes, invoke `/create-verification-skill` (resolves wherever pstack is installed: workspace, user, or plugin). On no, move on without pushing.
++Check whether the project has a way to drive the real app for proof (a `verify-*` skill, or an existing harness). If not, offer a project-local verification skill only when the actual `create-verification-skill` workflow and its dependencies are available. That workflow is not a supported entry point in this Pi baseline; report the gap rather than claiming a slash command will resolve or substituting a different authoring method. If available and accepted, read and follow its `SKILL.md`; on no, move on without pushing.
+diff --git a/skills/technical-writing/SKILL.md b/skills/technical-writing/SKILL.md
+index 1cd44cf..aef9018 100644
+--- a/skills/technical-writing/SKILL.md
++++ b/skills/technical-writing/SKILL.md
+@@ -1,6 +1,6 @@
+ ---
+ name: technical-writing
+-description: "Layered technical-writing standard: Diátaxis structure, Google developer style sentences, STE instruction rules, Global English syntax. Use for /technical-writing or when writing or reviewing docs, RFCs, readmes, PR descriptions, or commit messages."
++description: "Layered technical-writing standard: Diátaxis structure, Google developer style sentences, STE instruction rules, Global English syntax. Use for /skill:technical-writing or when writing or reviewing docs, RFCs, readmes, PR descriptions, or commit messages."
+ disable-model-invocation: true
+ ---
+ 
+diff --git a/skills/why/SKILL.md b/skills/why/SKILL.md
+index daac2c7..5f2f4d3 100644
+--- a/skills/why/SKILL.md
++++ b/skills/why/SKILL.md
+@@ -1,6 +1,6 @@
+ ---
+ name: why
+-description: "Use for 'why does X work this way', 'why we picked Y', design rationale, regressions, postmortems, or data-backed thresholds. Discovers available MCPs and queries each evidence category (source control, issue tracker, long-form docs, real-time chat, infrastructure observability, error tracking, product analytics warehouse) in parallel, then returns a cited read on decisions and tradeoffs. Use how for runtime behavior."
++description: "Use for 'why does X work this way', 'why we picked Y', design rationale, regressions, postmortems, or data-backed thresholds. Discovers available evidence integrations, including MCPs and Pi-native tools, and queries each evidence category (source control, issue tracker, long-form docs, real-time chat, infrastructure observability, error tracking, product analytics warehouse) in parallel, then returns a cited read on decisions and tradeoffs. Use how for runtime behavior."
+ disable-model-invocation: true
+ ---
+ 
+@@ -10,7 +10,7 @@ Investigate the motivation and intent behind code.
+ 
+ Companion to the `how` skill. `how` answers what the code does and how it works. `why` answers what forces led to its shape.
+ 
+-Each spawn below names a role line in the `pstack-models.mdc` rule and a default. Set `model` to that line's value, or to the default if the rule or the line is missing. Leave `model` unset when the value is `auto` or `inherit-parent`. If the Task tool rejects a slug, use the default and say so. If it rejects the default, use the closest valid slug of the same family from its error message.
++Each spawn below names a role in Pi's `pstack_models` configuration. Use its effective `provider/model:thinking` selector from the injected role table or `pstack_models` action `get`, including resolved `auto` and `inherit-parent` choices. If the role is unresolved or its selector is rejected, report the gap and obtain a valid choice through setup or the user. Do not substitute a model or omit the role.
+ 
+ ## Operating Posture
+ 
+@@ -20,7 +20,7 @@ Operate as a **careful, cautious, and precise investigator**. Be honest about wh
+ 
+ Parse what the user is asking. The **target** is usually a chunk of code, a pattern, a feature, or a named design decision. The **question** is usually a design rationale, a tradeoff, a motivating edge case, an external constraint, dead code, or a broad history sweep.
+ 
+-If the target is vague ("why do we do it this way?" with no clear referent), make your best guess from conversation context (open files, recent edits, cursor location, what was just discussed). State your interpretation briefly so the user can redirect if you're off, then proceed.
++If the target is vague ("why do we do it this way?" with no clear referent), make your best guess from conversation context (supplied paths or excerpts, recent edits, what was just discussed). State your interpretation briefly so the user can redirect if you're off, then proceed.
+ 
+ ## Step 2. Establish the Code Anchor
+ 
+@@ -61,9 +61,9 @@ Capture this as seed context (file paths, symbols, commits, PR numbers, linked t
+ 
+ ### Discovery
+ 
+-Before spawning investigators, list the available MCPs from the Cursor environment. Use the available-tools map when present. Otherwise inspect the `mcps/` directory Cursor exposes for enabled MCP servers.
++Before spawning investigators, identify the evidence sources available through this Pi session's tools and documented integrations. These may be native Pi extension tools, configured MCP integrations, or documented CLIs. Inspect the exposed tool descriptions, schemas, and integration guidance. Use an integration's discovery facility when it supplies one; do not assume a Cursor `mcps/` directory or invent discovery calls. MCP is a protocol, not a synonym for every external-data tool.
+ 
+-Map each available MCP to one evidence category:
++Map each available evidence-source integration to one category:
+ 
+ 1. Source control history
+ 2. Issue / ticket tracker
+@@ -73,31 +73,31 @@ Map each available MCP to one evidence category:
+ 6. Error / exception tracking
+ 7. Product analytics warehouse
+ 
+-Source control is always available through git and `gh`. For the other six, classify using the MCP name, server instructions, tool names, and resource descriptors. If an MCP could fit more than one category, choose the one matching its primary evidence. Record ambiguous cases in the coverage map.
++Source control uses git and `gh`; report missing commands, repository access, or authentication rather than claiming a search was performed. For the other six, classify using the integration's descriptions, tool schemas, documentation, and any exposed MCP server instructions or resource descriptors. If an integration could fit more than one category, choose the one matching its primary evidence. Record ambiguous cases in the coverage map. Tool availability in the parent does not prove access in a child; report a child startup or access failure as a gap, not a completed query.
+ 
+ Aim for a complete **coverage map**, not a minimal one. Document the null, don't skip the search.
+ 
+-Launch all matching investigators in a single message so they run concurrently. Don't ask one agent to cover multiple MCPs.
++Launch all matching investigators with `pstack_task` in a single message so they run concurrently. Don't ask one agent to cover multiple evidence-source integrations.
+ 
+ Subagent config (each):
+ - `subagent_type`: `generalPurpose`
+-- `model`: the `why investigators` line, default `grok-4.7-xhigh-fast`
+-- `readonly`: `false` (agent mode). **Do not use readonly/Ask mode.** It strips MCP access, which disables MCP-backed investigators entirely. Investigators still shouldn't write anything.
++- `model`: the effective `why investigators` selector
++- `readonly`: `false`. Pi's PStack read-only children expose only the restricted built-in and helper tools, not the integration tools or shell needed here. This enables the required tools; it does not authorize writes. Investigators must not edit files or modify external state.
+ 
+-Each investigator gets:
++Before launching each investigator, read and assemble its prompt from these inputs:
+ 1. The base prompt from `references/investigator-prompt.md`
+-2. The category playbook `references/sources/<source>.md` for the selected MCP, adapted from the examples in `references/source-playbook.md`
++2. The category playbook `references/sources/<source>.md` for the selected integration, adapted from the MCP and CLI examples in `references/source-playbook.md`
+ 3. The cross-cutting `references/sources/incident-postmortem.md` **if the target code looks defensive** (null checks, retry logic, timeout handling, rate limiting, feature flags, egress guards, OOM handlers)
+ 4. The code anchor from Step 2 (file paths, symbols, commit hashes, PR numbers, ticket IDs)
+ 5. The user's original question
+ 
+ ### Investigator roster. One per available evidence category
+ 
+-Spawn one investigator per category that has a matching MCP. Each owns exactly one tool or MCP.
++Spawn one investigator per category that has a matching evidence source. Each owns one source integration, whether exposed through native Pi tools, MCP, or a documented CLI.
+ 
+ Each entry names the category and the kind of "why" it uniquely surfaces. Use it to know what to expect back, how to name a gap when a category returns empty, and (only in the rare provably-irrelevant case) to justify a skip.
+ 
+-1. **Source control investigator**. Git history, `gh` for PRs, code comments, tests. Always spawn. The only guaranteed source. Best at surfacing *implementation-time rationale captured during review*.
++1. **Source control investigator**. Git history, `gh` for PRs, code comments, tests. Always spawn. Report any repository, command, or access gaps. Best at surfacing *implementation-time rationale captured during review*.
+ 
+ 2. **Issue / ticket tracker investigator** (e.g. Linear, Jira, GitHub Issues, Plane, Shortcut MCP). Best at surfacing *the product or business forcing function*. Strongest when the why is external to engineering.
+ 
+@@ -115,7 +115,7 @@ Each entry names the category and the kind of "why" it uniquely surfaces. Use it
+ 
+ Only skip with an **explicit, written justification** that goes in the final "Sources Consulted" section. Two valid reasons:
+ 
+-- **No MCP is available for that category** in this environment. Flag this as a gap, not a choice. Example: "Real-time team chat skipped. No matching MCP available, so the conversational record was not searchable."
++- **No usable evidence integration is available for that category** in this environment. Flag this as a gap, not a choice, and distinguish absence from an access failure. Example: "Real-time team chat skipped. No matching tool, MCP integration, or documented CLI was available, so the conversational record was not searchable."
+ - **The source is provably irrelevant**, not just "probably irrelevant." A high bar. Example: "Error / exception tracking skipped. Target is a build-time script with no runtime code path."
+ 
+ If your scope assessment suggests a single-commit trivial target where the PR description already contains the complete answer, you may answer inline **only after** confirming all seven available category searches would be redundant. Say so explicitly. This should be rare.
+@@ -125,10 +125,10 @@ If your scope assessment suggests a single-commit trivial target where the PR de
+ Spawn one synthesizer subagent:
+ 
+ - `subagent_type`: `generalPurpose`
+-- `model`: the `why synthesizer` line, default `claude-opus-5-5-max`
+-- `readonly`: `false` (agent mode). The synthesizer's quality check spot-verifies citations, which can require MCP access. Readonly/Ask mode strips MCPs and defeats that.
++- `model`: the effective `why synthesizer` selector
++- `readonly`: `false`. Citation spot-checks may need integration tools or shell commands that Pi's PStack read-only children do not expose. The synthesizer must not edit files or modify external state.
+ 
+-The synthesizer gets:
++Before launching the synthesizer, read the framework and prompt template below and fill the template's EPISTEMICS_PATH with the framework's absolute path. Assemble these inputs:
+ 1. The investigator findings, including any null results and any categories skipped with justification
+ 2. The code anchor from Step 2 (file paths, symbols, commit hashes, PR numbers, ticket IDs)
+ 3. The user's original question
+@@ -154,5 +154,5 @@ After the Sources Consulted block, if the user's `why` question is a precursor t
+ - `references/epistemics.md`. Confidence tiers and phrasing guide. The synthesizer must follow it.
+ - `references/investigator-prompt.md`. Base prompt template for investigator subagents.
+ - `references/source-playbook.md`. Index pointing at the category playbooks below.
+-- `references/sources/*.md`. One self-contained example playbook per category, plus cross-cutting `incident-postmortem.md`. Give an investigator the single file that matches its category and adapt it to the available MCP.
++- `references/sources/*.md`. One self-contained example playbook per category, plus cross-cutting `incident-postmortem.md`. Give an investigator the single file that matches its category and adapt it to the available integration's actual tools and schemas.
+ - `references/synthesizer-prompt.md`. Prompt template for the synthesizer subagent, including the output format.
+diff --git a/skills/why/references/source-playbook.md b/skills/why/references/source-playbook.md
+index aa3d877..6268792 100644
+--- a/skills/why/references/source-playbook.md
++++ b/skills/why/references/source-playbook.md
+@@ -1,8 +1,8 @@
+ # Source playbooks
+ 
+-The why skill spawns one investigator per available evidence category, each reading a single source-specific playbook below. The playbooks are concrete examples for common MCPs. Adapt them for a different MCP in the same category.
++The why skill spawns one investigator per available evidence category, each reading a single source-specific playbook below. The playbooks retain concrete MCP and CLI examples. Adapt each example to the selected integration in the same category, whether exposed through native Pi tools, MCP, or a documented CLI. Inspect its actual schemas and access requirements; example tool names do not establish availability.
+ 
+-| Category | Playbook | Example MCP it documents |
++| Category | Playbook | Example integration it documents |
+ |---|---|---|
+ | Source control history | [`code-archaeology.md`](./sources/code-archaeology.md) | git, `gh` |
+ | Issue / ticket tracker | [`linear.md`](./sources/linear.md) | Linear (adapt for Jira, GitHub Issues, Plane, Shortcut) |
+diff --git a/skills/why/references/sources/databricks.md b/skills/why/references/sources/databricks.md
+index 2770763..d8f5c7e 100644
+--- a/skills/why/references/sources/databricks.md
++++ b/skills/why/references/sources/databricks.md
+@@ -9,11 +9,11 @@ Databricks is the product-analytics, data-pipeline, and warehouse-telemetry laye
+ - **Experiment / feature-flag data.** Exposure and outcome tables. **Schema is company-specific.** Probe with `SHOW TABLES` before assuming names.
+ - **System tables.** `system.query.history`, `system.compute.warehouses`, `system.billing.*`, `system.access.audit`. Answer "was this query expensive?", "how often did anyone run this?", "when did warehouse load spike?"
+ - **dbt lineage.** Models in `<your_analytics_db>.<schema>` reveal what pipelines depend on a table/field. Upstream changes frequently motivate consumer-code changes.
+-- **Databricks notebooks.** Exploratory analyses engineers wrote before code changes. **Not queryable via the SQL MCP.** If you suspect the rationale lives in a notebook, name it as a gap.
++- **Databricks notebooks.** Exploratory analyses engineers wrote before code changes. **Not queryable through a SQL-only integration.** Check the selected integration's capabilities; if it cannot read notebooks and the rationale may live there, name the gap.
+ 
+ ## How to search it
+ 
+-Use the Databricks SQL MCP. Primary tool: `execute_sql_read_only`. If it returns a `statement_id`, poll with `poll_sql_result` rather than re-running.
++Use the selected warehouse integration's read-only query interface. For the Databricks SQL MCP example, the primary tool is `execute_sql_read_only`; if it returns a `statement_id`, poll with `poll_sql_result` rather than re-running. For other MCPs, Pi-native tools, or documented CLIs, inspect their schemas and use the corresponding query and result-retrieval operations. Do not infer a tool name or write permission from this example.
+ 
+ **Orient before querying.** Schemas are company-specific. Probe before trusting a table name:
+ 
+@@ -57,7 +57,7 @@ Beyond the pattern shapes above:
+ - **dbt refresh lag.** `<your_analytics_db>.<schema>.*` is rebuilt on a schedule (often hourly/daily). For events from the last few hours, fall back to `your_warehouse.events.*` and deduplicate by `_id`.
+ - **Company-specific tables.** Experiment, feature-flag, billing, and usage tables vary. Reporting a result from a table whose existence you never confirmed is a classic failure mode. Probe with `SHOW TABLES` / `DESCRIBE TABLE` first.
+ - **Retention cliff.** If the relevant window predates the table's retention or the dbt model's creation date, that's a *gap*, not a null result. Name it explicitly so the synthesizer doesn't read "no results" as "no activity."
+-- **Notebooks aren't queryable.** The SQL MCP can't see Databricks notebooks. If you suspect the rationale lives in one, return a gap.
++- **SQL access is not notebook access.** A SQL-only integration can't see Databricks notebooks. If the selected integration also lacks notebook access and the rationale may live in one, return a gap.
+ 
+ ## What to return
+ 
+diff --git a/skills/why/references/sources/datadog.md b/skills/why/references/sources/datadog.md
+index d8363b1..22a617d 100644
+--- a/skills/why/references/sources/datadog.md
++++ b/skills/why/references/sources/datadog.md
+@@ -16,18 +16,18 @@ Datadog answers "what was the production reality around the time this code was w
+ 
+ ## How to search it
+ 
+-Use the Datadog MCP. Start broad, then narrow.
++Use the selected observability integration. The Datadog MCP tool names below are examples; map these operations to the actual Pi-native tools, MCP tools, or documented CLI and inspect their schemas before calling them. Start broad, then narrow.
+ 
+ 1. **Identify the owning service(s).**
+ 
+-   ```
++   ```text
+    search_datadog_services (filter by name or team)
+    search_datadog_service_dependencies (see upstream/downstream)
+    ```
+ 
+ 2. **Dashboards and monitors first. They tell you what the team cares about.**
+ 
+-   ```
++   ```text
+    search_datadog_dashboards (query: feature name, service name, symbol)
+    search_datadog_monitors   (same queries)
+    ```
+@@ -36,7 +36,7 @@ Use the Datadog MCP. Start broad, then narrow.
+ 
+ 3. **Metrics around the target.**
+ 
+-   ```
++   ```text
+    search_datadog_metrics (by name pattern, e.g., the feature or symbol)
+    get_datadog_metric_context (metadata: description, units, tags)
+    get_datadog_metric (timeseries; "was there a spike around the PR date?")
+@@ -46,7 +46,7 @@ Use the Datadog MCP. Start broad, then narrow.
+ 
+ 4. **Logs. Narrow, don't dump.**
+ 
+-   ```
++   ```text
+    search_datadog_logs (raw log patterns near the target, set use_log_patterns=true)
+    analyze_datadog_logs (SQL-style aggregations, only when you need counts)
+    ```
+@@ -55,7 +55,7 @@ Use the Datadog MCP. Start broad, then narrow.
+ 
+ 5. **APM spans and traces.**
+ 
+-   ```
++   ```text
+    aggregate_spans    (stats: "how often does this endpoint fail?")
+    search_datadog_spans (inspect individual spans)
+    get_datadog_trace  (a specific trace ID)
+@@ -65,7 +65,7 @@ Use the Datadog MCP. Start broad, then narrow.
+ 
+ 6. **Incidents.**
+ 
+-   ```
++   ```text
+    search_datadog_incidents (by title, team, date range)
+    get_datadog_incident     (full detail for a specific incident)
+    ```
+diff --git a/skills/why/references/sources/linear.md b/skills/why/references/sources/linear.md
+index 899c643..b4f83d5 100644
+--- a/skills/why/references/sources/linear.md
++++ b/skills/why/references/sources/linear.md
+@@ -14,7 +14,7 @@ Linear is where the product/business context often lives: the "we're doing this
+ 
+ ## How to search it
+ 
+-Use the Linear MCP.
++Use the selected ticket-tracker integration. The Linear MCP tool names below are examples; map these operations to the actual Pi-native tools, MCP tools, or documented CLI and inspect their schemas before calling them.
+ 
+ 1. **Start with linked tickets.** If the seed commits or PRs reference ticket IDs (e.g., `ENG-1234`, `[BUG-567]`), fetch those first with `get_issue`. Read the full issue including comments.
+ 2. **List related issues by keyword.** Use `list_issues` with text search for the feature name, key symbol, or business term. Try multiple phrasings.
+diff --git a/skills/why/references/sources/notion.md b/skills/why/references/sources/notion.md
+index d16230a..1061388 100644
+--- a/skills/why/references/sources/notion.md
++++ b/skills/why/references/sources/notion.md
+@@ -15,7 +15,7 @@ Notion is where "why" often lives in long-form before it becomes code. A signifi
+ 
+ ## How to search it
+ 
+-Use the Notion MCP.
++Use the selected document integration. The Notion MCP tool names below are examples; map these operations to the actual Pi-native tools, MCP tools, or documented CLI and inspect their schemas before calling them.
+ 
+ 1. **Keyword searches with `notion-search`.** Try:
+    - The feature name
+diff --git a/skills/why/references/sources/sentry.md b/skills/why/references/sources/sentry.md
+index 2b7cf6f..1c95424 100644
+--- a/skills/why/references/sources/sentry.md
++++ b/skills/why/references/sources/sentry.md
+@@ -15,18 +15,18 @@ The most valuable thing Sentry provides is **temporal correlation**: "issue X wa
+ 
+ ## How to search it
+ 
+-Use the Sentry MCP.
++Use the selected error-tracking integration. The Sentry MCP tool names below are examples; map these operations to the actual Pi-native tools, MCP tools, or documented CLI and inspect their schemas before calling them.
+ 
+ 1. **Orient.** If you don't know the project slug and organization:
+ 
+-   ```
++   ```text
+    find_organizations
+    find_projects
+    ```
+ 
+ 2. **Search for issues related to the target.**
+ 
+-   ```
++   ```text
+    search_issues (natural language, e.g., "errors in PaymentService timeout", "unhandled exceptions in uploadFile")
+    ```
+ 
+@@ -34,7 +34,7 @@ Use the Sentry MCP.
+ 
+ 3. **Narrow by release and time window.**
+ 
+-   ```
++   ```text
+    search_issue_events (filter by release, time, environment, trace ID, tags)
+    get_issue_tag_values (for an issue, see distribution across versions, users, environments)
+    ```
+@@ -47,7 +47,7 @@ Use the Sentry MCP.
+ 
+ 4. **Pull the full event for context.**
+ 
+-   ```
++   ```text
+    get_sentry_resource (pass a Sentry URL or type+ID)
+    ```
+ 
+@@ -55,7 +55,7 @@ Use the Sentry MCP.
+ 
+ 5. **Check releases that landed near the target.**
+ 
+-   ```
++   ```text
+    find_releases (around the commit date of the target)
+    ```
+ 
+@@ -63,7 +63,7 @@ Use the Sentry MCP.
+ 
+ 6. **Use Seer sparingly.**
+ 
+-   ```
++   ```text
+    analyze_issue_with_seer
+    ```
+ 
+diff --git a/skills/why/references/sources/slack.md b/skills/why/references/sources/slack.md
+index 863a527..c43ebd8 100644
+--- a/skills/why/references/sources/slack.md
++++ b/skills/why/references/sources/slack.md
+@@ -13,7 +13,7 @@ Slack is frequently where the *real* decisions got made, especially for smaller
+ 
+ ## How to search it
+ 
+-Slack MCP tools vary. Check which Slack MCP is available and inspect its tool schema first. It may require `mcp_auth`. If authentication fails, stop and report the gap.
++Use the selected chat integration, whether exposed through Pi-native tools, MCP, or a documented CLI. Inspect its actual tool schemas and authentication guidance first. A Slack MCP may expose `mcp_auth`; call it only if that integration actually provides it. If authentication fails, stop and report the gap.
+ 
+ 1. **Author-bounded search.** Messages from the PR author around the PR merge date. Limits scope dramatically and often hits gold.
+ 2. **Keyword search for the feature name and key symbols.** Include misspellings and casual phrasings.
+@@ -41,7 +41,7 @@ Slack MCP tools vary. Check which Slack MCP is available and inspect its tool sc
+ - **Unsearched DMs.** Many decisions happen in DMs that aren't searchable. You'll miss them. That's a known limitation.
+ - **Speculative jokes as "decisions."** Slack is casual. "Lol just do the thing" isn't a decision, even if it preceded the commit. Look for considered discussion.
+ - **Context collapse in single messages.** Without the thread, a single message often reads differently than in context. Always fetch threads.
+-- **Auth failures.** If the MCP isn't authenticated, stop. Don't make up findings. Report that Slack wasn't searchable.
++- **Auth failures.** If the selected integration isn't authenticated, stop. Don't make up findings. Report that Slack wasn't searchable.
+ 
+ ## What to return
+ 
+diff --git a/skills/why/references/synthesizer-prompt.md b/skills/why/references/synthesizer-prompt.md
+index 9707dfc..9978c71 100644
+--- a/skills/why/references/synthesizer-prompt.md
++++ b/skills/why/references/synthesizer-prompt.md
+@@ -1,6 +1,6 @@
+ # Synthesizer Prompt Template
+ 
+-Build the synthesizer's prompt from this template. Fill in the placeholders.
++Build the synthesizer's prompt from this template. Fill in the placeholders, including EPISTEMICS_PATH with the absolute path to the sibling `epistemics.md` file.
+ 
+ ---
+ 
+@@ -26,7 +26,7 @@ You are answering a "why" question about a piece of code by synthesizing finding
+ 
+ ## Epistemics Framework
+ 
+-You MUST follow the framework in `references/epistemics.md`. Read it in full before writing the output. The key rules:
++You MUST follow the framework at {EPISTEMICS_PATH}. Read it in full before writing the output. The key rules:
+ 
+ 1. Every claim sits in one of these tiers: **Direct**, **Supported**, **Inferred**, **Speculative**, **Unknown**. The tier determines what section the claim goes in and how it's phrased.
+ 2. Every Direct/Supported claim must have a citation (PR #, ticket ID, doc URL, chat permalink, commit hash, or file:line).
+@@ -41,7 +41,7 @@ You MUST follow the framework in `references/epistemics.md`. Read it in full bef
+ 2. **Reconcile overlapping findings.** Multiple investigators may have cited the same PR, ticket, or doc. Merge into a single, authoritative reference.
+ 3. **Identify contradictions.** If two items of evidence disagree, don't pick one. Surface both.
+ 4. **Calibrate confidence.** For each claim, identify the evidence and the tier. State Direct claims plainly with a citation. Hedge Inferred claims and explain the inference. Mark Speculative claims explicitly. Put claims with no evidence in the gaps section.
+-5. **Verify citations by spot-checking.** You can read the codebase and call MCP tools to verify citations. Do not write files, commit, or modify external state. If you're uncertain a cited item exists or says what's claimed, check it. Don't propagate errors.
++5. **Verify citations by spot-checking.** You can read the codebase and use the selected evidence integrations (native Pi tools, MCP tools, or documented read-only CLI operations) to verify citations. Do not write files, commit, or modify external state. If you're uncertain a cited item exists or says what's claimed, check it. Don't propagate errors.
+ 6. **Don't overreach.** The user will act on your output. Better to leave an open question open than to fill it with a confident-sounding guess.
+ 
+ ## Output Format
+@@ -62,8 +62,10 @@ File paths, line ranges, key symbols. Two or three lines to orient a reader who
+ 
+ **Claims with direct evidence**, one per bullet. Quote or paraphrase the source and cite precisely. Format each finding like:
+ 
++```markdown
+ - **[Direct]** {Claim}. Source: [PR #123](url) / ticket ID / file:line. {Brief quote or paraphrase.}
+ - **[Supported]** {Claim}. Evidence: {list of items and what each contributes}.
++```
+ 
+ Use `[Direct]` for single-source, explicit evidence. Use `[Supported]` when multiple indirect items converge on a conclusion.
+ 
+@@ -87,7 +89,7 @@ Skip this section if there's a single clear answer.
+ 
+ ### What We Don't Know
+ 
+-**Explicit gaps.** Things the user asked that the evidence didn't answer. Sources searched that came up empty. Sources that weren't searchable at all, such as a missing real-time team chat MCP.
++**Explicit gaps.** Things the user asked that the evidence didn't answer. Sources searched that came up empty. Sources that weren't searchable at all, such as unavailable real-time team chat access.
+ 
+ Be specific. "We searched the issue tracker for [query1], [query2], [query3] and found no issue discussing the rate-limit threshold" is useful. "We don't know why" is not. Include:
+ 
+@@ -100,13 +102,15 @@ Be specific. "We searched the issue tracker for [query1], [query2], [query3] and
+ 
+ Bulleted list of what was actually searched, so the user can judge coverage and redirect. Format:
+ 
+-- **Source control history**: {file paths}, {number of commits reviewed}, PRs #{numbers}, and code comments searched. Or "Not searched. This should not happen because git and `gh` are always expected."
+-- **Issue / ticket tracker**: {ticket IDs and keyword searches}. Or "Not searched. No matching MCP available in this environment."
+-- **Long-form documents**: {page titles and search queries}. Or "Not searched. No matching MCP available in this environment."
+-- **Real-time team chat**: {channels searched, date ranges, queries}. Or "Not searched. No matching MCP available in this environment."
+-- **Infrastructure observability**: {dashboards, monitors, metrics, logs, traces, or incidents searched}. Or "Not searched. No matching MCP available in this environment."
+-- **Error / exception tracking**: {issues, events, or releases searched}. Or "Not searched. No matching MCP available in this environment."
+-- **Product analytics warehouse**: {fully-qualified tables queried, the time windows, and the numeric summaries (counts, percentiles, first/last-seen timestamps) that bore on the question}. Or "Not searched. No matching MCP available in this environment."
++- **Source control history**: {file paths}, {number of commits reviewed}, PRs #{numbers}, and code comments searched. If a search was blocked, name the missing command, repository access, or authentication.
++- **Issue / ticket tracker**: {ticket IDs and keyword searches}.
++- **Long-form documents**: {page titles and search queries}.
++- **Real-time team chat**: {channels searched, date ranges, queries}.
++- **Infrastructure observability**: {dashboards, monitors, metrics, logs, traces, or incidents searched}.
++- **Error / exception tracking**: {issues, events, or releases searched}.
++- **Product analytics warehouse**: {fully-qualified tables queried, the time windows, and the numeric summaries (counts, percentiles, first/last-seen timestamps) that bore on the question}.
++
++For every unsearched category, give its specific reason instead of queries. Distinguish "No matching tool, MCP integration, or documented CLI available" from a configured integration that failed authentication or could not run in the investigator's session. A searched source with no results is not an unavailable source.
+ 
+ ### Confidence Summary
+ 

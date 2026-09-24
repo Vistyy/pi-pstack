@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { rm, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { fauxAssistantMessage, fauxToolCall, getCurrentSystemPrompt } from "@earendil-works/pi-ai";
@@ -33,23 +33,35 @@ await test("child uses exact model/thinking and project context without ambient 
   });
 
   assert.equal(result.isError, false, result.text);
+  const transcript = receipt(result.text).transcript;
+  assert.ok(transcript !== undefined);
+  assert.ok(
+    prompt.includes(
+      `Current Pi transcript (null means unavailable): ${JSON.stringify(transcript)}`,
+    ),
+  );
+  assert.match(await readFile(transcript, "utf8"), /isolated child/);
   assert.match(prompt, /Project-only instruction marker/);
   assert.doesNotMatch(prompt, /Global (?:instruction|system|append) forbidden marker/);
   assert.doesNotMatch(prompt, /<available_skills>|Ambient forbidden skill marker/);
   assert.equal(f.childShutdowns(), 0, "readonly child never loads the external integration");
 });
 
-await test("writable child loads active integration and reports unreconstructable runtime-only tools", {
+await test("unsupported cloud assignment cannot silently execute in a local child", {
   timeout: 10000,
 }, async (t) => {
-  const f = await childFixture(t, { runtimeTool: true });
-  let result = await f.call("pstack_task", task);
-  assert.equal(result.isError, true);
-  assert.match(result.text, /runtime_only.*no file-backed extension/);
+  const f = await childFixture(t);
+  f.nested.setResponses([fauxAssistantMessage("executed locally")]);
+  const result = await f.call("pstack_task", { ...task, environment: "cloud" });
+  assert.equal(result.isError, true, result.text);
+  assert.match(result.text, /environment/);
   assert.equal(f.nested.state.callCount, 0);
-  f.session.setActiveToolsByName(
-    f.session.getActiveToolNames().filter((name) => name !== "runtime_only"),
-  );
+});
+
+await test("writable child loads and uses the parent's active file-backed integration", {
+  timeout: 10000,
+}, async (t) => {
+  const f = await childFixture(t);
   f.nested.setResponses([
     fauxAssistantMessage(fauxToolCall("fixture_lookup", {}), { stopReason: "toolUse" }),
     (context) => {
@@ -59,7 +71,7 @@ await test("writable child loads active integration and reports unreconstructabl
       return fauxAssistantMessage("lookup consumed");
     },
   ]);
-  result = await f.call("pstack_task", task);
+  const result = await f.call("pstack_task", task);
   assert.equal(result.isError, false, result.text);
   assert.match(await f.lookup(), /child:rev1/);
   assert.match(await f.lookup(), /"thinking":"low"/);

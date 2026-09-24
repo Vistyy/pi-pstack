@@ -14,10 +14,10 @@ const SUB_BLOCKS = [
 	"Verify, live.",
 	"Verify, perf.",
 	"Review gate.",
-	"Merge.",
+	"Handoff.",
 ];
-const PROGRAM_H3 = ["Arm the program", "Spawn owners", "PR mechanics", "Verdict and merge", "Boot recipe"];
-const PROGRAM_MARKERS = ["/goal", "git show origin/main:", /30[- ]minute/, "status message"];
+const PROGRAM_H3 = ["Start local work", "Spawn owners", "PR mechanics", "Verdict and handoff", "Boot recipe"];
+const PROGRAM_MARKERS = ["operator's explicit go", "done predicate"];
 const HOW_TO_READ_MARKERS = [
 	"One box is one unit of work",
 	"names the evidence",
@@ -125,7 +125,7 @@ for (const pr of prSections) {
 
 	const depends = block("Depends on.");
 	if (depends && depends.rest === "") fail(depends.n, `${pr.title}: Depends on names nothing`);
-	for (const name of ["Files.", "Build.", "You see.", "Verify, unit.", "Merge."]) {
+	for (const name of ["Files.", "Build.", "You see.", "Verify, unit.", "Handoff."]) {
 		const b = block(name);
 		if (b && boxes(b.lines).length === 0) fail(b.n, `${pr.title}: ${name} has no box`);
 	}

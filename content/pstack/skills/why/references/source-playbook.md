@@ -1,8 +1,8 @@
 # Source playbooks
 
-The why skill spawns one investigator per available evidence category, each reading a single source-specific playbook below. The playbooks are concrete examples for common MCPs. Adapt them for a different MCP in the same category.
+The why skill spawns one investigator per available evidence category, each reading a single source-specific playbook below. The playbooks retain concrete MCP and CLI examples. Adapt each example to the selected integration in the same category, whether exposed through native Pi tools, MCP, or a documented CLI. Inspect its actual schemas and access requirements; example tool names do not establish availability.
 
-| Category | Playbook | Example MCP it documents |
+| Category | Playbook | Example integration it documents |
 |---|---|---|
 | Source control history | [`code-archaeology.md`](./sources/code-archaeology.md) | git, `gh` |
 | Issue / ticket tracker | [`linear.md`](./sources/linear.md) | Linear (adapt for Jira, GitHub Issues, Plane, Shortcut) |

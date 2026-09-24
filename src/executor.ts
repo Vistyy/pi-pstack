@@ -15,21 +15,24 @@ import {
   selectModel,
 } from "./child-session.js";
 
-const TaskInput = Type.Object({
-  prompt: Type.String({ minLength: 1 }),
-  subagent_type: Type.Optional(
-    Type.Union([
-      Type.Literal("generalPurpose"),
-      Type.Literal("poteto-agent"),
-      Type.Literal("Comment Sicko"),
-    ]),
-  ),
-  model: Type.Optional(Type.String()),
-  readonly: Type.Optional(Type.Boolean()),
-  run_in_background: Type.Optional(Type.Boolean()),
-  cwd: Type.Optional(Type.String()),
-  resume: Type.Optional(Type.String()),
-});
+const TaskInput = Type.Object(
+  {
+    prompt: Type.String({ minLength: 1 }),
+    subagent_type: Type.Optional(
+      Type.Union([
+        Type.Literal("generalPurpose"),
+        Type.Literal("poteto-agent"),
+        Type.Literal("Comment Sicko"),
+      ]),
+    ),
+    model: Type.Optional(Type.String()),
+    readonly: Type.Optional(Type.Boolean()),
+    run_in_background: Type.Optional(Type.Boolean()),
+    cwd: Type.Optional(Type.String()),
+    resume: Type.Optional(Type.String()),
+  },
+  { additionalProperties: false },
+);
 
 type Request = Static<typeof TaskInput>;
 

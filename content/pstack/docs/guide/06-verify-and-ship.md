@@ -1,6 +1,6 @@
 # Verify the result and open a PR
 
-"It compiles" is not evidence. The [Prove It Works principle](../../skills/principle-prove-it-works/SKILL.md) makes the agent check the real artifact before it reports success, and your job is to make "the real artifact" checkable. This page covers stating a finish condition, generating a verification skill for your app, opening the PR, and driving it to merged.
+"It compiles" is not evidence. The [Prove It Works principle](../../skills/principle-prove-it-works/SKILL.md) makes the agent check the real artifact before it reports success, and your job is to make "the real artifact" checkable. This page covers stating a finish condition, generating a verification skill for your app, opening the PR, and addressing review and CI through merge-ready.
 
 ![A prototype plane flies a real test course while she times it with a stopwatch and robots film and checklist the run; the terminal reads verify: pass, evidence: captured.](./images/verification.jpg)
 
@@ -74,14 +74,6 @@ Babysit watches the PR with a bundled watcher and takes blockers in order: confl
 
 Babysit stops at merge-ready. It never merges, even with everything green, because merging is a different decision.
 
-## Land the stack with Shipping
+Landing is a separate user decision. This local package ends at reviewed, verified work and the PR evidence; it does not merge or arm auto-merge.
 
-Green is not the same as safe. When you're ready to land, say so:
-
-```text
-/poteto-mode land the stack.
-```
-
-The [Shipping playbook](../../skills/poteto-mode/playbooks/shipping.md) verifies each PR independently before it arms anything. One fresh agent per PR proves the behavior live, and the agent that judges a change is never the one that wrote it. Then Shipping lands only the contiguous verified run from the bottom, one PR at a time through GitHub by default or Origin when its CLI is available, and reports the first PR that breaks the chain. A verified PR sitting above an unverified one waits, because merging it would pull the gap in underneath.
-
-Next: [Run work while you sleep](./07-overnight.md).
+Next: [Audit a local run](./07-overnight.md).

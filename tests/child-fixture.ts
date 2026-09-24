@@ -27,7 +27,11 @@ export const packageRoot = fileURLToPath(new URL("..", import.meta.url));
 
 const agentDirKey = "PI_CODING_AGENT_DIR";
 
-const Receipt = Type.Object({ id: Type.String(), status: Type.String() });
+const Receipt = Type.Object({
+  id: Type.String(),
+  status: Type.String(),
+  transcript: Type.Optional(Type.String()),
+});
 
 export function receipt(text: string) {
   const value: unknown = JSON.parse(text);
@@ -36,10 +40,7 @@ export function receipt(text: string) {
   return value;
 }
 
-export async function childFixture(
-  t: TestContext,
-  options: { holdStartup?: boolean; runtimeTool?: boolean } = {},
-) {
+export async function childFixture(t: TestContext, options: { holdStartup?: boolean } = {}) {
   const dir = await mkdtemp(join(tmpdir(), "pstack-lifecycle-"));
   const previous = process.env[agentDirKey];
   process.env[agentDirKey] = dir;
@@ -170,20 +171,6 @@ export default (pi) => {
     resourceLoader: loader,
     settingsManager: settings,
     sessionManager: SessionManager.inMemory(project),
-    customTools:
-      options.runtimeTool === true
-        ? [
-            {
-              name: "runtime_only",
-              label: "Runtime only",
-              description: "No reconstructable source",
-              parameters: Type.Object({}),
-              async execute() {
-                return { content: [{ type: "text", text: "runtime" }], details: {} };
-              },
-            },
-          ]
-        : [],
   });
 
   session = created.session;

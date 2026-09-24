@@ -4,7 +4,7 @@ These mappings replace Cursor-specific host mechanics when following a packaged 
 
 ## Skill and tool names
 
-A named PStack skill is a file to read and follow, not a tool call. For a skill named `<name>`, read `<name>/SKILL.md` in full under the packaged skills directory shown with these instructions. Resolve its relative reference paths against that skill's directory. User-facing invocation is `/skill:<name>`; `/poteto-mode` and `/setup-pstack` are convenience commands.
+A named PStack skill is a file to read and follow, not a tool call. For a skill named `<name>`, read `<name>/SKILL.md` in full under the packaged skills directory shown with these instructions. Resolve skill-root paths beginning `references/`, `playbooks/`, or `scripts/` against that skill's directory. Relative Markdown links and explicit `./` or `../` paths in a reference file resolve against that file's directory. For skills registered in the package manifest, user-facing invocation is `/skill:<name>`; `/poteto-mode` and `/setup-pstack` are convenience commands.
 
 Use Pi `read`, `grep`, `find`, `ls`, `bash`, `edit`, and `write` for the corresponding upstream file and shell operations. `Glob` maps to `find`. The upstream todo list maps to `pstack_todo`: omit `items` to read it; supply the complete `items` list to replace it. `AskQuestion` maps to `pstack_question`. If interactive questions are unavailable, ask the user in the conversation and wait; do not manufacture an answer.
 
@@ -18,7 +18,7 @@ If the upstream request and agent supply neither a model role nor an explicit mo
 
 ## Delegation
 
-Upstream `Task` maps to `pstack_task`. Pass the upstream `subagent_type` unchanged: `generalPurpose`, `poteto-agent`, or `Comment Sicko`. The adapter loads the agent's source instructions; the Poteto profile includes the full source mode. Supply the complete filled reference prompt required by the skill, not a shorter replacement brief. Use the effective Pi selector for `model`.
+Upstream `Task` maps to `pstack_task`. Pass the upstream `subagent_type` unchanged: `generalPurpose`, `poteto-agent`, or `Comment Sicko`. The adapter loads the agent's source instructions; the Poteto profile includes the full source mode. Supply the complete filled reference prompt required by the skill, not a shorter replacement brief. Resolve its required file references to absolute paths before handing it to a child; the child's working directory is the task's project, not the skill directory. Use the effective Pi selector for `model`.
 
 `readonly` restricts the child's tools and its descendants; it is not an operating-system sandbox. Comment Sicko performs scoped comment edits and requires writable tools. For workflows such as `why` that require integrations, preserve the skill's writable agent mode rather than substituting a read-only investigator.
 
@@ -32,8 +32,8 @@ Children belong to the live parent branch. Starting branch navigation, reloading
 
 ## Current support boundary
 
-The current baseline covers local setup, Poteto-mode routing, understanding, alternative design, and critique. Cloud agents, Benny, automation, scheduled or overnight execution, and automated delivery are not implemented. A local process or worktree is not a cloud-agent substitute. If a selected route needs an unavailable capability, name the gap and stop at that boundary rather than claiming that route was completed.
+The adopted workflows cover local setup, understanding, design, implementation, independent review, verification, PR opening, and requested Babysit. Cloud programs, scheduled execution, automatic landing, and Cursor-specific cleanup routes are excluded. Local children remain session-bound; a worktree is not an operating-system sandbox. Preserve each workflow's panel sizes, evidence requirements, and gates. If a required verification capability or adequate local isolation is unavailable, report the gap instead of reducing coverage or claiming a pass. PR publication requires authority; opening a PR does not start Babysit, and Babysit stops at merge-ready without merging or arming auto-merge.
 
 Dependencies from outside PStack, including Cursor's `create-skill` and cursor-team-kit’s `deslop`, `control-cli`, and `control-ui`, still require their actual method and capabilities. Do not replace them with a similarly named personal skill or silently skip them. Report an unavailable dependency at the step that needs it.
 
-For `why`, discover the evidence-query tools actually loaded in the session. An unavailable integration is a gap in that evidence category, not permission to narrow the skill to source control or infer historical intent from code. Do not claim that a query was performed when its tool was unavailable.
+For `why`, discover evidence capabilities from the session's exposed tool descriptions, schemas, and integration guidance. Native Pi extension tools, configured MCP integrations, and documented CLIs can supply the same evidence categories through different mechanisms. MCP is a protocol, not a synonym for a Pi tool; this adapter does not implement an MCP client. Use an integration's discovery facility only when it actually provides one, not a Cursor directory or an invented tool call. Confirm access in the investigator's own session. An unavailable integration or failed access is a gap in that evidence category, not permission to infer historical intent from code or claim a query was performed.
