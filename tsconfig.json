@@ -1,0 +1,11 @@
+{
+  "extends": "@syzom/typescript-quality/tsconfig/base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "extensions/**/*.ts", "tests/**/*.ts", "oxlint.config.ts"]
+}

@@ -3,13 +3,53 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "pi": { "extensions": [], "skills": [], "prompts": [], "themes": [] },
+  "license": "MIT",
+  "description": "Upstream PStack quality workflows with explicit local Pi translations.",
+  "packageManager": "pnpm@11.25.0",
+  "engines": { "node": ">=24.0.0" },
+  "pi": {
+    "extensions": ["./node_modules/pi-subagents/index.js", "./extensions/index.ts"],
+    "skills": [
+      "./content/pstack/skills/setup-pstack",
+      "./content/pstack/skills/poteto-mode",
+      "./content/pstack/skills/how",
+      "./content/pstack/skills/why",
+      "./content/pstack/skills/architect",
+      "./content/pstack/skills/arena",
+      "./content/pstack/skills/interrogate",
+      "./content/pstack/skills/unslop",
+      "./content/pstack/skills/principle-*/SKILL.md"
+    ],
+    "subagents": { "agents": ["./agents"] }
+  },
   "scripts": {
     "source:generate": "node scripts/source.mjs generate",
     "source:verify": "node scripts/source.mjs verify",
     "source:diff": "node scripts/source.mjs diff",
     "upstream:check": "node scripts/source.mjs check-upstream",
     "upstream:prepare": "node scripts/source.mjs prepare-update",
-    "test:source": "node --test test-source/*.test.mjs"
+    "test:source": "node --test test-source/*.test.mjs",
+    "test:runtime": "node --import tsx --test tests/*.test.ts",
+    "test": "pnpm test:source && pnpm test:runtime",
+    "quality": "biome check --error-on-warnings . && oxlint --config oxlint.config.ts .",
+    "check": "pnpm source:verify && pnpm test && pnpm quality"
+  },
+  "dependencies": { "pi-subagents": "0.71.0" },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": ">=0.86.1",
+    "@earendil-works/pi-coding-agent": ">=0.86.1",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.12",
+    "@earendil-works/pi-ai": "0.86.1",
+    "@earendil-works/pi-coding-agent": "0.86.1",
+    "@syzom/typescript-quality": "0.5.0",
+    "@types/node": "24.0.0",
+    "oxlint": "1.82.0",
+    "oxlint-tsgolint": "7.0.2001",
+    "tsx": "4.23.0",
+    "typebox": "1.3.8",
+    "typescript": "7.0.2"
   }
 }

@@ -1,0 +1,6 @@
+{
+  "extends": ["@syzom/typescript-quality/biome"],
+  "files": {
+    "includes": ["src/**", "extensions/**", "tests/**", "scripts/**", "test-source/**", "package.json", "biome.json", "oxlint.config.ts", "tsconfig.json"]
+  }
+}
