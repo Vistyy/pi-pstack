@@ -3,5 +3,5 @@ import { defineConfig } from "oxlint";
 
 export default defineConfig({
   ...config,
-  ignorePatterns: ["upstream/**", "content/**", "agents/**", ".work/**"],
+  ignorePatterns: ["upstream/**", "content/**", ".work/**"],
 });

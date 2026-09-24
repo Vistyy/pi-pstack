@@ -1,0 +1,429 @@
+import assert from "node:assert/strict";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+import {
+  fauxAssistantMessage,
+  fauxProvider,
+  fauxToolCall,
+  getCurrentSystemPrompt,
+  InMemoryCredentialStore,
+} from "@earendil-works/pi-ai";
+import {
+  createAgentSession,
+  DefaultResourceLoader,
+  ModelRuntime,
+  SessionManager,
+  SettingsManager,
+} from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
+import { Check } from "typebox/value";
+
+const root = fileURLToPath(new URL("..", import.meta.url));
+
+await test("native child receives a fresh conversation and returns the entire final result", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "pstack-child-"));
+  const before = process.env["PI_CODING_AGENT_DIR"];
+  process.env["PI_CODING_AGENT_DIR"] = dir;
+  t.after(async () => {
+    if (before === undefined) delete process.env["PI_CODING_AGENT_DIR"];
+    else process.env["PI_CODING_AGENT_DIR"] = before;
+    await rm(dir, { recursive: true, force: true });
+  });
+  const project = join(dir, "project");
+  await mkdir(project);
+  await writeFile(join(project, "AGENTS.md"), "Project instruction sentinel");
+  const integration = join(dir, "integration.mjs");
+  await writeFile(
+    integration,
+    `import { appendFile, writeFile } from "node:fs/promises";
+export default (pi) => {
+  pi.on("session_start", async () => { await appendFile(${JSON.stringify(join(dir, "integration-lifecycle"))}, "start\\n"); });
+  pi.on("session_shutdown", async () => { await appendFile(${JSON.stringify(join(dir, "integration-lifecycle"))}, "shutdown\\n"); });
+  pi.registerTool({ name: "fixture_integration", label: "Fixture integration", description: "Record child cwd", parameters: { type: "object", properties: {} },
+    async execute(_id, _params, _signal, _update, ctx) {
+      await writeFile(${JSON.stringify(join(dir, "integration-result"))}, ctx.cwd);
+      return { content: [{ type: "text", text: ctx.cwd }], details: {} };
+    } });
+};`,
+  );
+
+  const provider = fauxProvider({
+    provider: "fixture",
+    models: [{ id: "child:rev1", reasoning: true }],
+    tokensPerSecond: Infinity,
+  });
+
+  const registry = await ModelRuntime.create({
+    credentials: new InMemoryCredentialStore(),
+    modelsPath: null,
+    modelsStorePath: join(dir, "catalog.json"),
+    allowModelNetwork: false,
+  });
+
+  registry.registerNativeProvider(provider.provider);
+
+  const nestedProvider = fauxProvider({
+    provider: "nested",
+    models: [{ id: "worker", reasoning: false }],
+    tokensPerSecond: Infinity,
+  });
+
+  const leafProvider = fauxProvider({
+    provider: "leaf",
+    models: [{ id: "reader", reasoning: false }],
+    tokensPerSecond: Infinity,
+  });
+
+  registry.registerNativeProvider(nestedProvider.provider);
+  registry.registerNativeProvider(leafProvider.provider);
+  await registry.getAvailable();
+  const settings = SettingsManager.inMemory({ packages: [], compaction: { enabled: false } });
+
+  const loader = new DefaultResourceLoader({
+    cwd: project,
+    agentDir: dir,
+    settingsManager: settings,
+    noExtensions: true,
+    noSkills: true,
+    additionalExtensionPaths: [join(root, "extensions/index.ts"), integration],
+  });
+
+  await loader.reload();
+
+  const { session } = await createAgentSession({
+    cwd: project,
+    agentDir: dir,
+    resourceLoader: loader,
+    modelRuntime: registry,
+    model: provider.getModel(),
+    thinkingLevel: "high",
+    settingsManager: settings,
+    sessionManager: SessionManager.inMemory(project),
+  });
+
+  t.after(() => session.dispose());
+  await session.bindExtensions({ mode: "rpc" });
+  let childPrompt = "";
+  let childContext = 0;
+  provider.setResponses([
+    fauxAssistantMessage(
+      fauxToolCall("pstack_task", {
+        prompt: "Inspect the project",
+        model: "fixture/child:rev1:low",
+        subagent_type: "generalPurpose",
+        readonly: true,
+      }),
+      { stopReason: "toolUse" },
+    ),
+    (context) => {
+      childPrompt = getCurrentSystemPrompt(context.messages);
+      childContext = context.messages.filter((message) => message.role === "user").length;
+
+      return fauxAssistantMessage("child evidence");
+    },
+    fauxAssistantMessage("parent received"),
+  ]);
+  await session.prompt("Parent secret");
+
+  const result = session.messages.findLast(
+    (message) => message.role === "toolResult" && message.toolName === "pstack_task",
+  );
+
+  assert.ok(result?.role === "toolResult");
+  assert.equal(result.isError, false, JSON.stringify(result.content));
+
+  const payload: unknown = JSON.parse(
+    result.content
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join(""),
+  );
+
+  assert.ok(
+    Check(
+      Type.Object({
+        id: Type.String(),
+        output: Type.String(),
+        model: Type.String(),
+        readonly: Type.Boolean(),
+        transcript: Type.String(),
+      }),
+      payload,
+    ),
+  );
+  assert.equal(payload.output, "child evidence");
+  assert.equal(payload.model, "fixture/child:rev1:low");
+  assert.equal(payload.readonly, true);
+  assert.equal(childContext, 1);
+  assert.match(childPrompt, /Project instruction sentinel/);
+  assert.doesNotMatch(childPrompt, /Parent secret/);
+  assert.match(await readFile(payload.transcript, "utf8"), /child evidence/);
+  provider.setResponses([
+    fauxAssistantMessage(
+      fauxToolCall("pstack_task", { prompt: "Use configured integration", readonly: false }),
+      { stopReason: "toolUse" },
+    ),
+    fauxAssistantMessage(fauxToolCall("fixture_integration", {}), { stopReason: "toolUse" }),
+    fauxAssistantMessage("integration complete"),
+    fauxAssistantMessage("parent done"),
+  ]);
+  await session.prompt("Check configured integration");
+  assert.equal(await readFile(join(dir, "integration-result"), "utf8"), project);
+  assert.match(await readFile(join(dir, "integration-lifecycle"), "utf8"), /start/);
+
+  let releaseChild: (() => void) | undefined;
+
+  const childGate = new Promise<void>((resolve) => {
+    releaseChild = resolve;
+  });
+
+  let resolveReceipt: (() => void) | undefined;
+
+  const receipt = new Promise<void>((resolve) => {
+    resolveReceipt = resolve;
+  });
+
+  const unsubscribe = session.subscribe((event) => {
+    if (
+      event.type === "message_end" &&
+      event.message.role === "assistant" &&
+      event.message.content.some((part) => part.type === "text" && part.text === "receipt consumed")
+    )
+      resolveReceipt?.();
+  });
+
+  provider.setResponses([
+    fauxAssistantMessage(
+      fauxToolCall("pstack_task", { prompt: "Work in background", run_in_background: true }),
+      { stopReason: "toolUse" },
+    ),
+    fauxAssistantMessage("parent continued"),
+    async () => {
+      await childGate;
+
+      return fauxAssistantMessage("background evidence");
+    },
+    fauxAssistantMessage("receipt consumed"),
+  ]);
+  await session.prompt("Launch a background child");
+
+  const launched = session.messages.findLast(
+    (message) => message.role === "toolResult" && message.toolName === "pstack_task",
+  );
+
+  assert.ok(launched?.role === "toolResult");
+  assert.match(JSON.stringify(launched.content), /running/);
+  releaseChild?.();
+  await receipt;
+  await session.waitForIdle();
+  unsubscribe();
+  assert.match(JSON.stringify(session.messages), /background evidence/);
+
+  provider.setResponses([
+    fauxAssistantMessage(
+      fauxToolCall("pstack_task", { prompt: "Observe provider failure", run_in_background: false }),
+      { stopReason: "toolUse" },
+    ),
+    fauxAssistantMessage("", { stopReason: "error", errorMessage: "fixture provider failed" }),
+    fauxAssistantMessage("parent observed failure"),
+  ]);
+  await session.prompt("Test provider error");
+
+  const failure = session.messages.findLast(
+    (message) => message.role === "toolResult" && message.toolName === "pstack_task",
+  );
+
+  assert.ok(failure?.role === "toolResult");
+  assert.equal(failure.isError, true);
+  assert.match(JSON.stringify(failure.content), /fixture provider failed/);
+
+  nestedProvider.setResponses([
+    fauxAssistantMessage(
+      fauxToolCall("pstack_task", {
+        prompt: "Grandchild checks",
+        model: "leaf/reader:off",
+        readonly: true,
+      }),
+      { stopReason: "toolUse" },
+    ),
+    fauxAssistantMessage("child synthesized evidence"),
+  ]);
+  leafProvider.setResponses([fauxAssistantMessage("grandchild evidence")]);
+  provider.setResponses([
+    fauxAssistantMessage(
+      fauxToolCall("pstack_task", {
+        prompt: "Root delegates",
+        model: "nested/worker:off",
+        readonly: true,
+      }),
+      { stopReason: "toolUse" },
+    ),
+    fauxAssistantMessage("root got synthesis"),
+  ]);
+  await session.prompt("Nested delegation");
+
+  const nested = session.messages.findLast(
+    (message) => message.role === "toolResult" && message.toolName === "pstack_task",
+  );
+
+  assert.ok(nested?.role === "toolResult");
+  assert.equal(nested.isError, false, JSON.stringify(nested.content));
+  assert.match(JSON.stringify(nested.content), /child synthesized evidence/);
+  nestedProvider.setResponses([
+    fauxAssistantMessage(fauxToolCall("pstack_task", { prompt: "Escalate", readonly: false }), {
+      stopReason: "toolUse",
+    }),
+    fauxAssistantMessage("escalation rejected"),
+  ]);
+  provider.setResponses([
+    fauxAssistantMessage(
+      fauxToolCall("pstack_task", {
+        prompt: "Readonly owner",
+        model: "nested/worker:off",
+        readonly: true,
+      }),
+      { stopReason: "toolUse" },
+    ),
+    fauxAssistantMessage("root saw rejection"),
+  ]);
+  await session.prompt("Enforce readonly ceiling");
+
+  const ceiling = session.messages.findLast(
+    (message) => message.role === "toolResult" && message.toolName === "pstack_task",
+  );
+
+  assert.ok(ceiling?.role === "toolResult");
+
+  const ceilingText = ceiling.content
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("");
+
+  const ceilingData: unknown = JSON.parse(ceilingText);
+  assert.ok(Check(Type.Object({ transcript: Type.String() }), ceilingData));
+  assert.match(await readFile(ceilingData.transcript, "utf8"), /Readonly child cannot escalate/);
+
+  let resumedHistory = "";
+  provider.setResponses([
+    fauxAssistantMessage(
+      fauxToolCall("pstack_task", {
+        resume: payload.id,
+        prompt: "Continue prior task",
+        run_in_background: false,
+      }),
+      { stopReason: "toolUse" },
+    ),
+    (context) => {
+      resumedHistory = JSON.stringify(context.messages);
+
+      return fauxAssistantMessage("continued evidence");
+    },
+    fauxAssistantMessage("root got continuation"),
+  ]);
+  await session.prompt("Resume owned child");
+  assert.match(resumedHistory, /Inspect the project/);
+  assert.match(resumedHistory, /child evidence/);
+  assert.doesNotMatch(resumedHistory, /Parent secret/);
+
+  let potetoContext = "";
+  nestedProvider.setResponses([
+    (context) => {
+      potetoContext = JSON.stringify(context.messages);
+
+      return fauxAssistantMessage("poteto result");
+    },
+  ]);
+  provider.setResponses([
+    fauxAssistantMessage(
+      fauxToolCall("pstack_task", {
+        prompt: "Poteto assignment",
+        subagent_type: "poteto-agent",
+        model: "nested/worker:off",
+        run_in_background: false,
+      }),
+      { stopReason: "toolUse" },
+    ),
+    fauxAssistantMessage("parent finished Poteto"),
+  ]);
+  await session.prompt("Delegate Poteto");
+  assert.match(potetoContext, /Poteto assignment/);
+  assert.match(potetoContext, /Poteto subagent/);
+  assert.match(potetoContext, /poteto-mode's full agent style/);
+  assert.match(potetoContext, /Packaged PStack skills directory/);
+
+  let started = 0;
+  let bothStarted: (() => void) | undefined;
+
+  const barrier = new Promise<void>((resolve) => {
+    bothStarted = resolve;
+  });
+
+  const simultaneous = async (label: string) => {
+    started += 1;
+
+    if (started === 2) bothStarted?.();
+    await barrier;
+
+    return fauxAssistantMessage(label);
+  };
+
+  nestedProvider.setResponses([() => simultaneous("left result")]);
+  leafProvider.setResponses([() => simultaneous("right result")]);
+  provider.setResponses([
+    fauxAssistantMessage(
+      [
+        fauxToolCall("pstack_task", { prompt: "left", model: "nested/worker:off" }),
+        fauxToolCall("pstack_task", { prompt: "right", model: "leaf/reader:off" }),
+      ],
+      { stopReason: "toolUse" },
+    ),
+    fauxAssistantMessage("parallel parent done"),
+  ]);
+  await session.prompt("Run both independent children");
+  assert.equal(started, 2);
+
+  const siblings = session.messages
+    .filter((message) => message.role === "toolResult" && message.toolName === "pstack_task")
+    .slice(-2);
+
+  assert.equal(siblings.length, 2);
+  assert.match(JSON.stringify(siblings), /left result/);
+  assert.match(JSON.stringify(siblings), /right result/);
+
+  let childStarted: (() => void) | undefined;
+
+  const entered = new Promise<void>((resolve) => {
+    childStarted = resolve;
+  });
+
+  nestedProvider.setResponses([
+    async (_context, options) => {
+      childStarted?.();
+      await new Promise<void>((resolve) => {
+        options?.signal?.addEventListener("abort", () => resolve(), { once: true });
+      });
+
+      return fauxAssistantMessage("aborted response", { stopReason: "aborted" });
+    },
+  ]);
+  provider.setResponses([
+    fauxAssistantMessage(
+      fauxToolCall("pstack_task", {
+        prompt: "Pending work",
+        model: "nested/worker:off",
+        run_in_background: true,
+      }),
+      { stopReason: "toolUse" },
+    ),
+    fauxAssistantMessage("root left pending work"),
+  ]);
+  await session.prompt("Start work before shutdown");
+  await entered;
+  await session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
+  assert.equal(session.isStreaming, false);
+  assert.doesNotMatch(JSON.stringify(session.messages), /aborted response/);
+  assert.match(await readFile(join(dir, "integration-lifecycle"), "utf8"), /shutdown/);
+});

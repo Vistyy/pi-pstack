@@ -145,7 +145,7 @@ function parentSelector(ctx: ExtensionContext) {
     : `${ctx.model.provider}/${ctx.model.id}:${ctx.thinkingLevel}`;
 }
 
-function resolveTarget(target: string, ctx: ExtensionContext, budget: Budget = "unlimited") {
+export function resolveTarget(target: string, ctx: ExtensionContext, budget: Budget = "unlimited") {
   if (target === "inherit-parent" || target === "auto") {
     const parent = parentSelector(ctx);
 

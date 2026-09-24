@@ -8,6 +8,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { Check } from "typebox/value";
+import { installExecutor } from "./executor.js";
 import { availableModels, ModelsInput, modelState, parseRoles, saveModels } from "./models.js";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -54,7 +55,11 @@ async function resources() {
   return { mode: stripFrontmatter(mode).trim(), host, roles: parseRoles(setup) };
 }
 
-export function createRuntime(pi: ExtensionAPI): void {
+export function createRuntime(
+  pi: ExtensionAPI,
+  options?: { profile: "generalPurpose" | "poteto-agent" | "Comment Sicko" },
+): void {
+  if (options === undefined) installExecutor(pi, undefined, createRuntime);
   let loaded: ReturnType<typeof resources> | undefined;
   const source = () => (loaded ??= resources());
 
@@ -85,7 +90,10 @@ export function createRuntime(pi: ExtensionAPI): void {
       projection = `Invalid PStack role configuration: ${String(error)}. Use /setup-pstack to replace it.`;
     }
 
-    const mode = modeEnabled(ctx) ? `\n\n${content.mode}` : "";
+    const mode =
+      options?.profile === "poteto-agent" || (options === undefined && modeEnabled(ctx))
+        ? `\n\n${content.mode}`
+        : "";
 
     return {
       systemPrompt: `${event.systemPrompt}${mode}\n\nPackaged PStack skills directory: ${skillsDir}\n\n${content.host}\n\n## PStack role map\n${projection}`,
