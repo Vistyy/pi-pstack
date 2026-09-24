@@ -39,21 +39,6 @@ async function fixture(t: TestContext) {
   const root = path.join(directory, "package");
   await put(remote, "pstack/base.txt", "pinned\n");
   await put(remote, "pstack/.cursor-plugin/plugin.json", '{"version":"1.0.0"}\n');
-  await put(
-    remote,
-    "pstack/agents/poteto-agent.md",
-    "---\nname: poteto-agent\n---\nOriginal identity.\n",
-  );
-  await put(
-    remote,
-    "pstack/skills/poteto-mode/SKILL.md",
-    "---\nname: poteto-mode\n---\nComplete original method.\n",
-  );
-  await put(
-    remote,
-    "pstack/agents/comment-sicko.md",
-    "---\nname: Comment Sicko\n---\nOriginal comment method.\n",
-  );
   await put(remote, "pstack/run.sh", "#!/bin/sh\nexit 0\n");
   await chmod(path.join(remote, "pstack/run.sh"), 0o755);
   await symlink("base.txt", path.join(remote, "pstack/link"));

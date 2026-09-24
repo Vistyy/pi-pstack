@@ -18,21 +18,17 @@ If the upstream request and agent supply neither a model role nor an explicit mo
 
 ## Delegation
 
-Upstream `Task` maps to the installed pi-subagents `subagent` tool; there is no separate PStack child runtime. If necessary, call `subagents_enable` and then inspect `subagent` with `action: "list", capabilities: true` to confirm the named profile is executable.
+Upstream `Task` maps to `pstack_task`. Pass the upstream `subagent_type` unchanged: `generalPurpose`, `poteto-agent`, or `Comment Sicko`. The adapter loads the agent's source instructions; the Poteto profile includes the full source mode. Supply the complete filled reference prompt required by the skill, not a shorter replacement brief. Use the effective Pi selector for `model`.
 
-Translate a Task request as follows:
+`readonly` restricts the child's tools and its descendants; it is not an operating-system sandbox. Comment Sicko performs scoped comment edits and requires writable tools. For workflows such as `why` that require integrations, preserve the skill's writable agent mode rather than substituting a read-only investigator.
 
-- `prompt` becomes `task`; use the complete filled reference prompt required by the skill, rather than a shorter replacement brief.
-- `subagent_type: generalPurpose` becomes `agent: pstack-general-purpose`; with `readonly: true`, use `pstack-reader`.
-- `subagent_type: poteto-agent` becomes `agent: pstack-poteto-agent`; with `readonly: true`, use `pstack-poteto-reader`.
-- `subagent_type: "Comment Sicko"` becomes `agent: pstack-comment-sicko`. Its upstream comment-review procedure includes scoped edits; it is not a read-only profile.
-- `model` is the effective Pi role selector described above.
-- `run_in_background` becomes `async`. Use `context: "fresh"` for a new assignment. Use `worktree: true` only where the upstream request requires local worktree isolation; otherwise children share the supplied working directory.
-- Set `mission: false`; the backend's mission ledger is not the PStack workflow. The packaged profiles disable backend acceptance gates; this does not remove PStack's own verification and review.
+Launch one independent child per prescribed assignment or panel member. Foreground calls return results and can execute in parallel. `run_in_background: true` returns an ID immediately and delivers the result automatically when the child and its nested work finish. While required results are outstanding, end the turn without presenting a final answer to the task; continue when results arrive. Do not poll in a waiting loop. Read the actual results and preserve the skill's dependency barriers, synthesis ownership, and presentation order. Execution completion is not acceptance of the work.
 
-Use a native workflow call for parallel or multi-step delegation, with one independent child per prescribed assignment or panel member. Preserve the skill's model choices, complete reference prompts, dependency barriers, and synthesis ownership. Native grouping changes the transport, not the method. Do not replace the workflow with the backend's built-in scout/worker/reviewer/oracle methodology. Native completion notifications deliver background results. While required results are outstanding, end the turn without presenting a final answer to the task; continue the workflow when the results arrive. Do not poll in a waiting loop. Read the actual results and perform the skill's synthesis/presentation step in the required order.
+Children share the working directory unless `cwd` selects another existing directory. Where the skill requires isolated candidate paths or worktrees, prepare them with the normal file or Git tools and pass the appropriate directory. The executor does not create, merge, or remove worktrees.
 
-To continue a specific existing child when the skill calls for it, use the backend's `resume` action with that child's returned run ID and the follow-up message. For an independent assignment or a consolidated fresh brief, launch a new child. Use the backend's status and stop controls for that exact run; do not build another registry or launch a replacement just because an outcome is uncertain.
+To continue a specific child, pass its returned ID as `resume` with the follow-up `prompt`. Its conversation, profile, model, and working directory are retained. For an independent assignment or consolidated fresh brief, start a new child. Use `pstack_tasks` to list children, inspect an exact child's status and transcript, or cancel it and its descendants. Cancellation does not undo edits.
+
+Children belong to the live parent branch. Leaving that branch, reloading, or exiting stops active children; retained transcripts are inspection evidence, not durable background jobs. The root and its direct children can delegate; grandchildren cannot launch another level.
 
 ## Current support boundary
 

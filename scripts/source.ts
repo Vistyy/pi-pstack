@@ -25,13 +25,11 @@ async function generate() {
   await temporary("pstack-generate-", async (staging) => {
     await build(staging);
 
-    for (const relative of ["content/pstack"]) {
-      const target = path.join(root, relative);
-      await rm(target, { recursive: true, force: true });
-      await copyTree(path.join(staging, relative), target);
-    }
+    const target = path.join(root, "content/pstack");
+    await rm(target, { recursive: true, force: true });
+    await copyTree(path.join(staging, "content/pstack"), target);
   });
-  console.log("Generated content/pstack and agents from the pinned source and patches.");
+  console.log("Generated content/pstack from the pinned source and patches.");
 }
 
 async function verify() {
@@ -39,15 +37,13 @@ async function verify() {
   await temporary("pstack-verify-", async (staging) => {
     await build(staging);
 
-    for (const relative of ["content/pstack"]) {
-      const actual = await treeId(path.join(root, relative));
-      const expected = await treeId(path.join(staging, relative));
+    const actual = await treeId(path.join(root, "content/pstack"));
+    const expected = await treeId(path.join(staging, "content/pstack"));
 
-      if (actual !== expected)
-        throw new Error(
-          `Generated drift in ${relative}; run source:generate. Do not edit generated files.`,
-        );
-    }
+    if (actual !== expected)
+      throw new Error(
+        "Generated drift in content/pstack; run source:generate. Do not edit generated files.",
+      );
   });
   console.log("Source snapshot and generated content verified, without fetching upstream.");
 }

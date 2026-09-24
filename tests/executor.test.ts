@@ -249,7 +249,14 @@ export default (pi) => {
       }),
       { stopReason: "toolUse" },
     ),
-    fauxAssistantMessage("child synthesized evidence"),
+    (context) => {
+      const returned = context.messages.findLast((message) => message.role === "toolResult");
+      assert.ok(returned?.role === "toolResult");
+      assert.equal(returned.isError, false, JSON.stringify(returned.content));
+      assert.match(JSON.stringify(returned.content), /grandchild evidence/);
+
+      return fauxAssistantMessage("child synthesized evidence");
+    },
   ]);
   leafProvider.setResponses([fauxAssistantMessage("grandchild evidence")]);
   provider.setResponses([
@@ -272,6 +279,7 @@ export default (pi) => {
   assert.ok(nested?.role === "toolResult");
   assert.equal(nested.isError, false, JSON.stringify(nested.content));
   assert.match(JSON.stringify(nested.content), /child synthesized evidence/);
+  assert.equal(leafProvider.state.callCount, 1);
   nestedProvider.setResponses([
     fauxAssistantMessage(fauxToolCall("pstack_task", { prompt: "Escalate", readonly: false }), {
       stopReason: "toolUse",
