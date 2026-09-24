@@ -59,6 +59,20 @@ Preparation is not adoption. Review the actual upstream method changes and trans
 
 ## Runtime configuration
 
+After installing dependencies, load this checkout as a local Pi package. Its manifest loads the PStack extension and the pinned native backend together. For an isolated evaluation, put the checkout's absolute path in the isolated agent directory's `settings.json` `packages` array; do not register either extension a second time.
+
+Native backend operational settings belong in `<agent directory>/extensions/subagent/config.json`, normally `~/.pi/agent/extensions/subagent/config.json`. They do **not** belong under `settings.json`'s `subagents` key. The local nested-flow baseline uses:
+
+```json
+{
+  "maxSubagentDepth": 2,
+  "missions": { "enabled": false },
+  "scheduledRuns": { "enabled": false }
+}
+```
+
+Native backend model defaults and agent overrides have a different owner: Pi settings under `subagents`. Avoid overrides that replace PStack's explicit per-role model choices. Consult the installed `pi-subagents` dependency's `docs/configuration.md` before changing backend options; PStack does not write or migrate them.
+
 `/setup-pstack` guides model selection and confirmation. `pstack_models` lists exact available Pi models and supported thinking levels, reads the role map, and saves the confirmed complete map to the current Pi agent directory's `pstack-models.json`.
 
 Real targets use `provider/model:thinking`. Cursor slugs remain source defaults, not automatic executable aliases. Explicit `inherit-parent` and `auto` resolve to the current parent's model and thinking. Panels retain their order, repeated entries, and chosen cardinality. Budget adjustment stays within the selected model's supported reasoning levels; it does not substitute another family.
