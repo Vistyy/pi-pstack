@@ -7,5 +7,12 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "extensions/**/*.ts", "tests/**/*.ts", "oxlint.config.ts"]
+  "include": [
+    "src/**/*.ts",
+    "extensions/**/*.ts",
+    "tests/**/*.ts",
+    "scripts/**/*.ts",
+    "test-source/**/*.ts",
+    "oxlint.config.ts"
+  ]
 }

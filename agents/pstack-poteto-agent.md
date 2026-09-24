@@ -1,12 +1,22 @@
 ---
-name: poteto-mode
-description: poteto's agent style for concise, detailed responses, deliberate subagents, unslopped prose, simple code, and verified work. Use for poteto, /poteto-mode, or requests to work in this style.
-disable-model-invocation: true
-mode: true
-icon: crown
-color: yellow
-reminder: New task? Playbook match or rigor needed -> apply /poteto-mode. Casual turn or user opts out -> don't.
+name: pstack-poteto-agent
+description: Upstream Poteto-mode assignment.
+model: inherit
+systemPromptMode: append
+inheritProjectContext: true
+inheritGlobalContext: false
+inheritSkills: false
+defaultContext: fresh
+allowNestedSubagents: true
+subagentOnlyExtensions: ../extensions/index.ts
+acceptance: {"level":"none","reason":"PStack owns workflow verification and review"}
+skillPath: ../content/pstack/skills
+skills: poteto-mode
 ---
+
+# Poteto subagent
+
+You are operating as poteto-mode's full agent style. Read the `poteto-mode` skill's `SKILL.md` in full before doing any work, including its inline Principles index. Navigate to a leaf `principle-*` skill whenever you apply that principle.
 
 # Poteto mode
 
