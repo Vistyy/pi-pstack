@@ -1,5 +1,5 @@
 diff --git a/README.md b/README.md
-index b7cdef8..073c99a 100644
+index b7cdef8..818b9f1 100644
 --- a/README.md
 +++ b/README.md
 @@ -1,5 +1,7 @@
@@ -42,7 +42,7 @@ index b7cdef8..073c99a 100644
  
  | playbook | for |
  |---|---|
-@@ -65,15 +62,9 @@ morning.
+@@ -65,16 +62,10 @@ morning.
  | [authoring a skill](./skills/poteto-mode/playbooks/authoring-a-skill.md) | writing or editing a SKILL.md. |
  | [eval](./skills/poteto-mode/playbooks/eval.md) | test how a skill or prompt change affects agent behavior, blinded. |
  | [babysit](./skills/poteto-mode/playbooks/babysit.md) | drive a pr or a stack to merge-ready: conflicts, review threads, ci. |
@@ -55,9 +55,11 @@ index b7cdef8..073c99a 100644
  | [pause safely](./skills/poteto-mode/playbooks/pause-safely.md) | suspend in-flight work cleanly so it can be resumed later. |
  | [multi-phase plan](./skills/poteto-mode/playbooks/multi-phase-plan.md) | work that spans phases or stacked PRs. |
 -| [worktree cleanup](./skills/poteto-mode/playbooks/worktree-cleanup.md) | reclaim disk by pruning merged or abandoned worktrees and stale ios simulators, safety-gated. |
- | [opening a pr](./skills/poteto-mode/playbooks/opening-a-pr.md) | open a ready pr from small ordered commits with a conventional commits title and a briefing-style body. invoked at the end of every other playbook. |
+-| [opening a pr](./skills/poteto-mode/playbooks/opening-a-pr.md) | open a ready pr from small ordered commits with a conventional commits title and a briefing-style body. invoked at the end of every other playbook. |
++| [opening a pr](./skills/poteto-mode/playbooks/opening-a-pr.md) | open a ready pr from small ordered commits with a conventional commits title and a briefing-style body. invoked after a change-producing playbook when publication is authorized. |
  
  </details>
+ 
 @@ -90,8 +81,6 @@ the full rules and playbooks live in [`skills/poteto-mode/SKILL.md`](./skills/po
  
  [`/poteto-mode`](./skills/poteto-mode/SKILL.md) is also a sticky mode: once entered it stays on across turns, applying itself when a playbook matches or the task needs rigor and staying out of the way otherwise. opt out any time by saying so.
@@ -2115,7 +2117,7 @@ index 285df75..0000000
 -Use the same field names in the UI and in the routine prompt.
 -Keep the field list small.
 diff --git a/skills/poteto-mode/SKILL.md b/skills/poteto-mode/SKILL.md
-index 8de8073..7642537 100644
+index 8de8073..555bf44 100644
 --- a/skills/poteto-mode/SKILL.md
 +++ b/skills/poteto-mode/SKILL.md
 @@ -30,10 +30,9 @@ Remaining triggers:
@@ -2157,7 +2159,8 @@ index 8de8073..7642537 100644
  - **Pause safely.** Suspending in-flight work cleanly on an explicit pause, going offline, or a Pi restart. Native Pi compaction retains the live session and does not itself cancel children. A restart cancels local children; use saved evidence and a fresh assignment, not a cross-session child ID, to pick up work. The complement to Session pickup. Full steps: `playbooks/pause-safely.md`.
  - **Multi-phase or multi-PR plan.** Work that spans phases or stacked PRs. `playbooks/multi-phase-plan.md`.
 -- **Worktree and simulator cleanup.** Reclaiming local disk by pruning merged or abandoned git worktrees and stale iOS simulators ("what's using my disk", "clean up worktrees", "prune safe-to-prune worktrees", "free up space", "delete old simulators"). `playbooks/worktree-cleanup.md`.
- - **Opening a PR.** Invoked at the end of every other playbook. `playbooks/opening-a-pr.md`.
+-- **Opening a PR.** Invoked at the end of every other playbook. `playbooks/opening-a-pr.md`.
++- **Opening a PR.** After a change-producing playbook when publication is authorized; not for read-only investigation or planning. `playbooks/opening-a-pr.md`.
 diff --git a/skills/poteto-mode/playbooks/autonomous-run.md b/skills/poteto-mode/playbooks/autonomous-run.md
 deleted file mode 100644
 index 12c3a7d..0000000

@@ -134,4 +134,4 @@ A large or cross-cutting effort (a migration across many call sites, an ambitiou
 - **Session pickup.** Resuming or taking over a prior agent's in-flight work from a task transcript, saved checkpoint, or pushed branch. `playbooks/session-pickup.md`.
 - **Pause safely.** Suspending in-flight work cleanly on an explicit pause, going offline, or a Pi restart. Native Pi compaction retains the live session and does not itself cancel children. A restart cancels local children; use saved evidence and a fresh assignment, not a cross-session child ID, to pick up work. The complement to Session pickup. Full steps: `playbooks/pause-safely.md`.
 - **Multi-phase or multi-PR plan.** Work that spans phases or stacked PRs. `playbooks/multi-phase-plan.md`.
-- **Opening a PR.** Invoked at the end of every other playbook. `playbooks/opening-a-pr.md`.
+- **Opening a PR.** After a change-producing playbook when publication is authorized; not for read-only investigation or planning. `playbooks/opening-a-pr.md`.
