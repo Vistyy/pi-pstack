@@ -1,6 +1,5 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { generateProfiles } from "./profiles.ts";
 import { git, pluginVersion, readLock, replay, type UpstreamLock, unpack } from "./source-files.ts";
 
 async function workspace(root: string, prefix: string) {
@@ -75,7 +74,6 @@ export async function prepareUpdate(root: string, revision: string | undefined) 
       `${JSON.stringify(candidate, null, 2)}\n`,
     );
     await replay(root, snapshot, path.join(directory, "content/pstack"));
-    await generateProfiles(path.join(directory, "content/pstack"), path.join(directory, "agents"));
     await writeFile(
       path.join(directory, "result.json"),
       `${JSON.stringify({ status: "prepared", semanticReview: "required" }, null, 2)}\n`,

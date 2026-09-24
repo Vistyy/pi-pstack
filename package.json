@@ -11,7 +11,6 @@
   },
   "pi": {
     "extensions": [
-      "./node_modules/pi-subagents/index.js",
       "./extensions/index.ts"
     ],
     "skills": [
@@ -26,12 +25,7 @@
       "./content/pstack/skills/no-comments",
       "./content/pstack/skills/technical-writing",
       "./content/pstack/skills/principle-*/SKILL.md"
-    ],
-    "subagents": {
-      "agents": [
-        "./agents"
-      ]
-    }
+    ]
   },
   "scripts": {
     "source:generate": "node scripts/source.ts generate",
@@ -44,9 +38,6 @@
     "test": "pnpm test:source && pnpm test:runtime",
     "quality": "biome check --error-on-warnings . && oxlint --config oxlint.config.ts .",
     "check": "pnpm source:verify && pnpm test && pnpm quality"
-  },
-  "dependencies": {
-    "pi-subagents": "0.71.0"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": ">=0.86.1",

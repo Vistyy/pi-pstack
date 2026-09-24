@@ -2,7 +2,6 @@ import type { Dirent } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { generateProfiles } from "./profiles.ts";
 import {
   contentDiff,
   copyTree,
@@ -19,7 +18,6 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 async function build(staging: string) {
   const content = path.join(staging, "content/pstack");
   await replay(root, path.join(root, "upstream/pstack"), content);
-  await generateProfiles(content, path.join(staging, "agents"));
 }
 
 async function generate() {
@@ -27,7 +25,7 @@ async function generate() {
   await temporary("pstack-generate-", async (staging) => {
     await build(staging);
 
-    for (const relative of ["content/pstack", "agents"]) {
+    for (const relative of ["content/pstack"]) {
       const target = path.join(root, relative);
       await rm(target, { recursive: true, force: true });
       await copyTree(path.join(staging, relative), target);
@@ -41,7 +39,7 @@ async function verify() {
   await temporary("pstack-verify-", async (staging) => {
     await build(staging);
 
-    for (const relative of ["content/pstack", "agents"]) {
+    for (const relative of ["content/pstack"]) {
       const actual = await treeId(path.join(root, relative));
       const expected = await treeId(path.join(staging, relative));
 

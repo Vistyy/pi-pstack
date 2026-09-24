@@ -106,12 +106,9 @@ function success(result: SpawnSyncReturns<string>) {
 
 async function activeState(root: string) {
   return Promise.all(
-    [
-      "upstream.lock.json",
-      "upstream/pstack/base.txt",
-      "content/pstack/base.txt",
-      "agents/pstack-poteto-agent.md",
-    ].map((name) => readFile(path.join(root, name), "utf8")),
+    ["upstream.lock.json", "upstream/pstack/base.txt", "content/pstack/base.txt"].map((name) =>
+      readFile(path.join(root, name), "utf8"),
+    ),
   );
 }
 
@@ -133,10 +130,6 @@ await test("generate and verify work without upstream Git objects, preserve sour
   assert.equal(await readFile(path.join(f.root, "content/pstack/base.txt"), "utf8"), "adapted\n");
   assert.equal(await readlink(path.join(f.root, "content/pstack/link")), "base.txt");
   assert.equal((await stat(path.join(f.root, "content/pstack/run.sh"))).mode & 0o111, 0o111);
-  assert.match(
-    await readFile(path.join(f.root, "agents/pstack-poteto-agent.md"), "utf8"),
-    /Original identity\.\n\nComplete original method\./,
-  );
   assert.match(success(f.run("diff")), /-pinned\n\+adapted/);
   await put(f.root, "content/pstack/extra.txt", "drift");
   const drift = f.run("verify");
