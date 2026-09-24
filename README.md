@@ -17,7 +17,7 @@ No personalization or migration of old Pi-PStack settings is included.
 | Path | Responsibility |
 | --- | --- |
 | `upstream/pstack/` | Unmodified snapshot of the locked upstream subtree. |
-| `patches/*.patch` | Ordered, visible Pi translations. Currently the mode name and setup storage/model mechanics. |
+| `patches/*.patch` | Ordered, visible Pi translations. Currently the mode name, its reminder moved from unsupported metadata into the body, and setup storage/model mechanics. |
 | `content/pstack/` | Generated snapshot plus those patches. Do not edit directly. |
 | `instructions/pi-host.md` | Tool-name, native delegation, and capability-boundary translations. |
 | `agents/` | Generated native backend profiles. Poteto profiles embed the full source mode; Comment Sicko retains its source prompt. |

@@ -5,10 +5,11 @@ disable-model-invocation: true
 mode: true
 icon: crown
 color: yellow
-reminder: New task? Playbook match or rigor needed -> apply /poteto-mode. Casual turn or user opts out -> don't.
 ---
 
 # Poteto mode
+
+New task? Playbook match or rigor needed -> apply /poteto-mode. Casual turn or user opts out -> don't.
 
 ## Non-negotiables
 

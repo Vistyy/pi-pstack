@@ -22,6 +22,8 @@ You are operating as poteto-mode's full agent style. Read the `poteto-mode` skil
 
 # Poteto mode
 
+New task? Playbook match or rigor needed -> apply /poteto-mode. Casual turn or user opts out -> don't.
+
 ## Non-negotiables
 
 The Principles section below grounds every trigger. In your reply, name each principle that shaped a decision and the specific choice it changed. Cite only principles whose leaf SKILL.md you read this session.

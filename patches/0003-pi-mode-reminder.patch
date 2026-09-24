@@ -1,0 +1,14 @@
+--- a/skills/poteto-mode/SKILL.md
++++ b/skills/poteto-mode/SKILL.md
+@@ -6,9 +6,10 @@
+ mode: true
+ icon: crown
+ color: yellow
+-reminder: New task? Playbook match or rigor needed -> apply /poteto-mode. Casual turn or user opts out -> don't.
+ ---
+ 
+ # Poteto mode
+ 
++New task? Playbook match or rigor needed -> apply /poteto-mode. Casual turn or user opts out -> don't.
++
+ ## Non-negotiables
