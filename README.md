@@ -36,6 +36,8 @@ pnpm source:generate
 pnpm check
 ```
 
+Runtime tests use real Pi sessions and Pi's scripted Faux provider. They exercise the native tool loop, configuration persistence, branch state, compaction, question bindings, and command expansion without network model calls. They do not establish that an LLM follows the PStack method or that nested backend execution works.
+
 Shared `@syzom/typescript-quality` configuration governs maintained code. Generated and untouched upstream content is excluded from local code linting. The runtime uses the existing Pi callback API rather than introducing a second application runtime.
 
 The source CLI locates its package from its own file, not the caller's working directory. Verification checks the tracked snapshot's Git tree without requiring upstream commit objects or a network connection. It checks generated content and profiles by rebuilding them, including executable-file and symlink identity.
@@ -61,6 +63,6 @@ Preparation is not adoption. Review the actual upstream method changes and trans
 
 Real targets use `provider/model:thinking`. Cursor slugs remain source defaults, not automatic executable aliases. Explicit `inherit-parent` and `auto` resolve to the current parent's model and thinking. Panels retain their order, repeated entries, and chosen cardinality. Budget adjustment stays within the selected model's supported reasoning levels; it does not substitute another family.
 
-`/poteto-mode on` and `/poteto-mode off` change branch-local mode state. `/poteto-mode <task>` expands the packaged skill in interactive and RPC sessions. For print/JSON execution, use `/skill:poteto-mode <task>` directly. Enabled parent sessions receive the full generated mode on each prompt, including after native compaction.
+`/poteto-mode on` and `/poteto-mode off` change branch-local mode state. The current native session branch owns that state; there is no separate mode cache to restore. `/poteto-mode <task>` expands the packaged skill in interactive and RPC sessions. For print/JSON execution, use `/skill:poteto-mode <task>` directly. Enabled parent sessions receive the full generated mode on each prompt, including after native compaction.
 
 A normal Pi configuration switch is separate from developing this package. Validate the package in an isolated Pi agent directory first, including native profile discovery, nested delegation, configured model diversity, and result ordering. Do not combine it with the old Pi-PStack or Workgraph runtime while evaluating the replacement.

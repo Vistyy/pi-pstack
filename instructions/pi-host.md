@@ -1,6 +1,6 @@
 # Pi mechanics for the packaged PStack skills
 
-These mappings apply when following a packaged PStack skill. Its procedure, references, role choices, evidence requirements, and presentation rules remain authoritative for that workflow. This adapter does not select another methodology.
+These mappings replace Cursor-specific host mechanics when following a packaged PStack skill. For model selection, use the effective Pi role table rather than the source's Cursor-rule lookup, slug fallback, or omitted-model alias mechanics. The skill's procedure, references, role choices, evidence requirements, and presentation rules remain authoritative for the workflow. This adapter does not select another methodology.
 
 ## Skill and tool names
 
