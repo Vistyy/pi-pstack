@@ -90,13 +90,26 @@ export function createRuntime(
       projection = `Invalid PStack role configuration: ${String(error)}. Use /setup-pstack to replace it.`;
     }
 
+    const identity =
+      options?.profile && options.profile !== "generalPurpose"
+        ? stripFrontmatter(
+            await readFile(
+              join(
+                root,
+                "content/pstack/agents",
+                options.profile === "poteto-agent" ? "poteto-agent.md" : "comment-sicko.md",
+              ),
+              "utf8",
+            ),
+          )
+        : "";
     const mode =
       options?.profile === "poteto-agent" || (options === undefined && modeEnabled(ctx))
         ? `\n\n${content.mode}`
         : "";
 
     return {
-      systemPrompt: `${event.systemPrompt}${mode}\n\nPackaged PStack skills directory: ${skillsDir}\n\n${content.host}\n\n## PStack role map\n${projection}`,
+      systemPrompt: `${event.systemPrompt}\n\n${identity}${mode}\n\nPackaged PStack skills directory: ${skillsDir}\n\n${content.host}\n\n## PStack role map\n${projection}`,
     };
   });
   pi.registerCommand("poteto-mode", {

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { readdir, readFile } from "node:fs/promises";
+
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -13,7 +13,6 @@ import {
   ModelRuntime,
   SessionManager,
   SettingsManager,
-  stripFrontmatter,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { resolveTarget } from "./models.js";
@@ -23,6 +22,8 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 type Profile = "generalPurpose" | "poteto-agent" | "Comment Sicko";
 
 type Status = "running" | "cancelling" | "completed" | "failed" | "cancelled";
+
+type ChildOwner = { depth: number; readonly: boolean; child?: Child };
 
 type Child = {
   id: string;
@@ -44,7 +45,7 @@ const textResult = (text: string) => ({ content: [{ type: "text" as const, text 
 /** One instance per extension runtime; never shared with a parent session. */
 export function installExecutor(
   pi: ExtensionAPI,
-  owner?: { depth: number; readonly: boolean; child: Child },
+  owner?: ChildOwner,
   createRuntime?: (pi: ExtensionAPI, options: { profile: Profile }) => void,
 ): void {
   const children = new Map<string, Child>();
@@ -91,7 +92,11 @@ export function installExecutor(
   });
   pi.on("session_before_switch", stop);
   pi.on("session_before_fork", stop);
-  pi.on("session_before_tree", stop);
+  pi.on("session_tree", async (_event, ctx) => {
+    await stop();
+    alive = true;
+    branch = ctx.sessionManager.getLeafId();
+  });
   pi.on("session_shutdown", stop);
 
   pi.registerTool({
@@ -197,8 +202,10 @@ export function installExecutor(
           else if (config) registry.registerProvider(id, config);
         }
 
+        const active = pi.getActiveTools();
         const paths = pi
           .getAllTools()
+          .filter((tool) => active.includes(tool.name))
           .flatMap((tool) => (tool.sourceInfo?.path ? [tool.sourceInfo.path] : []))
           .filter(
             (path) =>
@@ -206,12 +213,10 @@ export function installExecutor(
               path !== fileURLToPath(new URL("../extensions/index.ts", import.meta.url)),
           );
 
-        const skillsDir = join(root, "content/pstack/skills");
-
-        const skillPaths = (await readdir(skillsDir, { withFileTypes: true }))
-          .filter((item) => item.isDirectory())
-          .map((item) => join(skillsDir, item.name));
-
+        const ownership: ChildOwner = {
+          depth: (owner?.depth ?? 0) + 1,
+          readonly,
+        };
         const loader = new DefaultResourceLoader({
           cwd,
           agentDir,
@@ -219,17 +224,16 @@ export function installExecutor(
           eventBus: createEventBus(),
           noExtensions: true,
           additionalExtensionPaths: [...new Set(paths)],
-          additionalSkillPaths: skillPaths,
+          noPromptTemplates: true,
+          noThemes: true,
+          systemPromptOverride: () => undefined,
+          appendSystemPromptOverride: () => [],
           extensionFactories: [
             {
               name: "pstack-child",
               factory: (api) => {
                 createRuntime?.(api, { profile });
-                installExecutor(
-                  api,
-                  { depth: (owner?.depth ?? 0) + 1, readonly, child },
-                  createRuntime,
-                );
+                installExecutor(api, ownership, createRuntime);
               },
             },
           ],
@@ -247,8 +251,6 @@ export function installExecutor(
         });
 
         await loader.reload();
-        const active = pi.getActiveTools();
-
         const tools = readonly
           ? ["read", "grep", "find", "ls", "pstack_todo", "pstack_task", "pstack_tasks"]
           : [...new Set([...active, "pstack_task", "pstack_tasks", "pstack_todo"])];
@@ -286,8 +288,9 @@ export function installExecutor(
           error: undefined,
           children: new Set(),
         };
+        ownership.child = child;
         children.set(child.id, child);
-        owner?.child.children.add(child);
+        owner?.child?.children.add(child);
       }
 
       child.status = "running";
@@ -299,22 +302,8 @@ export function installExecutor(
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Completion must discriminate native outcomes and descendant settlement.
       const run = async () => {
         try {
-          const identity =
-            child.profile === "generalPurpose"
-              ? ""
-              : stripFrontmatter(
-                  await readFile(
-                    join(
-                      root,
-                      "content/pstack/agents",
-                      child.profile === "poteto-agent" ? "poteto-agent.md" : "comment-sicko.md",
-                    ),
-                    "utf8",
-                  ),
-                );
-
           if (child.status === "cancelling" || !alive) throw new Error("Child cancelled");
-          await child.session.prompt(`${identity}\n\n${params.prompt}`);
+          await child.session.prompt(params.prompt);
           await Promise.all([...child.children].map((nested) => nested.run ?? Promise.resolve()));
           await child.session.waitForIdle();
           const last = [...child.session.messages].reverse().find((m) => m.role === "assistant");
@@ -333,6 +322,10 @@ export function installExecutor(
             .filter((part) => part.type === "text")
             .map((part) => part.text)
             .join("");
+          if (child.status === "cancelled" || !alive) {
+            child.status = "cancelled";
+            return;
+          }
           child.status = "completed";
         } catch (error) {
           child.error = String(error);
@@ -346,7 +339,12 @@ export function installExecutor(
 
       if (params.run_in_background ?? child.profile === "poteto-agent") {
         void child.run.then(() => {
-          if (alive && branch === origin && signal?.aborted !== true)
+          if (
+            alive &&
+            branch === origin &&
+            signal?.aborted !== true &&
+            child.status !== "cancelled"
+          )
             pi.sendMessage(
               {
                 customType: "pstack-task-result",
@@ -367,6 +365,7 @@ export function installExecutor(
       };
 
       signal?.addEventListener("abort", abort, { once: true });
+      if (signal?.aborted === true) void cancel(child);
 
       try {
         await child.run;

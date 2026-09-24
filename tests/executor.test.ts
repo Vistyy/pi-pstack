@@ -357,10 +357,24 @@ export default (pi) => {
     fauxAssistantMessage("parent finished Poteto"),
   ]);
   await session.prompt("Delegate Poteto");
-  assert.match(potetoContext, /Poteto assignment/);
-  assert.match(potetoContext, /Poteto subagent/);
-  assert.match(potetoContext, /poteto-mode's full agent style/);
-  assert.match(potetoContext, /Packaged PStack skills directory/);
+  const potetoMessages = JSON.parse(potetoContext) as Array<{
+    role: string;
+    content: string | Array<{ type: string; text?: string }>;
+  }>;
+  const potetoSystem = potetoMessages.find((message) => message.role === "system");
+  assert.ok(potetoSystem && typeof potetoSystem.content === "string");
+  const systemText = potetoSystem.content;
+  assert.ok(
+    systemText.includes(
+      "# Poteto subagent\n\nYou are operating as poteto-mode's full agent style. Read the `poteto-mode` skill's `SKILL.md` in full before doing any work, including its inline Principles index. Navigate to a leaf `principle-*` skill whenever you apply that principle.",
+    ),
+  );
+  assert.doesNotMatch(systemText, /Poteto assignment/);
+  const potetoUser = potetoMessages.find((message) => message.role === "user");
+  assert.ok(potetoUser && Array.isArray(potetoUser.content));
+  assert.deepEqual(potetoUser.content, [{ type: "text", text: "Poteto assignment" }]);
+  assert.match(systemText, /Packaged PStack skills directory/);
+  assert.doesNotMatch(systemText, /Parent secret/);
 
   let started = 0;
   let bothStarted: (() => void) | undefined;
