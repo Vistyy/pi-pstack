@@ -76,7 +76,11 @@ export function createRuntime(pi: ExtensionAPI): void {
 
     try {
       const state = await modelState(content.roles, ctx);
-      projection = JSON.stringify({ roles: state.roles, error: state.error });
+      projection = JSON.stringify({
+        parentSelector: state.parentSelector,
+        roles: state.roles,
+        error: state.error,
+      });
     } catch (error) {
       projection = `Invalid PStack role configuration: ${String(error)}. Use /setup-pstack to replace it.`;
     }

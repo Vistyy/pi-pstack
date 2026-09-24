@@ -4,7 +4,7 @@ These mappings replace Cursor-specific host mechanics when following a packaged 
 
 ## Skill and tool names
 
-A named PStack skill is a file to read and follow, not a tool call. Read its complete `SKILL.md` under the packaged skills directory shown with these instructions. Resolve its relative reference paths against that skill's directory. User-facing invocation is `/skill:<name>`; `/poteto-mode` and `/setup-pstack` are convenience commands.
+A named PStack skill is a file to read and follow, not a tool call. For a skill named `<name>`, read `<name>/SKILL.md` in full under the packaged skills directory shown with these instructions. Resolve its relative reference paths against that skill's directory. User-facing invocation is `/skill:<name>`; `/poteto-mode` and `/setup-pstack` are convenience commands.
 
 Use Pi `read`, `grep`, `find`, `ls`, `bash`, `edit`, and `write` for the corresponding upstream file and shell operations. `Glob` maps to `find`. The upstream todo list maps to `pstack_todo`: omit `items` to read it; supply the complete `items` list to replace it. `AskQuestion` maps to `pstack_question`. If interactive questions are unavailable, ask the user in the conversation and wait; do not manufacture an answer.
 
@@ -13,6 +13,8 @@ Use Pi `read`, `grep`, `find`, `ls`, `bash`, `edit`, and `write` for the corresp
 `pstack_models` owns the Pi model configuration. `list` reports available exact provider/model IDs and supported thinking levels. `get` reports the upstream defaults, saved choices, effective Pi selectors, and missing capabilities. `set` persists the complete role table and selected budget after the setup skill's confirmation procedure.
 
 Use the effective selector for the role prescribed by the skill, including its `:thinking` suffix. Upstream Cursor model slugs are reference defaults, not executable Pi model IDs. An unresolved role requires setup or an explicit user choice; do not substitute a different model, inherit implicitly, or omit panel members. Explicit `inherit-parent` and `auto` choices resolve to the current parent's model and thinking. Panel order, repeated entries, and the distinction between a fan-out panel and a cross-judge pool are preserved.
+
+If the upstream request and agent supply neither a model role nor an explicit model, preserve the upstream agent's default `inherit` behavior by passing the displayed `parentSelector`, including its thinking suffix. This applies to a direct Comment Sicko invocation without Poteto's role defaults. It is not a fallback for an unresolved named role. If `parentSelector` is absent, resolve the reported configuration or model gap rather than guessing.
 
 ## Delegation
 

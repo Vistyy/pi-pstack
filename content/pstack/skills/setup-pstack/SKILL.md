@@ -1,6 +1,6 @@
 ---
 name: setup-pstack
-description: Configure which models pstack uses per role and at what reasoning budget. Detects your available models and writes an always-applied rule that overrides the skill defaults. Use for /setup-pstack, "configure pstack models", "pstack budget", or changing pstack's model choices.
+description: Configure which models PStack uses per role and at what reasoning budget in Pi. Use for /setup-pstack, "configure pstack models", "pstack budget", or changing PStack's model choices.
 ---
 
 # Setup pstack
@@ -40,7 +40,7 @@ After confirmation, call `pstack_models` with `action: "set"`, the selected `bud
 
 This block is the unchanged upstream default table for comparison, not a Pi configuration file or a list of available Pi routes:
 
-```
+```text
 ---
 description: pstack per-role model choices (overrides skill defaults)
 alwaysApply: true

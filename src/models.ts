@@ -139,11 +139,19 @@ export function availableModels(ctx: ExtensionContext) {
   }));
 }
 
+function parentSelector(ctx: ExtensionContext) {
+  return ctx.model === undefined
+    ? undefined
+    : `${ctx.model.provider}/${ctx.model.id}:${ctx.thinkingLevel}`;
+}
+
 function resolveTarget(target: string, ctx: ExtensionContext, budget: Budget = "unlimited") {
   if (target === "inherit-parent" || target === "auto") {
-    if (ctx.model === undefined) throw new Error(`${target}: current parent model is unavailable`);
+    const parent = parentSelector(ctx);
 
-    return `${ctx.model.provider}/${ctx.model.id}:${ctx.thinkingLevel}`;
+    if (parent === undefined) throw new Error(`${target}: current parent model is unavailable`);
+
+    return parent;
   }
 
   const match = target.match(/^([^/]+)\/(.+):([^:]+)$/);
@@ -216,6 +224,7 @@ export async function modelState(roles: Role[], ctx: ExtensionContext) {
 
   return {
     config,
+    parentSelector: parentSelector(ctx),
     sourceDefaults: Object.fromEntries(roles.map((role) => [role.name, role.defaults] as const)),
     roles: config === null ? null : effectiveRoles(config, ctx),
     error:

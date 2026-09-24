@@ -168,10 +168,16 @@ async function fixture(t: TestContext) {
 
 await test("native tool loop persists exact model roles, applies budgets, resolves aliases, and reports invalid targets", async (t) => {
   const f = await fixture(t);
+  const listed = await f.call("pstack_models", { action: "list" });
+  assert.equal(listed.isError, false);
+  assert.partialDeepStrictEqual(JSON.parse(listed.text), [
+    { provider: "fixture", id: "judge:rev1", thinking: ["low", "medium", "high"] },
+  ]);
   const initial = await f.call("pstack_models", { action: "get" });
   assert.equal(initial.isError, false);
   assert.partialDeepStrictEqual(JSON.parse(initial.text), {
     config: null,
+    parentSelector: "fixture/judge:rev1:high",
     roles: null,
     sourceDefaults: {
       "arena runners": ["claude-opus-5-5-max", "gpt-5.6-sol-max", "grok-4.7-xhigh-fast"],
@@ -196,7 +202,12 @@ await test("native tool loop persists exact model roles, applies budgets, resolv
   });
   f.session.setThinkingLevel("low");
   const current = await f.call("pstack_models", { action: "get" });
+  assert.match(
+    await f.prompt("parent selector inspection"),
+    /"parentSelector":"fixture\/judge:rev1:low"/,
+  );
   assert.partialDeepStrictEqual(JSON.parse(current.text), {
+    parentSelector: "fixture/judge:rev1:low",
     roles: {
       "architect runners": [
         { requested: "inherit-parent", selector: "fixture/judge:rev1:low" },
@@ -233,6 +244,15 @@ await test("native tool loop persists exact model roles, applies budgets, resolv
 
   assert.equal(noReasoning.isError, true);
   assert.match(noReasoning.text, /No supported reasoning level/);
+
+  const unknownThinking = await f.call("pstack_models", {
+    action: "set",
+    budget: "small",
+    roles: { ...roles, "how explorer": "fixture/judge:rev1:bananas" },
+  });
+
+  assert.equal(unknownThinking.isError, true);
+  assert.match(unknownThinking.text, /Unknown thinking level/);
   assert.equal(await readFile(join(f.directory, "pstack-models.json"), "utf8"), before);
   await writeFile(join(f.directory, "pstack-models.json"), "{}");
   const invalid = await f.call("pstack_models", { action: "get" });

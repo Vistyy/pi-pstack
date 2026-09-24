@@ -1,0 +1,28 @@
+--- a/skills/setup-pstack/SKILL.md
++++ b/skills/setup-pstack/SKILL.md
+@@ -1,5 +1,5 @@
+ ---
+ name: setup-pstack
+-description: Configure which models pstack uses per role and at what reasoning budget. Detects your available models and writes an always-applied rule that overrides the skill defaults. Use for /setup-pstack, "configure pstack models", "pstack budget", or changing pstack's model choices.
++description: Configure which models PStack uses per role and at what reasoning budget in Pi. Use for /setup-pstack, "configure pstack models", "pstack budget", or changing PStack's model choices.
+ ---
+ 
+@@ -41,7 +41,7 @@
+ This block is the unchanged upstream default table for comparison, not a Pi configuration file or a list of available Pi routes:
+ 
+-```
++```text
+ ---
+ description: pstack per-role model choices (overrides skill defaults)
+ alwaysApply: true
+ ---
+--- a/docs/guide/01-setup.md
++++ b/docs/guide/01-setup.md
+@@ -1,5 +1,7 @@
+ # Set up pstack
+ 
++> **Original Cursor reference, not the Pi setup guide.** The instructions below describe the upstream Cursor plugin. For this Pi package, use the [root README](../../../../README.md) and its `/setup-pstack` instructions. Cursor installation commands, rule paths, fallback behavior, and optional Cursor dependencies below do not describe the Pi adapter.
++
+ In this page you install the plugin, pick which models pstack uses, and run your first task. Setup is one command plus a short conversation.
+ 
+ ## Install the plugin

@@ -1,5 +1,7 @@
 # Set up pstack
 
+> **Original Cursor reference, not the Pi setup guide.** The instructions below describe the upstream Cursor plugin. For this Pi package, use the [root README](../../../../README.md) and its `/setup-pstack` instructions. Cursor installation commands, rule paths, fallback behavior, and optional Cursor dependencies below do not describe the Pi adapter.
+
 In this page you install the plugin, pick which models pstack uses, and run your first task. Setup is one command plus a short conversation.
 
 ## Install the plugin
