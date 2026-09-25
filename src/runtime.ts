@@ -11,6 +11,7 @@ import { Check } from "typebox/value";
 import type { Profile } from "./child-session.js";
 import { installExecutor } from "./executor.js";
 import { availableModels, ModelsInput, modelState, parseRoles, saveModels } from "./models.js";
+import { installQuestionTool } from "./question.js";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 
@@ -178,24 +179,5 @@ export function createRuntime(pi: ExtensionAPI, options?: { profile: Profile }):
       return result(JSON.stringify(params.items ?? items));
     },
   });
-  pi.registerTool({
-    name: "pstack_question",
-    label: "PStack question",
-    description:
-      "Ask the user to choose an option through Pi's UI. If unavailable or dismissed, ask in the conversation and wait; no answer is fabricated.",
-    parameters: Type.Object({
-      question: Type.String(),
-      options: Type.Array(Type.String(), { minItems: 1 }),
-    }),
-    async execute(_id, params, _signal, _update, ctx) {
-      if (!ctx.hasUI)
-        throw new Error("Cannot ask interactively in this mode; ask the user in the conversation.");
-      const answer = await ctx.ui.select(params.question, params.options);
-
-      if (answer === undefined)
-        throw new Error("Question dismissed; ask the user in the conversation.");
-
-      return result(answer);
-    },
-  });
+  installQuestionTool(pi);
 }

@@ -1,14 +1,14 @@
-import { type ExtensionContext, getMarkdownTheme } from "@earendil-works/pi-coding-agent";
+import { getMarkdownTheme, type Theme } from "@earendil-works/pi-coding-agent";
 import {
+  type Component,
   Editor,
-  type Focusable,
   Key,
-  type KeyId,
+  type KeybindingsManager,
   Markdown,
   matchesKey,
   SelectList,
+  type TUI,
   truncateToWidth,
-  visibleWidth,
   wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
 
@@ -20,322 +20,345 @@ export type QuestionnaireResult =
   | { status: "answered"; answers: QuestionAnswer[] }
   | { status: "cancelled"; answers: [] };
 
+type QuestionnaireUI = {
+  custom(
+    factory: (
+      tui: TUI,
+      theme: Theme,
+      keys: KeybindingsManager,
+      done: (value: QuestionnaireResult) => void,
+    ) => Component,
+  ): Promise<QuestionnaireResult>;
+};
+
 const cancelled = (): QuestionnaireResult => ({ status: "cancelled", answers: [] });
 
 export async function showQuestionnaire(
-  ctx: ExtensionContext,
+  ui: QuestionnaireUI,
   questions: Question[],
   signal: AbortSignal | undefined,
 ): Promise<QuestionnaireResult> {
-  if (signal?.aborted) return cancelled();
+  const isAborted = () => signal?.aborted ?? false;
+
+  if (isAborted()) return cancelled();
   let close: (() => void) | undefined;
   const onAbort = () => close?.();
   signal?.addEventListener("abort", onAbort, { once: true });
 
   try {
-    const result = await ctx.ui.custom<QuestionnaireResult>((tui, theme, keys, done) => {
-      let finished = false;
+    const result = await ui.custom((tui, theme, keys, done) => {
+      const component = createQuestionnaire(tui, theme, keys, questions, done);
+      close = component.cancel;
 
-      const finish = (value: QuestionnaireResult) => {
-        if (finished) return;
-        finished = true;
-        done(value);
-      };
-
-      close = () => finish(cancelled());
-
-      if (signal?.aborted) close();
-
-      const answers = new Map<string, QuestionAnswer>();
-      let page = 0;
-      let editing = false;
-      let bodyOffset = 0;
-      let bodyHeight = 1;
-      let selected = 0;
-      let warning = "";
-      const bodies = questions.map((q) => new Markdown(q.question, 0, 0, getMarkdownTheme()));
-
-      const listTheme = {
-        selectedPrefix: (s: string) => theme.fg("accent", s),
-        selectedText: (s: string) => theme.fg("accent", s),
-        description: (s: string) => theme.fg("muted", s),
-        scrollInfo: (s: string) => theme.fg("dim", s),
-        noMatch: (s: string) => theme.fg("warning", s),
-      };
-
-      const editor = new Editor(tui, {
-        borderColor: (s) => theme.fg("accent", s),
-        selectList: listTheme,
-      });
-
-      const lists = questions.map(
-        (q) =>
-          new SelectList(
-            [
-              ...q.options.map((label, i) => ({ label, value: String(i) })),
-              { label: "Other (write an answer)", value: "other" },
-            ],
-            Math.min(q.options.length + 1, 5),
-            listTheme,
-          ),
-      );
-
-      const refresh = () => tui.requestRender();
-      const isKey = (data: string, key: KeyId) => data === key || matchesKey(data, key);
-
-      const selectPage = (index: number) => {
-        page = index;
-        bodyOffset = 0;
-
-        if (page < questions.length) {
-          const answer = answers.get(questions[page].id);
-          selected =
-            answer?.kind === "other"
-              ? questions[page].options.length
-              : Math.max(0, questions[page].options.indexOf(answer?.value ?? ""));
-          lists[page].setSelectedIndex(selected);
-        }
-      };
-
-      const next = () => {
-        selectPage(Math.min(page + 1, questions.length));
-        warning = "";
-        refresh();
-      };
-
-      const answerOther = (text: string) => {
-        if (!text.trim()) {
-          warning = "Other cannot be blank";
-          refresh();
-
-          return;
-        }
-
-        answers.set(questions[page].id, { id: questions[page].id, kind: "other", value: text });
-        editing = false;
-        editor.focused = false;
-        next();
-      };
-
-      editor.onSubmit = answerOther;
-
-      const renderReview = (width: number, lines: string[]) => {
-        for (const q of questions) {
-          const answer = answers.get(q.id);
-
-          const value = answer
-            ? `${answer.kind === "other" ? "Other: " : ""}${answer.value}`
-            : "Unanswered";
-
-          lines.push(...wrapTextWithAnsi(`${q.id}: ${value}`, width));
-        }
-
-        lines.push(
-          answers.size === questions.length
-            ? "Press Enter to Submit"
-            : "Answer every question before submitting",
-        );
-      };
-
-      const renderQuestion = (width: number, lines: string[]) => {
-        const optionLines = editing ? editor.render(width) : lists[page].render(width);
-        const available = Math.max(3, tui.terminal.rows - 9);
-        bodyHeight = Math.max(1, available - optionLines.length);
-        const body = bodies[page].render(width);
-        bodyOffset = Math.min(bodyOffset, Math.max(0, body.length - bodyHeight));
-        lines.push(...body.slice(bodyOffset, bodyOffset + bodyHeight));
-
-        if (body.length > bodyHeight) {
-          lines.push(
-            theme.fg(
-              "dim",
-              `Body ${bodyOffset + 1}-${Math.min(body.length, bodyOffset + bodyHeight)}/${body.length} • PgUp/PgDn`,
-            ),
-          );
-        }
-
-        lines.push("", ...optionLines);
-
-        if (editing) lines.push(theme.fg("muted", "Other answer:"));
-      };
-
-      const handleNavigation = (data: string): boolean => {
-        const actions: Array<[KeyId, () => boolean]> = [
-          [
-            Key.escape,
-            () => {
-              finish(cancelled());
-
-              return true;
-            },
-          ],
-          [
-            Key.pageUp,
-            () => {
-              bodyOffset = Math.max(0, bodyOffset - bodyHeight);
-              refresh();
-
-              return true;
-            },
-          ],
-          [
-            Key.pageDown,
-            () => {
-              bodyOffset += bodyHeight;
-              refresh();
-
-              return true;
-            },
-          ],
-          [
-            Key.left,
-            () => {
-              if (page === 0) return false;
-              selectPage(page - 1);
-              refresh();
-
-              return true;
-            },
-          ],
-          [
-            Key.right,
-            () => {
-              if (page >= questions.length || !answers.has(questions[page].id)) return false;
-              next();
-
-              return true;
-            },
-          ],
-        ];
-
-        const action = actions.find(([key]) => isKey(data, key));
-
-        return action?.[1]() ?? false;
-      };
-
-      const confirmChoice = () => {
-        const q = questions[page];
-
-        if (selected === q.options.length) {
-          editing = true;
-          editor.focused = true;
-          editor.setText(
-            answers.get(q.id)?.kind === "other" ? (answers.get(q.id)?.value ?? "") : "",
-          );
-
-          return;
-        }
-
-        answers.set(q.id, { id: q.id, kind: "option", value: q.options[selected] ?? "" });
-        next();
-      };
-
-      const handleChoice = (data: string) => {
-        const count = questions[page].options.length + 1;
-
-        if (keys.matches(data, "tui.select.up")) selected = (selected + count - 1) % count;
-
-        if (keys.matches(data, "tui.select.down")) selected = (selected + 1) % count;
-
-        lists[page].setSelectedIndex(selected);
-        if (keys.matches(data, "tui.select.confirm")) confirmChoice();
-        refresh();
-      };
-
-      const handleEditing = (data: string) => {
-        if (isKey(data, Key.escape)) {
-          editing = false;
-          editor.focused = false;
-          warning = "";
-        } else editor.handleInput(data);
-        refresh();
-      };
-
-      const submitReview = (data: string) => {
-        if (!keys.matches(data, "tui.select.confirm") || answers.size !== questions.length) return;
-
-        const ordered = questions.reduce<QuestionAnswer[]>((items, q) => {
-          const answer = answers.get(q.id);
-
-          if (answer) items.push(answer);
-
-          return items;
-        }, []);
-
-        finish({ status: "answered", answers: ordered });
-      };
-
-      const component: Focusable & {
-        render(width: number): string[];
-        invalidate(): void;
-        handleInput(data: string): void;
-      } = {
-        get focused() {
-          return editor.focused;
-        },
-        set focused(value) {
-          editor.focused = value && editing;
-        },
-        invalidate() {
-          for (const body of bodies) body.invalidate();
-
-          for (const list of lists) list.invalidate();
-          editor.invalidate();
-        },
-        handleInput(data) {
-          if (finished) return;
-
-          if (editing) {
-            handleEditing(data);
-
-            return;
-          }
-
-          if (handleNavigation(data)) return;
-
-          if (page === questions.length) {
-            submitReview(data);
-
-            return;
-          }
-
-          handleChoice(data);
-        },
-        render(width) {
-          const w = Math.max(1, width);
-          const isReview = page === questions.length;
-
-          const title = isReview
-            ? `Review • ${questions.length} questions`
-            : `Question ${page + 1}/${questions.length}`;
-
-          const lines = [theme.fg("accent", truncateToWidth(title, w))];
-
-          if (isReview) renderReview(w, lines);
-          else renderQuestion(w, lines);
-
-          if (warning) lines.push(theme.fg("warning", warning));
-
-          const help = isReview
-            ? "← back/edit • Enter Submit • Esc cancel"
-            : editing
-              ? "Enter save • Shift+Enter newline • Esc choices"
-              : "↑↓ choose • Enter answer • ← back • → next • PgUp/PgDn body • Esc cancel";
-
-          lines.push(...wrapTextWithAnsi(theme.fg("dim", help), w));
-
-          return lines.map((line) =>
-            visibleWidth(line) > w ? truncateToWidth(line, w, "") : line,
-          );
-        },
-      };
+      if (isAborted()) queueMicrotask(close);
 
       return component;
     });
 
-    return signal?.aborted ? cancelled() : result;
+    return isAborted() ? cancelled() : result;
   } finally {
     signal?.removeEventListener("abort", onAbort);
     close = undefined;
   }
+}
+
+function createQuestionnaire(
+  tui: TUI,
+  theme: Theme,
+  keys: KeybindingsManager,
+  questions: Question[],
+  done: (result: QuestionnaireResult) => void,
+) {
+  let finished = false;
+
+  const finish = (value: QuestionnaireResult) => {
+    if (finished) return;
+    finished = true;
+    done(value);
+  };
+
+  const listTheme = {
+    selectedPrefix: (s: string) => theme.fg("accent", s),
+    selectedText: (s: string) => theme.fg("accent", s),
+    description: (s: string) => theme.fg("muted", s),
+    scrollInfo: (s: string) => theme.fg("dim", s),
+    noMatch: (s: string) => theme.fg("warning", s),
+  };
+
+  const pages = questions.map((question) => ({
+    question,
+    body: new Markdown(question.question, 0, 0, getMarkdownTheme()),
+    list: new SelectList(
+      [
+        ...question.options.map((label, index) => ({ label, value: String(index) })),
+        { label: "Other (write an answer)", value: "other" },
+      ],
+      Math.min(question.options.length + 1, 5),
+      listTheme,
+    ),
+  }));
+
+  const editor = new Editor(tui, {
+    borderColor: (s) => theme.fg("accent", s),
+    selectList: listTheme,
+  });
+
+  const answers = new Map<string, QuestionAnswer>();
+  let page = 0;
+  let selected = 0;
+  let editing = false;
+  let focused = false;
+  let bodyOffset = 0;
+  let bodyHeight = 1;
+  let warning = "";
+  let fits = true;
+  const refresh = () => tui.requestRender();
+
+  const current = () => {
+    const entry = pages[page];
+
+    if (!entry) throw new Error("No active question on the review page.");
+
+    return entry;
+  };
+
+  const selectPage = (index: number) => {
+    page = index;
+    bodyOffset = 0;
+    warning = "";
+
+    if (page < pages.length) {
+      const { question, list } = current();
+      const answer = answers.get(question.id);
+      selected =
+        answer?.kind === "other"
+          ? question.options.length
+          : Math.max(0, question.options.indexOf(answer?.value ?? ""));
+      list.setSelectedIndex(selected);
+    }
+
+    refresh();
+  };
+
+  const save = (kind: QuestionAnswer["kind"], value: string) => {
+    const { question } = current();
+    answers.set(question.id, { id: question.id, kind, value });
+    editing = false;
+    editor.focused = false;
+    selectPage(page + 1);
+  };
+
+  editor.disableSubmit = true;
+
+  const answerOther = () => {
+    const text = editor.getExpandedText();
+
+    if (!text.trim()) {
+      warning = "Other cannot be blank";
+      refresh();
+
+      return;
+    }
+
+    save("other", text);
+  };
+
+  const confirmChoice = () => {
+    const { question } = current();
+
+    if (selected === question.options.length) {
+      editing = true;
+      editor.focused = focused;
+      const answer = answers.get(question.id);
+      editor.setText(answer?.kind === "other" ? answer.value : "");
+    } else {
+      const value = question.options[selected];
+
+      if (value === undefined) throw new Error("No selected option.");
+      save("option", value);
+    }
+  };
+
+  const handleChoice = (data: string) => {
+    const { question, list } = current();
+    const count = question.options.length + 1;
+
+    if (keys.matches(data, "tui.select.up")) selected = (selected + count - 1) % count;
+
+    if (keys.matches(data, "tui.select.down")) selected = (selected + 1) % count;
+    list.setSelectedIndex(selected);
+
+    if (keys.matches(data, "tui.select.confirm")) confirmChoice();
+    refresh();
+  };
+
+  const handleEditing = (data: string) => {
+    if (keys.matches(data, "tui.select.cancel")) {
+      editing = false;
+      editor.focused = false;
+      warning = "";
+    } else if (keys.matches(data, "tui.input.newLine")) editor.handleInput(data);
+    else if (keys.matches(data, "tui.input.submit")) answerOther();
+    else editor.handleInput(data);
+    refresh();
+  };
+
+  const navigate = (data: string) => {
+    if (keys.matches(data, "tui.select.cancel")) {
+      finish(cancelled());
+
+      return true;
+    }
+
+    if (matchesKey(data, Key.pageUp) || matchesKey(data, Key.pageDown)) {
+      bodyOffset = Math.max(
+        0,
+        bodyOffset + (matchesKey(data, Key.pageUp) ? -bodyHeight : bodyHeight),
+      );
+      refresh();
+
+      return true;
+    }
+
+    if (matchesKey(data, Key.left) && page > 0) {
+      selectPage(page - 1);
+
+      return true;
+    }
+
+    if (matchesKey(data, Key.right) && page < pages.length && answers.has(current().question.id)) {
+      selectPage(page + 1);
+
+      return true;
+    }
+
+    return false;
+  };
+
+  const submit = (data: string) => {
+    if (!keys.matches(data, "tui.select.confirm") || answers.size !== questions.length) return;
+
+    const ordered = questions.map((question) => {
+      const answer = answers.get(question.id);
+
+      if (!answer) throw new Error("Question is unanswered.");
+
+      return answer;
+    });
+
+    finish({ status: "answered", answers: ordered });
+  };
+
+  const viewport = (body: string[], budget: number) => {
+    const scrolls = body.length > budget;
+    bodyHeight = Math.max(1, budget - (scrolls ? 1 : 0));
+    bodyOffset = Math.min(bodyOffset, Math.max(0, body.length - bodyHeight));
+    const visible = body.slice(bodyOffset, bodyOffset + bodyHeight);
+
+    if (scrolls && budget > 1)
+      visible.push(
+        theme.fg(
+          "dim",
+          `Lines ${bodyOffset + 1}-${bodyOffset + visible.length}/${body.length} • PgUp/PgDn`,
+        ),
+      );
+
+    return visible;
+  };
+
+  const review = (width: number) =>
+    questions.flatMap((question) => {
+      const answer = answers.get(question.id);
+
+      const value = answer
+        ? `${answer.kind === "other" ? "Other: " : ""}${answer.value}`
+        : "Unanswered";
+
+      return wrapTextWithAnsi(`${question.id}: ${value}`, width);
+    });
+
+  const hint = (id: Parameters<typeof keys.getKeys>[0]) => keys.getKeys(id).join("/");
+
+  const help = () => {
+    const cancel = hint("tui.select.cancel");
+
+    if (editing)
+      return `${hint("tui.input.submit")} save • ${cancel} choices • ${hint("tui.input.newLine")} newline`;
+
+    if (page === pages.length)
+      return `← edit • ${hint("tui.select.confirm")} Submit • ${cancel} cancel • PgUp/PgDn`;
+
+    return `${hint("tui.select.up")}/${hint("tui.select.down")} choose • ${hint("tui.select.confirm")} answer • ←→ pages • PgUp/PgDn • ${cancel} cancel`;
+  };
+
+  return {
+    cancel: () => finish(cancelled()),
+    get focused() {
+      return focused;
+    },
+    set focused(value: boolean) {
+      focused = value;
+      editor.focused = value && editing;
+    },
+    invalidate() {
+      for (const entry of pages) {
+        entry.body.invalidate();
+        entry.list.invalidate();
+      }
+
+      editor.invalidate();
+    },
+    handleInput(data: string) {
+      if (finished) return;
+
+      if (!fits) {
+        if (keys.matches(data, "tui.select.cancel")) finish(cancelled());
+
+        return;
+      }
+
+      if (editing) {
+        handleEditing(data);
+
+        return;
+      }
+
+      if (navigate(data)) return;
+
+      if (page === pages.length) submit(data);
+      else handleChoice(data);
+    },
+    render(width: number) {
+      const w = Math.max(1, width);
+      const isReview = page === pages.length;
+
+      const title = isReview
+        ? `Review • ${questions.length} questions`
+        : `Question ${page + 1}/${questions.length}${editing ? " • Other" : ""}`;
+
+      const helpLines = wrapTextWithAnsi(theme.fg("dim", help()), w);
+      const budget = Math.max(1, tui.terminal.rows - 1 - helpLines.length - (warning ? 1 : 0));
+      const lines = [theme.fg("accent", truncateToWidth(title, w))];
+
+      if (isReview) lines.push(...viewport(review(w), budget));
+      else {
+        const { body, list } = current();
+        const options = editing ? editor.render(w) : list.render(w);
+        lines.push(...viewport(body.render(w), Math.max(1, budget - options.length)), ...options);
+      }
+
+      if (warning) lines.push(theme.fg("warning", warning));
+      lines.push(...helpLines);
+      fits = lines.length <= tui.terminal.rows;
+
+      const rendered = fits
+        ? lines
+        : wrapTextWithAnsi(
+            `Enlarge the terminal to answer. ${hint("tui.select.cancel")} cancels.`,
+            w,
+          ).slice(0, tui.terminal.rows);
+
+      return rendered.map((line) => truncateToWidth(line, w));
+    },
+  };
 }

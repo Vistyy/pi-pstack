@@ -28,6 +28,12 @@ Real targets use `provider/model:thinking`. Cursor slugs remain source defaults,
 
 `/poteto-mode on` and `/poteto-mode off` change branch-local mode state. The current Pi session branch owns that state; there is no separate mode cache to restore. `/poteto-mode <task>` expands the packaged skill in interactive and RPC sessions. For print/JSON execution, use `/skill:poteto-mode <task>` directly. Enabled parent sessions receive the full generated mode on each prompt, including after native compaction.
 
+## Questions
+
+`pstack_question` presents one question at a time in Pi's terminal UI. Each question offers single-choice options and an **Other** multiline editor. Go back to revise answers, then submit the final review. Cancellation or an aborted call discards the questionnaire's answers; only explicit submission returns them to the agent.
+
+Question bodies support Pi's Markdown rendering, including tables and fenced text diagrams. Long bodies can be scrolled; diagrams should fit the terminal width. This is a text UI, not a Mermaid renderer or browser form. Outside the terminal UI, including RPC and private child sessions, the tool reports that UI is unavailable so the caller can ask conversationally instead.
+
 ## Child execution
 
 `pstack_task` runs the source `generalPurpose`, `poteto-agent`, and `Comment Sicko` assignments. Each child starts with its own conversation, project `AGENTS.md` context, and selected model/thinking. Ambient system-prompt overrides, prompt templates, and skill catalogs are not inherited. Poteto children receive the full source mode; ordinary children do not inherit the parent's Poteto mode or conversation.

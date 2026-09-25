@@ -303,31 +303,6 @@ await test("mode and todo state follow native branches; full mode and configured
   assert.ok(!disabled.includes(body));
   assert.match(disabled, /fixture\/judge:rev1:high/);
   assert.ok((await f.prompt("/skill:poteto-mode direct task")).includes(body));
-  const question = await f.call("pstack_question", { question: "Which?", options: ["A", "B"] });
-  assert.equal(question.isError, true);
-  assert.match(question.text, /ask the user in the conversation/);
-  const ui = f.session.extensionRunner.createContext().ui;
-  await f.session.bindExtensions({
-    mode: "rpc",
-    uiContext: {
-      ...ui,
-      select: async (title, options) => {
-        assert.equal(title, "Which?");
-        assert.deepEqual(options, ["A", "B"]);
-
-        return "B";
-      },
-    },
-  });
-  const selected = await f.call("pstack_question", { question: "Which?", options: ["A", "B"] });
-  assert.deepEqual(selected, { isError: false, text: "B" });
-  await f.session.bindExtensions({
-    mode: "rpc",
-    uiContext: { ...ui, select: async () => undefined },
-  });
-  const dismissed = await f.call("pstack_question", { question: "Which?", options: ["A", "B"] });
-  assert.equal(dismissed.isError, true);
-  assert.match(dismissed.text, /Question dismissed/);
   f.provider.setResponses([
     fauxAssistantMessage("Fixture summary."),
     fauxAssistantMessage("Fixture turn summary."),

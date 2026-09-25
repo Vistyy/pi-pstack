@@ -1,10 +1,30 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { type ExtensionContext, initTheme } from "@earendil-works/pi-coding-agent";
-import { Key, type KeybindingsManager, visibleWidth } from "@earendil-works/pi-tui";
-import { type Question, showQuestionnaire } from "../src/question-ui.ts";
+import test, { type TestContext } from "node:test";
+import { stripVTControlCharacters } from "node:util";
+import { initTheme } from "@earendil-works/pi-coding-agent";
+import {
+  type Component,
+  CURSOR_MARKER,
+  getKeybindings,
+  ProcessTerminal,
+  TuiMainScreen,
+  visibleWidth,
+} from "@earendil-works/pi-tui";
+import { type Question, type QuestionnaireResult, showQuestionnaire } from "../src/question-ui.ts";
+import { childFixture } from "./child-fixture.js";
 
 initTheme("dark", false);
+
+const key = {
+  enter: "\r",
+  up: "\x1b[A",
+  down: "\x1b[B",
+  left: "\x1b[D",
+  right: "\x1b[C",
+  escape: "\x1b",
+  pageDown: "\x1b[6~",
+  pageUp: "\x1b[5~",
+};
 
 const questions: Question[] = [
   {
@@ -12,66 +32,113 @@ const questions: Question[] = [
     question: "| A | B |\n|---|---|\n| x | y |\n\n```text\n+--+\n|  |\n+--+\n```",
     options: ["yes", "no"],
   },
-  { id: "second", question: `Long question ${"word ".repeat(160)}`, options: ["one"] },
+  { id: "second", question: `Long question ${"word ".repeat(160)}END OF BODY`, options: ["one"] },
 ];
 
-function harness(rows = 30) {
-  let component:
-    | ReturnType<NonNullable<Parameters<ExtensionContext["ui"]["custom"]>[0]>>
-    | undefined;
+class SizedTerminal extends ProcessTerminal {
+  height = 30;
+  override get rows() {
+    return this.height;
+  }
+  override write(_data: string): void {}
+}
 
-  const tui = { terminal: { rows }, requestRender() {} };
+class QuietTui extends TuiMainScreen {
+  override requestRender(): void {}
+}
 
-  const theme = {
-    fg: (_color: string, text: string) => text,
-    bold: (text: string) => text,
-  };
-
-  const keys = {
-    matches(data: string, id: string) {
-      return (
-        (id === "tui.select.up" && data === Key.up) ||
-        (id === "tui.select.down" && data === Key.down) ||
-        (id === "tui.select.confirm" && (data === Key.enter || data === "\r"))
-      );
-    },
-  } as KeybindingsManager;
-
-  const ctx = {
-    ui: {
-      custom(
-        factory: (tui: never, theme: never, keys: never, done: (value: unknown) => void) => never,
-      ) {
-        return new Promise((r) => {
-          component = factory(tui as never, theme as never, keys as never, r);
-        });
-      },
-    },
-  } as unknown as ExtensionContext;
+async function uiFixture(t: TestContext) {
+  const f = await childFixture(t);
+  const theme = f.session.extensionRunner.getUIContext().theme;
 
   return {
-    component: () => {
-      if (!component) throw new Error("UI not created");
+    async start(items = questions, controller = new AbortController()) {
+      const terminal = new SizedTerminal();
+      const tui = new QuietTui(terminal);
+      const ready = Promise.withResolvers<Component>();
 
-      return component;
-    },
-    start(signal?: AbortSignal) {
-      return showQuestionnaire(ctx, questions, signal);
+      const ui: Parameters<typeof showQuestionnaire>[0] = {
+        custom(factory) {
+          const result = Promise.withResolvers<QuestionnaireResult>();
+          const component = factory(tui, theme, getKeybindings(), result.resolve);
+          tui.setFocus(component);
+          ready.resolve(component);
+
+          return result.promise;
+        },
+      };
+
+      const result = showQuestionnaire(ui, items, controller.signal);
+      const component = await ready.promise;
+      t.after(() => controller.abort());
+
+      return {
+        result,
+        terminal,
+        component,
+        controller,
+        input(...keys: string[]) {
+          for (const data of keys) component.handleInput?.(data);
+        },
+        screen(width = 80) {
+          return stripVTControlCharacters(component.render(width).join("\n"));
+        },
+      };
     },
   };
 }
 
-const input = (h: ReturnType<typeof harness>, key: string) => h.component().handleInput(key);
+await test("answers remain ordered and require explicit review, including a single question", async (t) => {
+  const f = await uiFixture(t);
+  const h = await f.start();
+  h.input(key.enter, key.enter);
+  assert.match(h.screen(), /Review/);
+  h.input(key.left, key.left, key.down, key.enter, key.right);
+  assert.match(h.screen(), /Review/);
+  h.input(key.enter);
+  assert.deepEqual(await h.result, {
+    status: "answered",
+    answers: [
+      { id: "first", kind: "option", value: "no" },
+      { id: "second", kind: "option", value: "one" },
+    ],
+  });
+  const single = await f.start([{ id: "only", question: "Proceed?", options: ["yes"] }]);
+  single.input(key.enter);
+  assert.match(single.screen(), /Review/);
+  single.input(key.escape);
+  assert.deepEqual(await single.result, { status: "cancelled", answers: [] });
+});
 
-test("selects all answers and requires explicit review submission in question order", async () => {
-  const h = harness();
-  const result = h.start();
-  h.component().render(80);
-  input(h, Key.enter);
-  input(h, Key.enter);
-  assert.match(h.component().render(80).join("\n"), /Review/);
-  input(h, Key.enter);
-  assert.deepEqual(await result, {
+await test("Other preserves multiline text verbatim, receives focus, and can be revised", async (t) => {
+  const f = await uiFixture(t);
+  const h = await f.start();
+  h.screen();
+  h.input(key.down, key.down, key.enter);
+  assert.ok(h.component.render(80).join("\n").includes(CURSOR_MARKER));
+  h.input(" ", "a", " ", "b", "\n", " ", "c", " ", key.enter, key.enter);
+  h.input(key.left, key.left, key.enter);
+  assert.match(h.screen(), /a b/);
+  h.input("!", key.enter, key.right, key.enter);
+  assert.deepEqual(await h.result, {
+    status: "answered",
+    answers: [
+      { id: "first", kind: "other", value: " a b\n c !" },
+      { id: "second", kind: "option", value: "one" },
+    ],
+  });
+});
+
+await test("blank Other is rejected; Escape returns to choices without saving the draft", async (t) => {
+  const f = await uiFixture(t);
+  const h = await f.start();
+  h.screen();
+  h.input(key.down, key.down, key.enter, " ", key.enter);
+  assert.match(h.screen(), /Other cannot be blank/);
+  h.input(key.escape);
+  assert.match(h.screen(), /Other \(write an answer\)/);
+  h.input(key.up, key.up, key.enter, key.enter, key.enter);
+  assert.deepEqual(await h.result, {
     status: "answered",
     answers: [
       { id: "first", kind: "option", value: "yes" },
@@ -80,92 +147,76 @@ test("selects all answers and requires explicit review submission in question or
   });
 });
 
-test("retains Other verbatim, supports back-edit and only submits from review", async () => {
-  const h = harness();
-  const result = h.start();
-  h.component().render(80);
-  input(h, Key.down);
-  input(h, Key.down);
-  input(h, Key.enter);
-  // Editor owns normal typing; the injected component forwards editor keys.
-  input(h, "a");
-  input(h, " ");
-  input(h, "b");
-  input(h, "\n");
-  input(h, " ");
-  input(h, "c");
-  input(h, "\r");
-  input(h, Key.enter);
-  input(h, Key.left);
-  assert.match(h.component().render(80).join("\n"), /Question 2\/2/);
-  input(h, Key.left);
-  assert.match(h.component().render(80).join("\n"), /Question 1\/2/);
-  input(h, Key.enter); // revisit Other
-  input(h, "\r"); // retain existing value
-  input(h, Key.enter); // review
-  input(h, Key.enter); // submit
-  const value = await result;
-  assert.equal(value.status, "answered");
-
-  if (value.status === "answered") assert.equal(value.answers[0]?.value, "a b\n c");
-});
-
-test("Other rejects whitespace and Escape returns to choices without committing", async () => {
-  const h = harness();
-  const result = h.start();
-  h.component().render(80);
-  input(h, Key.down);
-  input(h, Key.down);
-  input(h, Key.enter);
-  input(h, " ");
-  input(h, "\r");
-  assert.match(h.component().render(80).join("\n"), /Other cannot be blank/);
-  input(h, Key.escape);
-  assert.match(h.component().render(80).join("\n"), /Other \(write an answer\)/);
-  input(h, Key.up);
-  input(h, Key.up);
-  input(h, Key.enter);
-  input(h, Key.enter);
-  input(h, Key.enter);
-  input(h, Key.enter);
-  const value = await result;
-  assert.equal(value.status, "answered");
-
-  if (value.status === "answered")
-    assert.deepEqual(value.answers[0], { id: "first", kind: "option", value: "yes" });
-});
-
-test("renders native Markdown, pages long bodies, fits narrow widths, and responds to resize", async () => {
-  const h = harness(12);
-  h.start();
-  const narrow = h.component().render(24);
-  assert.ok(narrow.some((line) => line.includes("A") || line.includes("B")));
+await test("native Markdown tables and diagrams render; body and review scroll after resize", async (t) => {
+  const f = await uiFixture(t);
+  const h = await f.start();
+  const rich = h.screen();
+  assert.match(rich, /A\s+│\s+B/);
+  assert.match(rich, /\+--\+/);
+  assert.match(rich, / {2}\+--\+[^\n]*\n {2}\| {2}\|[^\n]*\n {2}\+--\+/);
+  h.input(key.enter);
+  h.terminal.height = 16;
+  const narrow = h.component.render(24);
   assert.ok(narrow.every((line) => visibleWidth(line) <= 24));
-  input(h, Key.right);
-  const long = h.component().render(40).join("\n");
-  assert.match(long, /Body 1-/);
-  input(h, Key.pageDown);
-  assert.match(h.component().render(40).join("\n"), /Body [2-9]/);
-  assert.ok(
-    h
-      .component()
-      .render(100)
-      .every((line) => line.length <= 100),
+  assert.ok(narrow.length <= 16);
+  assert.doesNotMatch(h.screen(24), /END OF\s+BODY/);
+
+  for (let i = 0; i < 30; i++) {
+    h.input(key.pageDown);
+    h.screen(24);
+  }
+
+  assert.match(h.screen(24), /END OF\s+BODY/);
+  h.input(key.pageUp);
+  assert.doesNotMatch(h.screen(24), /END OF\s+BODY/);
+  h.terminal.height = 40;
+  assert.ok(h.component.render(100).every((line) => visibleWidth(line) <= 100));
+  h.input(key.escape);
+  await h.result;
+
+  const many = await f.start(
+    Array.from({ length: 30 }, (_, i) => ({
+      id: `q${i}`,
+      question: "Choose",
+      options: ["chosen"],
+    })),
   );
+
+  for (let i = 0; i < 30; i++) many.input(key.enter);
+  many.terminal.height = 12;
+  assert.ok(many.component.render(40).length <= 12);
+  assert.doesNotMatch(many.screen(40), /q29:/);
+
+  for (let i = 0; i < 5; i++) {
+    many.input(key.pageDown);
+    many.screen(40);
+  }
+
+  assert.match(many.screen(40), /q29: chosen/);
+  many.input(key.enter);
+  assert.equal((await many.result).answers.length, 30);
 });
 
-test("Escape cancels; abort closes UI and discards partial answers", async () => {
-  const cancel = harness();
-  const cancelled = cancel.start();
-  cancel.component().render(80);
-  input(cancel, Key.escape);
-  assert.deepEqual(await cancelled, { status: "cancelled", answers: [] });
-
-  const abort = harness();
-  const controller = new AbortController();
-  const aborted = abort.start(controller.signal);
-  abort.component().render(80);
-  input(abort, Key.enter);
-  controller.abort();
-  assert.deepEqual(await aborted, { status: "cancelled", answers: [] });
+await test("Escape and abort discard partial answers; late input cannot submit", async (t) => {
+  const f = await uiFixture(t);
+  const cancel = await f.start();
+  cancel.input(key.enter, key.escape, key.enter);
+  assert.deepEqual(await cancel.result, { status: "cancelled", answers: [] });
+  const abort = await f.start();
+  abort.input(key.enter);
+  abort.controller.abort();
+  abort.input(key.enter, key.enter);
+  assert.deepEqual(await abort.result, { status: "cancelled", answers: [] });
+  assert.deepEqual(
+    await showQuestionnaire(
+      {
+        custom: () => {
+          throw new Error("UI must not open");
+        },
+      },
+      questions,
+      AbortSignal.abort(),
+    ),
+    { status: "cancelled", answers: [] },
+  );
 });
