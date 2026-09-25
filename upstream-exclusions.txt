@@ -1,6 +1,9 @@
 # Exact paths relative to the pinned PStack subtree, excluded before patches.
 # Directories include all descendants. No glob patterns or negation.
 
+# Cursor installation guide; Pi setup lives in the package README.
+docs/guide/01-setup.md
+
 # Cloud automation and its webhook UI.
 automations/benny/
 skills/make-bot-ui/
