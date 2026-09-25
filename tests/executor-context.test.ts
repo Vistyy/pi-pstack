@@ -12,10 +12,10 @@ await test("global child-tool exclusions remove inherited integrations for new c
   const f = await childFixture(t);
   await writeFile(
     join(f.dir, "settings.json"),
-    JSON.stringify({
+    `\uFEFF${JSON.stringify({
       unrelatedSetting: true,
-      "pi-pstack": { excludedChildTools: ["fixture_lookup"] },
-    }),
+      "pi-pstack": { excludedChildTools: ["fixture_lookup", "fixture_private"] },
+    })}`,
   );
   await mkdir(join(f.project, ".pi"));
   await writeFile(
@@ -26,8 +26,30 @@ await test("global child-tool exclusions remove inherited integrations for new c
   );
   f.nested.setResponses([
     fauxAssistantMessage(fauxToolCall("fixture_lookup", {}), { stopReason: "toolUse" }),
+    fauxAssistantMessage(fauxToolCall("fixture_private", {}), { stopReason: "toolUse" }),
     fauxAssistantMessage(fauxToolCall("fixture_echo", {}), { stopReason: "toolUse" }),
-    fauxAssistantMessage("tool unavailable"),
+    (context) => {
+      const result = context.messages.findLast((message) => message.role === "toolResult");
+      assert.ok(result?.role === "toolResult");
+      assert.equal(result.toolName, "fixture_echo");
+      assert.equal(result.isError, false);
+      const calls = JSON.stringify(context.messages);
+      assert.match(calls, /fixture_lookup/);
+      assert.match(calls, /fixture_private/);
+
+      const lookupResult = context.messages.findLast(
+        (message) => message.role === "toolResult" && message.toolName === "fixture_lookup",
+      );
+
+      const privateResult = context.messages.findLast(
+        (message) => message.role === "toolResult" && message.toolName === "fixture_private",
+      );
+
+      assert.ok(lookupResult?.role === "toolResult" && lookupResult.isError);
+      assert.ok(privateResult?.role === "toolResult" && privateResult.isError);
+
+      return fauxAssistantMessage("permitted sibling succeeded");
+    },
   ]);
 
   const result = await f.call("pstack_task", {
@@ -38,34 +60,184 @@ await test("global child-tool exclusions remove inherited integrations for new c
 
   assert.equal(result.isError, false, result.text);
 
-  assert.doesNotMatch(result.text, /lookup/);
+  assert.match(result.text, /permitted sibling succeeded/);
+  const child = receipt(result.text);
   assert.match(await readFile(join(f.dir, "echo.jsonl"), "utf8"), /called/);
 
   await assert.rejects(readFile(join(f.dir, "lookup.jsonl"), "utf8"), { code: "ENOENT" });
+  await assert.rejects(readFile(join(f.dir, "private-start.jsonl"), "utf8"), { code: "ENOENT" });
+  await assert.rejects(readFile(join(f.dir, "private-call.jsonl"), "utf8"), { code: "ENOENT" });
+
+  const parentCall = await f.call("fixture_lookup", {});
+  assert.equal(parentCall.isError, false, parentCall.text);
+  assert.match(await f.lookup(), /root/);
+
+  await writeFile(
+    join(f.dir, "settings.json"),
+    JSON.stringify({ "pi-pstack": { excludedChildTools: [] } }),
+  );
+  f.nested.setResponses([
+    fauxAssistantMessage(fauxToolCall("fixture_lookup", {}), { stopReason: "toolUse" }),
+    (context) => {
+      const denied = context.messages.findLast(
+        (message) => message.role === "toolResult" && message.toolName === "fixture_lookup",
+      );
+
+      assert.ok(denied?.role === "toolResult" && denied.isError);
+
+      return fauxAssistantMessage("resumed session retained its tool policy");
+    },
+  ]);
+
+  const resumed = await f.call("pstack_task", {
+    resume: child.id,
+    prompt: "Try the tool after changing global settings",
+    run_in_background: false,
+  });
+
+  assert.equal(resumed.isError, false, resumed.text);
+  assert.match(resumed.text, /resumed session retained/);
+
+  f.nested.setResponses([
+    fauxAssistantMessage(fauxToolCall("fixture_lookup", {}), { stopReason: "toolUse" }),
+    fauxAssistantMessage("new session can use the tool"),
+  ]);
+
+  const fresh = await f.call("pstack_task", {
+    prompt: "Use the now permitted tool",
+    model: "nested/child:rev1:low",
+    run_in_background: false,
+  });
+
+  assert.equal(fresh.isError, false, fresh.text);
+  assert.match(await readFile(join(f.dir, "lookup.jsonl"), "utf8"), /child:rev1/);
 });
 
-await test("malformed global child-tool policy fails before child model effects", {
+await test("global exclusions also subtract tools from readonly children", {
   timeout: 10000,
 }, async (t) => {
   const f = await childFixture(t);
   await writeFile(
     join(f.dir, "settings.json"),
-    JSON.stringify({ "pi-pstack": { excludedChildTools: [""] } }),
+    JSON.stringify({ "pi-pstack": { excludedChildTools: ["read"] } }),
   );
+  f.nested.setResponses([
+    fauxAssistantMessage(fauxToolCall("read", { path: join(f.project, "AGENTS.md") }), {
+      stopReason: "toolUse",
+    }),
+    (context) => {
+      const denied = context.messages.findLast(
+        (message) => message.role === "toolResult" && message.toolName === "read",
+      );
+
+      assert.ok(denied?.role === "toolResult" && denied.isError);
+
+      return fauxAssistantMessage("readonly exclusion applied");
+    },
+  ]);
+
+  const result = await f.call("pstack_task", {
+    prompt: "Try excluded read",
+    model: "nested/child:rev1:low",
+    readonly: true,
+    run_in_background: false,
+  });
+
+  assert.equal(result.isError, false, result.text);
+  assert.match(result.text, /readonly exclusion applied/);
+});
+
+await test("grandchildren inherit exclusions from their immediate parent tools", {
+  timeout: 10000,
+}, async (t) => {
+  const f = await childFixture(t);
+  await writeFile(
+    join(f.dir, "settings.json"),
+    JSON.stringify({ "pi-pstack": { excludedChildTools: ["fixture_lookup"] } }),
+  );
+  f.nested.setResponses([
+    fauxAssistantMessage(
+      fauxToolCall("pstack_task", {
+        prompt: "Try inherited exclusion",
+        model: "leaf/reader:off",
+        readonly: false,
+      }),
+      { stopReason: "toolUse" },
+    ),
+    (context) => {
+      const returned = context.messages.findLast(
+        (message) => message.role === "toolResult" && message.toolName === "pstack_task",
+      );
+
+      assert.ok(returned?.role === "toolResult" && !returned.isError);
+      assert.match(JSON.stringify(returned.content), /grandchild blocked/);
+
+      return fauxAssistantMessage("grandchild completed");
+    },
+  ]);
+  f.leaf.setResponses([
+    fauxAssistantMessage(fauxToolCall("fixture_lookup", {}), { stopReason: "toolUse" }),
+    (context) => {
+      const denied = context.messages.findLast(
+        (message) => message.role === "toolResult" && message.toolName === "fixture_lookup",
+      );
+
+      assert.ok(denied?.role === "toolResult" && denied.isError);
+
+      return fauxAssistantMessage("grandchild blocked");
+    },
+  ]);
+
+  const result = await f.call("pstack_task", {
+    prompt: "Delegate to grandchild",
+    model: "nested/child:rev1:low",
+    run_in_background: false,
+  });
+
+  assert.equal(result.isError, false, result.text);
+  await assert.rejects(readFile(join(f.dir, "lookup.jsonl"), "utf8"), { code: "ENOENT" });
+});
+
+await test("unreadable global policy fails before child effects", { timeout: 10000 }, async (t) => {
+  const f = await childFixture(t);
+  await mkdir(join(f.dir, "settings.json"));
   f.nested.setResponses([fauxAssistantMessage("should not be requested")]);
 
   const result = await f.call("pstack_task", {
-    prompt: "Reject invalid policy",
+    prompt: "Reject unreadable global settings",
     model: "nested/child:rev1:low",
     run_in_background: false,
   });
 
   assert.equal(result.isError, true);
-
-  assert.match(result.text, /excludedChildTools/);
-
+  assert.match(result.text, /Cannot read global child-tool policy/);
   assert.equal(f.nested.state.callCount, 0);
 });
+
+for (const [label, settings] of [
+  ["malformed JSON", "{"],
+  ["empty global settings file", ""],
+  ["malformed namespace", JSON.stringify({ "pi-pstack": [] })],
+  ["malformed tool list", JSON.stringify({ "pi-pstack": { excludedChildTools: [""] } })],
+] as const) {
+  await test(`${label} global child-tool policy fails before child effects`, {
+    timeout: 10000,
+  }, async (t) => {
+    const f = await childFixture(t);
+    await writeFile(join(f.dir, "settings.json"), settings);
+    f.nested.setResponses([fauxAssistantMessage("should not be requested")]);
+
+    const result = await f.call("pstack_task", {
+      prompt: "Reject invalid policy",
+      model: "nested/child:rev1:low",
+      run_in_background: false,
+    });
+
+    assert.equal(result.isError, true);
+    assert.match(result.text, /global|settings|JSON|excludedChildTools/i);
+    assert.equal(f.nested.state.callCount, 0);
+  });
+}
 
 for (const profile of ["poteto-agent", "Comment Sicko"] as const) {
   await test(`${profile} source identity remains a system instruction on continuation`, {

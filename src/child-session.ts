@@ -1,4 +1,4 @@
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import {
@@ -66,15 +66,18 @@ const ChildPolicyNamespace = Type.Object({
 
 const ChildPolicyTools = Type.Array(Type.String({ minLength: 1 }));
 
-function excludedChildTools(settings: SettingsManager) {
-  const globalError = settings.drainErrors().find((error) => error.scope === "global");
+async function excludedChildTools(agentDir: string) {
+  const path = join(agentDir, "settings.json");
+  let content: string;
 
-  if (globalError)
-    throw new Error(
-      `Cannot read global child-tool policy (${globalError.path}): ${globalError.error}`,
-    );
+  try {
+    content = await readFile(path, "utf8");
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return [];
+    throw new Error(`Cannot read global child-tool policy (${path}): ${String(error)}`);
+  }
 
-  const global = settings.getGlobalSettings();
+  const global: unknown = JSON.parse(content.replace(/^\uFEFF/, ""));
 
   if (!Check(ChildPolicySettings, global))
     throw new Error("Invalid global settings: expected an object");
@@ -139,8 +142,7 @@ export async function createChildSession(
   lifetime.check();
   const agentDir = getAgentDir();
   const settings = SettingsManager.create(config.cwd, agentDir);
-  const policySettings = SettingsManager.create(agentDir, agentDir);
-  const excluded = excludedChildTools(policySettings);
+  const excluded = await excludedChildTools(agentDir);
   const plan = toolPlan(pi, config.readonly, new Set(excluded));
 
   const modelRuntime = await ModelRuntime.create({

@@ -92,6 +92,24 @@ export async function childFixture(t: TestContext, options: { holdStartup?: bool
   await mkdir(join(dir, "prompts"));
   await writeFile(join(dir, "prompts/ambient-override.md"), "Ambient template forbidden marker");
   const integration = join(dir, "integration.mjs");
+  const privateIntegration = join(dir, "private-integration.mjs");
+  await writeFile(
+    privateIntegration,
+    `
+import { appendFile } from 'node:fs/promises';
+export default (pi) => {
+  pi.on('session_start', async (_event, ctx) => {
+    if (ctx.model?.provider === 'nested') await appendFile(${JSON.stringify(join(dir, "private-start.jsonl"))}, 'started\\n');
+  });
+  pi.registerTool({ name:'fixture_private', label:'Fixture private', description:'Excluded-only integration',
+    parameters:{type:'object',properties:{}}, async execute() {
+      await appendFile(${JSON.stringify(join(dir, "private-call.jsonl"))}, 'called\\n');
+      return {content:[{type:'text',text:'private works'}],details:{}};
+    }
+  });
+};
+`,
+  );
   await writeFile(
     integration,
     `
@@ -100,6 +118,7 @@ import { existsSync } from 'node:fs';
 export default (pi) => {
   pi.on('session_before_tree', () => existsSync(${JSON.stringify(join(dir, "veto-tree"))}) ? {cancel:true} : undefined);
   pi.on('session_start', async (_event, ctx) => {
+    if (ctx.model?.provider === 'nested') pi.setActiveTools([...pi.getActiveTools(), 'fixture_lookup']);
     if (ctx.model?.provider === 'nested' && existsSync(${JSON.stringify(join(dir, "fail-startup"))})) throw new Error('startup failed');
     if (ctx.model?.provider === 'nested' && ${JSON.stringify(options.holdStartup ?? false)})
       await new Promise((resolve) => process.emit(${JSON.stringify(eventName)}, 'start', resolve));
@@ -163,7 +182,11 @@ export default (pi) => {
     settingsManager: settings,
     noExtensions: true,
     noSkills: true,
-    additionalExtensionPaths: [join(packageRoot, "extensions/index.ts"), integration],
+    additionalExtensionPaths: [
+      join(packageRoot, "extensions/index.ts"),
+      integration,
+      privateIntegration,
+    ],
   });
 
   await loader.reload();
