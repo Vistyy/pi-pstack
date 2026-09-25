@@ -14,6 +14,8 @@ import {
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
+import { Check } from "typebox/value";
 import { resolveTarget } from "./models.js";
 
 export type Profile = "generalPurpose" | "poteto-agent" | "Comment Sicko";
@@ -54,14 +56,56 @@ export function selectModel(selector: string | undefined, ctx: ExtensionContext)
 
 export type Selection = ReturnType<typeof selectModel>;
 
-function toolPlan(pi: ExtensionAPI, readonly: boolean) {
-  if (readonly) return { tools: readerTools, paths: [] };
+const ChildPolicySettings = Type.Object({
+  "pi-pstack": Type.Optional(Type.Unknown()),
+});
+
+const ChildPolicyNamespace = Type.Object({
+  excludedChildTools: Type.Optional(Type.Unknown()),
+});
+
+const ChildPolicyTools = Type.Array(Type.String({ minLength: 1 }));
+
+function excludedChildTools(settings: SettingsManager) {
+  const globalError = settings.drainErrors().find((error) => error.scope === "global");
+
+  if (globalError)
+    throw new Error(
+      `Cannot read global child-tool policy (${globalError.path}): ${globalError.error}`,
+    );
+
+  const global = settings.getGlobalSettings();
+
+  if (!Check(ChildPolicySettings, global))
+    throw new Error("Invalid global settings: expected an object");
+
+  const namespace = global["pi-pstack"];
+
+  if (namespace === undefined) return [];
+
+  if (!Check(ChildPolicyNamespace, namespace))
+    throw new Error("Invalid global pi-pstack settings: expected an object");
+  const list = namespace.excludedChildTools;
+
+  if (list === undefined) return [];
+
+  if (!Check(ChildPolicyTools, list))
+    throw new Error(
+      "Invalid global pi-pstack.excludedChildTools: expected an array of nonempty tool names",
+    );
+
+  return list;
+}
+
+function toolPlan(pi: ExtensionAPI, readonly: boolean, excluded: ReadonlySet<string>) {
+  if (readonly) return { tools: readerTools.filter((name) => !excluded.has(name)), paths: [] };
   const active = pi.getActiveTools();
   const paths = new Set<string>();
 
   for (const tool of pi.getAllTools()) {
     if (
       !active.includes(tool.name) ||
+      excluded.has(tool.name) ||
       ownTools.has(tool.name) ||
       tool.sourceInfo.source === "builtin"
     )
@@ -75,7 +119,9 @@ function toolPlan(pi: ExtensionAPI, readonly: boolean) {
   }
 
   return {
-    tools: [...new Set([...active, "pstack_task", "pstack_tasks", "pstack_todo"])],
+    tools: [...new Set([...active, "pstack_task", "pstack_tasks", "pstack_todo"])].filter(
+      (name) => !excluded.has(name),
+    ),
     paths: [...paths],
   };
 }
@@ -92,8 +138,10 @@ export async function createChildSession(
   if (!(await stat(config.cwd)).isDirectory()) throw new Error(`Not a directory: ${config.cwd}`);
   lifetime.check();
   const agentDir = getAgentDir();
-  const plan = toolPlan(pi, config.readonly);
   const settings = SettingsManager.create(config.cwd, agentDir);
+  const policySettings = SettingsManager.create(agentDir, agentDir);
+  const excluded = excludedChildTools(policySettings);
+  const plan = toolPlan(pi, config.readonly, new Set(excluded));
 
   const modelRuntime = await ModelRuntime.create({
     authPath: join(agentDir, "auth.json"),
@@ -145,6 +193,7 @@ export async function createChildSession(
     model: config.selection.model,
     thinkingLevel: config.selection.thinking,
     tools: plan.tools,
+    excludeTools: excluded,
     sessionManager: SessionManager.create(config.cwd),
   });
 

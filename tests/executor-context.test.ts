@@ -1,10 +1,71 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
-import { fauxAssistantMessage, getCurrentSystemPrompt } from "@earendil-works/pi-ai";
+import { fauxAssistantMessage, fauxToolCall, getCurrentSystemPrompt } from "@earendil-works/pi-ai";
 import { stripFrontmatter } from "@earendil-works/pi-coding-agent";
 import { childFixture, packageRoot, receipt } from "./child-fixture.js";
+
+await test("global child-tool exclusions remove inherited integrations for new children", {
+  timeout: 10000,
+}, async (t) => {
+  const f = await childFixture(t);
+  await writeFile(
+    join(f.dir, "settings.json"),
+    JSON.stringify({
+      unrelatedSetting: true,
+      "pi-pstack": { excludedChildTools: ["fixture_lookup"] },
+    }),
+  );
+  await mkdir(join(f.project, ".pi"));
+  await writeFile(
+    join(f.project, ".pi/settings.json"),
+    JSON.stringify({
+      "pi-pstack": { excludedChildTools: [] },
+    }),
+  );
+  f.nested.setResponses([
+    fauxAssistantMessage(fauxToolCall("fixture_lookup", {}), { stopReason: "toolUse" }),
+    fauxAssistantMessage(fauxToolCall("fixture_echo", {}), { stopReason: "toolUse" }),
+    fauxAssistantMessage("tool unavailable"),
+  ]);
+
+  const result = await f.call("pstack_task", {
+    prompt: "Try the excluded tool",
+    model: "nested/child:rev1:low",
+    run_in_background: false,
+  });
+
+  assert.equal(result.isError, false, result.text);
+
+  assert.doesNotMatch(result.text, /lookup/);
+  assert.match(await readFile(join(f.dir, "echo.jsonl"), "utf8"), /called/);
+
+  await assert.rejects(readFile(join(f.dir, "lookup.jsonl"), "utf8"), { code: "ENOENT" });
+});
+
+await test("malformed global child-tool policy fails before child model effects", {
+  timeout: 10000,
+}, async (t) => {
+  const f = await childFixture(t);
+  await writeFile(
+    join(f.dir, "settings.json"),
+    JSON.stringify({ "pi-pstack": { excludedChildTools: [""] } }),
+  );
+  f.nested.setResponses([fauxAssistantMessage("should not be requested")]);
+
+  const result = await f.call("pstack_task", {
+    prompt: "Reject invalid policy",
+    model: "nested/child:rev1:low",
+    run_in_background: false,
+  });
+
+  assert.equal(result.isError, true);
+
+  assert.match(result.text, /excludedChildTools/);
+
+  assert.equal(f.nested.state.callCount, 0);
+});
 
 for (const profile of ["poteto-agent", "Comment Sicko"] as const) {
   await test(`${profile} source identity remains a system instruction on continuation`, {

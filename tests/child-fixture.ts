@@ -114,6 +114,12 @@ export default (pi) => {
       return {content:[{type:'text',text:JSON.stringify(result)}],details:{}};
     }
   });
+  pi.registerTool({ name:'fixture_echo', label:'Fixture echo', description:'Record a permitted sibling tool',
+    parameters:{type:'object',properties:{}}, async execute() {
+      await appendFile(${JSON.stringify(join(dir, "echo.jsonl"))}, 'called\\n');
+      return {content:[{type:'text',text:'echo works'}],details:{}};
+    }
+  });
 };
 `,
   );
