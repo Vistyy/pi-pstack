@@ -1,4 +1,8 @@
-import { getMarkdownTheme, type Theme } from "@earendil-works/pi-coding-agent";
+import {
+  type ExtensionUIContext,
+  getMarkdownTheme,
+  type Theme,
+} from "@earendil-works/pi-coding-agent";
 import {
   type Component,
   Editor,
@@ -28,6 +32,7 @@ type QuestionnaireUI = {
       keys: KeybindingsManager,
       done: (value: QuestionnaireResult) => void,
     ) => Component,
+    options: Parameters<ExtensionUIContext["custom"]>[1],
   ): Promise<QuestionnaireResult>;
 };
 
@@ -46,14 +51,17 @@ export async function showQuestionnaire(
   signal?.addEventListener("abort", onAbort, { once: true });
 
   try {
-    const result = await ui.custom((tui, theme, keys, done) => {
-      const component = createQuestionnaire(tui, theme, keys, questions, done);
-      close = component.cancel;
+    const result = await ui.custom(
+      (tui, theme, keys, done) => {
+        const component = createQuestionnaire(tui, theme, keys, questions, done);
+        close = component.cancel;
 
-      if (isAborted()) queueMicrotask(close);
+        if (isAborted()) queueMicrotask(close);
 
-      return component;
-    });
+        return component;
+      },
+      { overlay: true, overlayOptions: { width: "100%", maxHeight: "100%" } },
+    );
 
     return isAborted() ? cancelled() : result;
   } finally {
