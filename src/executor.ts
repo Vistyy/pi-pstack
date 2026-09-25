@@ -17,19 +17,54 @@ import {
 
 const TaskInput = Type.Object(
   {
-    prompt: Type.String({ minLength: 1 }),
+    prompt: Type.String({
+      minLength: 1,
+      description:
+        "Complete assignment for a fresh child, or follow-up for a resumed child. Resolve required packaged skill and reference paths to absolute paths; the child works in the project directory, not the skill directory.",
+    }),
     subagent_type: Type.Optional(
-      Type.Union([
-        Type.Literal("generalPurpose"),
-        Type.Literal("poteto-agent"),
-        Type.Literal("Comment Sicko"),
-      ]),
+      Type.Union(
+        [
+          Type.Literal("generalPurpose"),
+          Type.Literal("poteto-agent"),
+          Type.Literal("Comment Sicko"),
+        ],
+        {
+          description:
+            "Defaults to generalPurpose. Named profiles load their packaged agent instructions; poteto-agent also receives full Poteto mode. Comment Sicko edits comments and requires writable tools.",
+        },
+      ),
     ),
-    model: Type.Optional(Type.String()),
-    readonly: Type.Optional(Type.Boolean()),
-    run_in_background: Type.Optional(Type.Boolean()),
-    cwd: Type.Optional(Type.String()),
-    resume: Type.Optional(Type.String()),
+    model: Type.Optional(
+      Type.String({
+        description:
+          "Exact provider/model:thinking selector. Use the effective selector for the skill's named role. Only when no role or model is prescribed, omit this to inherit the parent's model and thinking.",
+      }),
+    ),
+    readonly: Type.Optional(
+      Type.Boolean({
+        description:
+          "Restrict child tools and descendants, excluding shell and integration tools. Defaults to false unless inherited from a read-only parent; cannot escalate. This is not an OS sandbox, and writable tools do not authorize unrelated writes.",
+      }),
+    ),
+    run_in_background: Type.Optional(
+      Type.Boolean({
+        description:
+          "Return an ID immediately and deliver completion automatically after the child and its nested work finish. Defaults to true for poteto-agent, false otherwise. Foreground calls wait for results and may run in parallel.",
+      }),
+    ),
+    cwd: Type.Optional(
+      Type.String({
+        description:
+          "Existing working directory, relative to the parent's directory or absolute; defaults to the parent's. Prepare any required isolation first: the executor does not create, merge, or remove worktrees.",
+      }),
+    ),
+    resume: Type.Optional(
+      Type.String({
+        description:
+          "ID of an idle owned child to continue. Retains conversation, profile, model, working directory, and read-only configuration; these cannot change on resume. Start a new child for an independent assignment. Cannot steer an active child or resume across parent-session restarts.",
+      }),
+    ),
   },
   { additionalProperties: false },
 );
@@ -376,7 +411,7 @@ export function installExecutor(
     name: "pstack_tasks",
     label: "PStack tasks",
     description:
-      "List this parent's children, inspect an exact child and its transcript/result, or cancel that child and its descendants. Completion reports execution, not acceptance of its work.",
+      "List this parent's children, inspect an exact child and its transcript/result, or cancel that child and its descendants. Cancellation does not undo edits. Transcripts are inspection evidence, not durable jobs. Completion reports execution, not acceptance of its work.",
     parameters: Type.Object({
       action: Type.Union([Type.Literal("list"), Type.Literal("inspect"), Type.Literal("cancel")]),
       id: Type.Optional(Type.String()),
@@ -399,7 +434,7 @@ export function installExecutor(
     label: "PStack task",
     executionMode: "parallel",
     description:
-      "Run or resume a PStack child with its own conversation. Supply the complete assignment and an exact provider/model:thinking selector, or omit model to inherit. Background calls return an ID; completion is delivered automatically. Resume keeps the child's context and configuration.",
+      "Run or resume a PStack child with its own conversation. Children belong to the live parent branch: starting branch navigation, reloading, or exiting stops them; cancelling navigation does not revive them. Root and direct children can delegate; grandchildren cannot. While required background results are outstanding, end the turn without a final answer and continue when results arrive; do not poll in a waiting loop.",
     parameters: TaskInput,
     async execute(_id, request, signal, _update, ctx) {
       signal?.throwIfAborted();
