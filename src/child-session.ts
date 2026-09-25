@@ -143,6 +143,7 @@ export async function createChildSession(
   const agentDir = getAgentDir();
   const settings = SettingsManager.create(config.cwd, agentDir);
   const excluded = await excludedChildTools(agentDir);
+  lifetime.check();
   const plan = toolPlan(pi, config.readonly, new Set(excluded));
 
   const modelRuntime = await ModelRuntime.create({

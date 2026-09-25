@@ -33,9 +33,6 @@ await test("global child-tool exclusions remove inherited integrations for new c
       assert.ok(result?.role === "toolResult");
       assert.equal(result.toolName, "fixture_echo");
       assert.equal(result.isError, false);
-      const calls = JSON.stringify(context.messages);
-      assert.match(calls, /fixture_lookup/);
-      assert.match(calls, /fixture_private/);
 
       const lookupResult = context.messages.findLast(
         (message) => message.role === "toolResult" && message.toolName === "fixture_lookup",
@@ -111,6 +108,7 @@ await test("global child-tool exclusions remove inherited integrations for new c
 
   assert.equal(fresh.isError, false, fresh.text);
   assert.match(await readFile(join(f.dir, "lookup.jsonl"), "utf8"), /child:rev1/);
+  assert.equal(await readFile(join(f.dir, "private-start.jsonl"), "utf8"), "started\n");
 });
 
 await test("global exclusions also subtract tools from readonly children", {
@@ -156,14 +154,21 @@ await test("grandchildren inherit exclusions from their immediate parent tools",
     JSON.stringify({ "pi-pstack": { excludedChildTools: ["fixture_lookup"] } }),
   );
   f.nested.setResponses([
-    fauxAssistantMessage(
-      fauxToolCall("pstack_task", {
-        prompt: "Try inherited exclusion",
-        model: "leaf/reader:off",
-        readonly: false,
-      }),
-      { stopReason: "toolUse" },
-    ),
+    async () => {
+      await writeFile(
+        join(f.dir, "settings.json"),
+        JSON.stringify({ "pi-pstack": { excludedChildTools: [] } }),
+      );
+
+      return fauxAssistantMessage(
+        fauxToolCall("pstack_task", {
+          prompt: "Try inherited exclusion after the global policy changes",
+          model: "leaf/reader:off",
+          readonly: false,
+        }),
+        { stopReason: "toolUse" },
+      );
+    },
     (context) => {
       const returned = context.messages.findLast(
         (message) => message.role === "toolResult" && message.toolName === "pstack_task",

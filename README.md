@@ -46,6 +46,24 @@ Child sessions run in the parent's process. They share the filesystem and use th
 
 Children belong to the live parent branch. Normal exit, reload, or starting branch navigation cancels active owned work and prevents late results from entering another conversation. Navigation cancellation or an extension veto does not disable subsequent delegation, but does not revive the cancelled children. Extension startup and shutdown hooks are awaited; an uncooperative integration hook can delay teardown in this shared process. Continuation is not a cross-session job-recovery mechanism. Transcripts may remain for inspection, but there is no persistent worker service or crash-recovery guarantee.
 
+### Child tool exclusions
+
+Set `pi-pstack.excludedChildTools` in the global Pi `settings.json` (normally `~/.pi/agent/settings.json`) to keep selected tools out of new child sessions:
+
+```json
+{
+  "pi-pstack": {
+    "excludedChildTools": ["name_session", "start_session", "tuicr_review"]
+  }
+}
+```
+
+Names match exactly; absent tools have no effect. An omitted list means no extra exclusions. Project settings cannot override this list. An invalid global setting or unreadable global configuration prevents child creation rather than silently dropping the exclusions.
+
+Exclusions apply after the child's normal tool selection, including read-only restrictions, and also apply to newly created grandchildren. The parent's tools are unchanged. Changes to the list affect new sessions; running and resumed children keep their original configuration. An inherited integration tool absent from the immediate parent is not restored merely by removing its name from the list.
+
+Pi's native tool filtering excludes these tools from execution as well as from the model's tool catalog. The adapter also skips an inherited extension when none of its active tools remain needed. A mixed extension still loads to supply permitted tools, so its startup hooks still run. This is tool selection, not a sandbox for extensions or shell access.
+
 ## Evidence integrations
 
 `why` can use Pi-native tools, configured MCP integrations, or documented CLIs for its evidence categories. Missing integrations are reported as gaps. No MCP server is required merely to use this package. MCP transport, discovery, and authentication belong to the selected host integration; the child adapter does not implement an MCP client, and extension loading alone does not prove MCP compatibility.
