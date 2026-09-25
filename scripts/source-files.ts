@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { cp, mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -105,7 +105,7 @@ export async function contentDiff(source: string, generated: string) {
     const before = writeTree(repository, source);
     const after = writeTree(repository, generated);
 
-    return git(repository, ["diff", "--binary", before, after]);
+    return git(repository, ["diff", "--binary", "--irreversible-delete", before, after]);
   });
 }
 
@@ -149,8 +149,61 @@ export async function patchNames(root: string) {
   return entries.filter((name) => name.endsWith(".patch")).sort();
 }
 
+async function excludePaths(root: string, target: string) {
+  const manifest = await readFile(path.join(root, "upstream-exclusions.txt"), "utf8");
+
+  const entries = manifest
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !line.startsWith("#"));
+
+  const excluded: string[] = [];
+
+  for (const entry of entries) {
+    const relative = entry.replace(/\/$/, "");
+    const parts = relative.split("/");
+
+    if (
+      relative.includes("\\") ||
+      parts.some((part) => part === "" || part === "." || part === "..")
+    )
+      throw new Error(`Invalid path in upstream-exclusions.txt: ${entry}`);
+
+    if (
+      excluded.some(
+        (other) =>
+          relative === other ||
+          relative.startsWith(`${other}/`) ||
+          other.startsWith(`${relative}/`),
+      )
+    )
+      throw new Error(`Overlapping paths in upstream-exclusions.txt: ${entry}`);
+
+    const destination = path.join(target, relative);
+    let current = target;
+
+    for (const part of parts) {
+      current = path.join(current, part);
+
+      const info = await lstat(current).catch((error: unknown) => {
+        throw new Error(`Cannot inspect exclusion ${entry}: ${String(error)}`, { cause: error });
+      });
+
+      if (current !== destination && info.isSymbolicLink())
+        throw new Error(`Exclusion traverses a symlink: ${entry}`);
+    }
+
+    excluded.push(relative);
+  }
+
+  for (const relative of excluded) await rm(path.join(target, relative), { recursive: true });
+
+  return excluded;
+}
+
 export async function replay(root: string, snapshot: string, target: string) {
   await copyTree(snapshot, target);
+  const excluded = await excludePaths(root, target);
   await temporary("pstack-patch-", async (workspace) => {
     git(workspace, ["init", "--quiet", "--bare", "objects.git"]);
     const args = ["--git-dir", path.join(workspace, "objects.git"), "--work-tree", target];
@@ -169,6 +222,19 @@ export async function replay(root: string, snapshot: string, target: string) {
       }
     }
   });
+
+  for (const relative of excluded) {
+    try {
+      await lstat(path.join(target, relative));
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") continue;
+      throw error;
+    }
+
+    throw new Error(
+      `A patch restored excluded path ${relative}; reconcile it with upstream-exclusions.txt.`,
+    );
+  }
 }
 
 export async function unpack(cache: string, revision: string, destination: string) {

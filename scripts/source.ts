@@ -29,7 +29,7 @@ async function generate() {
     await rm(target, { recursive: true, force: true });
     await copyTree(path.join(staging, "content/pstack"), target);
   });
-  console.log("Generated content/pstack from the pinned source and patches.");
+  console.log("Generated content/pstack from the pinned source, exclusions, and patches.");
 }
 
 async function verify() {
@@ -72,7 +72,10 @@ async function ownedFiles(directory: string, relative = ""): Promise<string[]> {
 }
 
 async function diff() {
-  console.log("Pi content adaptations (upstream -> generated):");
+  console.log(
+    "Pi content adaptations (upstream -> generated; whole-file deletions shown as headers):",
+  );
+  console.log("Review display only, not a replayable patch.\n");
   console.log(
     (await contentDiff(path.join(root, "upstream/pstack"), path.join(root, "content/pstack"))) ||
       "(none)",

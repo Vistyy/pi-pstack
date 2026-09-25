@@ -40,8 +40,11 @@ async function fixture(t: TestContext) {
   await put(remote, "pstack/base.txt", "pinned\n");
   await put(remote, "pstack/.cursor-plugin/plugin.json", '{"version":"1.0.0"}\n');
   await put(remote, "pstack/run.sh", "#!/bin/sh\nexit 0\n");
+  await put(remote, "pstack/retired/old.txt", "retired implementation v1\n");
+  await put(remote, "pstack/omit.txt", "excluded single file\n");
   await chmod(path.join(remote, "pstack/run.sh"), 0o755);
   await symlink("base.txt", path.join(remote, "pstack/link"));
+  await symlink("retired", path.join(remote, "pstack/retired-link"));
 
   const git = (...args: string[]) => {
     const result = command(remote, "git", args);
@@ -72,6 +75,7 @@ async function fixture(t: TestContext) {
     verbatimSymlinks: true,
   });
   await put(root, "upstream.lock.json", JSON.stringify(lock));
+  await put(root, "upstream-exclusions.txt", "");
 
   return {
     root,
@@ -159,6 +163,106 @@ await test("upstream check and preparation expose changes and new version withou
   assert.match(
     await readFile(path.join(candidate, "upstream.diff"), "utf8"),
     /new upstream evidence/,
+  );
+  assert.deepEqual(await activeState(f.root), before);
+});
+
+await test("literal exclusions preserve the snapshot and replay across edits to excluded upstream content", async (t) => {
+  const f = await fixture(t);
+  await put(f.root, "upstream-exclusions.txt", "# local scope\nretired/\nomit.txt\nlink\n\n");
+  await put(f.root, "patches/001.patch", patch);
+  success(f.run("generate"));
+  success(f.run("verify"));
+  const expected = [".cursor-plugin", "base.txt", "retired-link", "run.sh"];
+  assert.deepEqual((await readdir(path.join(f.root, "content/pstack"))).sort(), expected);
+  assert.equal(await readFile(path.join(f.root, "content/pstack/base.txt"), "utf8"), "adapted\n");
+  assert.equal(await readlink(path.join(f.root, "upstream/pstack/link")), "base.txt");
+  assert.equal(
+    await readFile(path.join(f.root, "upstream/pstack/retired/old.txt"), "utf8"),
+    "retired implementation v1\n",
+  );
+  const display = success(f.run("diff"));
+  assert.match(display, /deleted file mode/);
+  assert.doesNotMatch(display, /retired implementation v1/);
+  const before = await activeState(f.root);
+  await put(f.remote, "pstack/retired/old.txt", "changed excluded implementation\n");
+  await put(f.remote, "pstack/retired/new.txt", "new excluded file\n");
+  f.git("add", ".");
+  f.git("commit", "--quiet", "-m", "excluded changes");
+  success(f.run("prepare-update", f.git("rev-parse", "HEAD")));
+  const candidate = await candidateDirectory(f.root);
+  assert.deepEqual((await readdir(path.join(candidate, "content/pstack"))).sort(), expected);
+  assert.equal(
+    await readFile(path.join(candidate, "upstream/pstack/retired/new.txt"), "utf8"),
+    "new excluded file\n",
+  );
+  assert.deepEqual(await activeState(f.root), before);
+});
+
+await test("invalid exclusion paths and patch recreation fail before replacing active content", async (t) => {
+  const f = await fixture(t);
+  success(f.run("generate"));
+  const before = await activeState(f.root);
+
+  const cases = [
+    ["/", /Invalid path/],
+    ["/tmp/elsewhere", /Invalid path/],
+    [".", /Invalid path/],
+    ["../elsewhere", /Invalid path/],
+    ["retired/../base.txt", /Invalid path/],
+    ["retired//old.txt", /Invalid path/],
+    ["retired\\old.txt", /Invalid path/],
+    ["retired/*", /Cannot inspect exclusion/],
+    ["missing.txt", /Cannot inspect exclusion/],
+    ["retired/\nretired/old.txt", /Overlapping paths/],
+    ["retired/old.txt\nretired", /Overlapping paths/],
+    ["retired\nretired/", /Overlapping paths/],
+    ["retired-link/old.txt", /traverses a symlink/],
+  ] as const;
+
+  for (const [entry, message] of cases) {
+    await put(f.root, "upstream-exclusions.txt", entry);
+    const result = f.run("generate");
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, message);
+    assert.deepEqual(await activeState(f.root), before);
+  }
+
+  await rm(path.join(f.root, "upstream-exclusions.txt"));
+  assert.notEqual(
+    f.run("generate").status,
+    0,
+    "a missing manifest is not an empty exclusion policy",
+  );
+  await put(f.root, "upstream-exclusions.txt", "retired/");
+  await put(
+    f.root,
+    "patches/001.patch",
+    "--- /dev/null\n+++ b/retired/restored.txt\n@@ -0,0 +1 @@\n+restored\n",
+  );
+  const restored = f.run("generate");
+  assert.notEqual(restored.status, 0);
+  assert.match(restored.stderr, /patch restored excluded path retired/);
+  assert.deepEqual(await activeState(f.root), before);
+  assert.equal(
+    await readFile(path.join(f.root, "upstream/pstack/retired/old.txt"), "utf8"),
+    "retired implementation v1\n",
+  );
+});
+
+await test("upstream renaming an excluded path fails preparation with evidence and unchanged active files", async (t) => {
+  const f = await fixture(t);
+  await put(f.root, "upstream-exclusions.txt", "retired/");
+  success(f.run("generate"));
+  const before = await activeState(f.root);
+  f.git("mv", "pstack/retired", "pstack/renamed");
+  f.git("commit", "--quiet", "-m", "renamed excluded path");
+  const result = f.run("prepare-update", f.git("rev-parse", "HEAD"));
+  assert.notEqual(result.status, 0);
+  const candidate = await candidateDirectory(f.root);
+  assert.match(
+    await readFile(path.join(candidate, "failure.txt"), "utf8"),
+    /Cannot inspect exclusion retired/,
   );
   assert.deepEqual(await activeState(f.root), before);
 });

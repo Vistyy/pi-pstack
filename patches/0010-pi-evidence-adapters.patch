@@ -1,0 +1,199 @@
+diff --git a/skills/why/references/sources/databricks.md b/skills/why/references/sources/databricks.md
+index 2770763..d8f5c7e 100644
+--- a/skills/why/references/sources/databricks.md
++++ b/skills/why/references/sources/databricks.md
+@@ -9,11 +9,11 @@ Databricks is the product-analytics, data-pipeline, and warehouse-telemetry laye
+ - **Experiment / feature-flag data.** Exposure and outcome tables. **Schema is company-specific.** Probe with `SHOW TABLES` before assuming names.
+ - **System tables.** `system.query.history`, `system.compute.warehouses`, `system.billing.*`, `system.access.audit`. Answer "was this query expensive?", "how often did anyone run this?", "when did warehouse load spike?"
+ - **dbt lineage.** Models in `<your_analytics_db>.<schema>` reveal what pipelines depend on a table/field. Upstream changes frequently motivate consumer-code changes.
+-- **Databricks notebooks.** Exploratory analyses engineers wrote before code changes. **Not queryable via the SQL MCP.** If you suspect the rationale lives in a notebook, name it as a gap.
++- **Databricks notebooks.** Exploratory analyses engineers wrote before code changes. **Not queryable through a SQL-only integration.** Check the selected integration's capabilities; if it cannot read notebooks and the rationale may live there, name the gap.
+ 
+ ## How to search it
+ 
+-Use the Databricks SQL MCP. Primary tool: `execute_sql_read_only`. If it returns a `statement_id`, poll with `poll_sql_result` rather than re-running.
++Use the selected warehouse integration's read-only query interface. For the Databricks SQL MCP example, the primary tool is `execute_sql_read_only`; if it returns a `statement_id`, poll with `poll_sql_result` rather than re-running. For other MCPs, Pi-native tools, or documented CLIs, inspect their schemas and use the corresponding query and result-retrieval operations. Do not infer a tool name or write permission from this example.
+ 
+ **Orient before querying.** Schemas are company-specific. Probe before trusting a table name:
+ 
+@@ -57,7 +57,7 @@ Beyond the pattern shapes above:
+ - **dbt refresh lag.** `<your_analytics_db>.<schema>.*` is rebuilt on a schedule (often hourly/daily). For events from the last few hours, fall back to `your_warehouse.events.*` and deduplicate by `_id`.
+ - **Company-specific tables.** Experiment, feature-flag, billing, and usage tables vary. Reporting a result from a table whose existence you never confirmed is a classic failure mode. Probe with `SHOW TABLES` / `DESCRIBE TABLE` first.
+ - **Retention cliff.** If the relevant window predates the table's retention or the dbt model's creation date, that's a *gap*, not a null result. Name it explicitly so the synthesizer doesn't read "no results" as "no activity."
+-- **Notebooks aren't queryable.** The SQL MCP can't see Databricks notebooks. If you suspect the rationale lives in one, return a gap.
++- **SQL access is not notebook access.** A SQL-only integration can't see Databricks notebooks. If the selected integration also lacks notebook access and the rationale may live in one, return a gap.
+ 
+ ## What to return
+ 
+diff --git a/skills/why/references/sources/datadog.md b/skills/why/references/sources/datadog.md
+index d8363b1..22a617d 100644
+--- a/skills/why/references/sources/datadog.md
++++ b/skills/why/references/sources/datadog.md
+@@ -16,18 +16,18 @@ Datadog answers "what was the production reality around the time this code was w
+ 
+ ## How to search it
+ 
+-Use the Datadog MCP. Start broad, then narrow.
++Use the selected observability integration. The Datadog MCP tool names below are examples; map these operations to the actual Pi-native tools, MCP tools, or documented CLI and inspect their schemas before calling them. Start broad, then narrow.
+ 
+ 1. **Identify the owning service(s).**
+ 
+-   ```
++   ```text
+    search_datadog_services (filter by name or team)
+    search_datadog_service_dependencies (see upstream/downstream)
+    ```
+ 
+ 2. **Dashboards and monitors first. They tell you what the team cares about.**
+ 
+-   ```
++   ```text
+    search_datadog_dashboards (query: feature name, service name, symbol)
+    search_datadog_monitors   (same queries)
+    ```
+@@ -36,7 +36,7 @@ Use the Datadog MCP. Start broad, then narrow.
+ 
+ 3. **Metrics around the target.**
+ 
+-   ```
++   ```text
+    search_datadog_metrics (by name pattern, e.g., the feature or symbol)
+    get_datadog_metric_context (metadata: description, units, tags)
+    get_datadog_metric (timeseries; "was there a spike around the PR date?")
+@@ -46,7 +46,7 @@ Use the Datadog MCP. Start broad, then narrow.
+ 
+ 4. **Logs. Narrow, don't dump.**
+ 
+-   ```
++   ```text
+    search_datadog_logs (raw log patterns near the target, set use_log_patterns=true)
+    analyze_datadog_logs (SQL-style aggregations, only when you need counts)
+    ```
+@@ -55,7 +55,7 @@ Use the Datadog MCP. Start broad, then narrow.
+ 
+ 5. **APM spans and traces.**
+ 
+-   ```
++   ```text
+    aggregate_spans    (stats: "how often does this endpoint fail?")
+    search_datadog_spans (inspect individual spans)
+    get_datadog_trace  (a specific trace ID)
+@@ -65,7 +65,7 @@ Use the Datadog MCP. Start broad, then narrow.
+ 
+ 6. **Incidents.**
+ 
+-   ```
++   ```text
+    search_datadog_incidents (by title, team, date range)
+    get_datadog_incident     (full detail for a specific incident)
+    ```
+diff --git a/skills/why/references/sources/linear.md b/skills/why/references/sources/linear.md
+index 899c643..b4f83d5 100644
+--- a/skills/why/references/sources/linear.md
++++ b/skills/why/references/sources/linear.md
+@@ -14,7 +14,7 @@ Linear is where the product/business context often lives: the "we're doing this
+ 
+ ## How to search it
+ 
+-Use the Linear MCP.
++Use the selected ticket-tracker integration. The Linear MCP tool names below are examples; map these operations to the actual Pi-native tools, MCP tools, or documented CLI and inspect their schemas before calling them.
+ 
+ 1. **Start with linked tickets.** If the seed commits or PRs reference ticket IDs (e.g., `ENG-1234`, `[BUG-567]`), fetch those first with `get_issue`. Read the full issue including comments.
+ 2. **List related issues by keyword.** Use `list_issues` with text search for the feature name, key symbol, or business term. Try multiple phrasings.
+diff --git a/skills/why/references/sources/notion.md b/skills/why/references/sources/notion.md
+index d16230a..1061388 100644
+--- a/skills/why/references/sources/notion.md
++++ b/skills/why/references/sources/notion.md
+@@ -15,7 +15,7 @@ Notion is where "why" often lives in long-form before it becomes code. A signifi
+ 
+ ## How to search it
+ 
+-Use the Notion MCP.
++Use the selected document integration. The Notion MCP tool names below are examples; map these operations to the actual Pi-native tools, MCP tools, or documented CLI and inspect their schemas before calling them.
+ 
+ 1. **Keyword searches with `notion-search`.** Try:
+    - The feature name
+diff --git a/skills/why/references/sources/sentry.md b/skills/why/references/sources/sentry.md
+index 2b7cf6f..1c95424 100644
+--- a/skills/why/references/sources/sentry.md
++++ b/skills/why/references/sources/sentry.md
+@@ -15,18 +15,18 @@ The most valuable thing Sentry provides is **temporal correlation**: "issue X wa
+ 
+ ## How to search it
+ 
+-Use the Sentry MCP.
++Use the selected error-tracking integration. The Sentry MCP tool names below are examples; map these operations to the actual Pi-native tools, MCP tools, or documented CLI and inspect their schemas before calling them.
+ 
+ 1. **Orient.** If you don't know the project slug and organization:
+ 
+-   ```
++   ```text
+    find_organizations
+    find_projects
+    ```
+ 
+ 2. **Search for issues related to the target.**
+ 
+-   ```
++   ```text
+    search_issues (natural language, e.g., "errors in PaymentService timeout", "unhandled exceptions in uploadFile")
+    ```
+ 
+@@ -34,7 +34,7 @@ Use the Sentry MCP.
+ 
+ 3. **Narrow by release and time window.**
+ 
+-   ```
++   ```text
+    search_issue_events (filter by release, time, environment, trace ID, tags)
+    get_issue_tag_values (for an issue, see distribution across versions, users, environments)
+    ```
+@@ -47,7 +47,7 @@ Use the Sentry MCP.
+ 
+ 4. **Pull the full event for context.**
+ 
+-   ```
++   ```text
+    get_sentry_resource (pass a Sentry URL or type+ID)
+    ```
+ 
+@@ -55,7 +55,7 @@ Use the Sentry MCP.
+ 
+ 5. **Check releases that landed near the target.**
+ 
+-   ```
++   ```text
+    find_releases (around the commit date of the target)
+    ```
+ 
+@@ -63,7 +63,7 @@ Use the Sentry MCP.
+ 
+ 6. **Use Seer sparingly.**
+ 
+-   ```
++   ```text
+    analyze_issue_with_seer
+    ```
+ 
+diff --git a/skills/why/references/sources/slack.md b/skills/why/references/sources/slack.md
+index 863a527..c43ebd8 100644
+--- a/skills/why/references/sources/slack.md
++++ b/skills/why/references/sources/slack.md
+@@ -13,7 +13,7 @@ Slack is frequently where the *real* decisions got made, especially for smaller
+ 
+ ## How to search it
+ 
+-Slack MCP tools vary. Check which Slack MCP is available and inspect its tool schema first. It may require `mcp_auth`. If authentication fails, stop and report the gap.
++Use the selected chat integration, whether exposed through Pi-native tools, MCP, or a documented CLI. Inspect its actual tool schemas and authentication guidance first. A Slack MCP may expose `mcp_auth`; call it only if that integration actually provides it. If authentication fails, stop and report the gap.
+ 
+ 1. **Author-bounded search.** Messages from the PR author around the PR merge date. Limits scope dramatically and often hits gold.
+ 2. **Keyword search for the feature name and key symbols.** Include misspellings and casual phrasings.
+@@ -41,7 +41,7 @@ Slack MCP tools vary. Check which Slack MCP is available and inspect its tool sc
+ - **Unsearched DMs.** Many decisions happen in DMs that aren't searchable. You'll miss them. That's a known limitation.
+ - **Speculative jokes as "decisions."** Slack is casual. "Lol just do the thing" isn't a decision, even if it preceded the commit. Look for considered discussion.
+ - **Context collapse in single messages.** Without the thread, a single message often reads differently than in context. Always fetch threads.
+-- **Auth failures.** If the MCP isn't authenticated, stop. Don't make up findings. Report that Slack wasn't searchable.
++- **Auth failures.** If the selected integration isn't authenticated, stop. Don't make up findings. Report that Slack wasn't searchable.
+ 
+ ## What to return
+ 

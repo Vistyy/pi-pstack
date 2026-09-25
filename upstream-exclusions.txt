@@ -1,0 +1,18 @@
+# Exact paths relative to the pinned PStack subtree, excluded before patches.
+# Directories include all descendants. No glob patterns or negation.
+
+# Cloud automation and its webhook UI.
+automations/benny/
+skills/make-bot-ui/
+
+# Cloud programs, scheduled work, and automatic landing.
+skills/poteto-mode/playbooks/orchestrate.md
+skills/poteto-mode/playbooks/autopilot-full.md
+skills/poteto-mode/playbooks/autopilot-stack.md
+skills/poteto-mode/playbooks/autonomous-run.md
+skills/poteto-mode/playbooks/shipping.md
+skills/poteto-mode/scripts/orch/
+
+# Cleanup depends on Cursor chat ownership and macOS-specific tooling.
+skills/poteto-mode/playbooks/worktree-cleanup.md
+skills/poteto-mode/scripts/worktree-audit.sh

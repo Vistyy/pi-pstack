@@ -79,7 +79,7 @@ export async function prepareUpdate(root: string, revision: string | undefined) 
       `${JSON.stringify({ status: "prepared", semanticReview: "required" }, null, 2)}\n`,
     );
     console.log(
-      `Candidate: ${directory}\nPatch replay succeeded; semantic review is still required. Active source, lock, and content are unchanged.`,
+      `Candidate: ${directory}\nExclusions and patch replay succeeded; semantic review is still required. Active source, lock, and content are unchanged.`,
     );
   } catch (error) {
     const message = error instanceof Error ? error.stack : String(error);

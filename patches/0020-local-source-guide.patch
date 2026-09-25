@@ -1,0 +1,203 @@
+diff --git a/docs/guide/02-poteto-mode.md b/docs/guide/02-poteto-mode.md
+index 403cbe8..ea99337 100644
+--- a/docs/guide/02-poteto-mode.md
++++ b/docs/guide/02-poteto-mode.md
+@@ -1,6 +1,6 @@
+ # Route work through `/poteto-mode`
+ 
+-`/poteto-mode` is the front door. You give it a goal, it matches one of twenty-three playbooks, copies that playbook's steps into the todo list, and calls the other skills as the steps need them. In this page you learn what a good prompt looks like, and how little of one you actually need.
++`/poteto-mode` is the front door. You give it a goal, it matches one of the local-work playbooks, copies that playbook's steps into the todo list, and calls the other skills as the steps need them. In this page you learn what a good prompt looks like, and how little of one you actually need.
+ 
+ ![A dispatcher pulls a switch lever to route robots on rail handcars toward lit gates, under a /poteto-mode departure board listing BUG FIX, FEATURE, and INVESTIGATION.](./images/router.jpg)
+ 
+@@ -25,7 +25,7 @@ flowchart TD
+     J --> K
+ ```
+ 
+-The diagram shows the common routes. There are also playbooks for hillclimbing a metric, diagnosing runtime symptoms and captured traces, prototypes, visual parity, authoring and evaluating skills, autonomous runs, babysitting a PR or stack to merge-ready, shipping a verified stack, running a PR queue on autopilot, orchestrating project-scale programs, session pickup, pausing safely, multi-phase plans, and worktree cleanup. The [playbook directory](../../skills/poteto-mode/playbooks/) has the full set.
++The diagram shows the common routes. There are also playbooks for hillclimbing a metric, diagnosing runtime symptoms and captured traces, prototypes, visual parity, authoring and evaluating skills, babysitting a PR or stack to merge-ready, session pickup, pausing safely, and multi-phase plans. The [playbook directory](../../skills/poteto-mode/playbooks/) has the full set.
+ 
+ ## Say the goal, not the ceremony
+ 
+@@ -73,14 +73,6 @@ If you run several agents against one repository, they will fight over the worki
+ 
+ Each task in its own branch and worktree means no agent stomps another's files. The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) already works from a worktree for code changes, so mostly you only say this when a specific base or location matters.
+ 
+-Worktrees accumulate. When disk gets tight, ask:
+-
+-```text
+-/poteto-mode what's eating my disk? prune the worktrees that are safe to prune.
+-```
+-
+-The [Worktree cleanup playbook](../../skills/poteto-mode/playbooks/worktree-cleanup.md) classifies every worktree by merge state, uncommitted work, and which chats still touch it. It deletes only what that evidence clears and pauses for your call on anything holding uncommitted work.
+-
+ ## Leave it running
+ 
+ When you step away, say what done means and go:
+@@ -89,7 +81,7 @@ When you step away, say what done means and go:
+ /poteto-mode im stepping away. keep going until the migration check reports zero old callers. log your decisions.
+ ```
+ 
+-Work you'll review later routes through [`/figure-it-out`](../../skills/figure-it-out/SKILL.md), which designs the run's phases and keeps a [`/show-me-your-work`](../../skills/show-me-your-work/SKILL.md) decision log. [Run work while you sleep](./07-overnight.md) covers the full overnight contract.
++Work you'll review later routes through [`/figure-it-out`](../../skills/figure-it-out/SKILL.md), which designs the run's phases and keeps a [`/show-me-your-work`](../../skills/show-me-your-work/SKILL.md) decision log. [Audit a local run](./07-overnight.md) covers the finish condition and decision trail. Work continues only while the owning Pi session stays live.
+ 
+ **Pitfall:** don't enumerate skills in your prompt ("use /how, then /architect, then /arena..."). The playbook already sequences them, and a hand-written sequence usually reorders or drops steps the playbook would have kept. Name a skill only when you want to override a specific choice.
+ 
+diff --git a/docs/guide/06-verify-and-ship.md b/docs/guide/06-verify-and-ship.md
+index d96c766..44813eb 100644
+--- a/docs/guide/06-verify-and-ship.md
++++ b/docs/guide/06-verify-and-ship.md
+@@ -1,6 +1,6 @@
+ # Verify the result and open a PR
+ 
+-"It compiles" is not evidence. The [Prove It Works principle](../../skills/principle-prove-it-works/SKILL.md) makes the agent check the real artifact before it reports success, and your job is to make "the real artifact" checkable. This page covers stating a finish condition, generating a verification skill for your app, opening the PR, and driving it to merged.
++"It compiles" is not evidence. The [Prove It Works principle](../../skills/principle-prove-it-works/SKILL.md) makes the agent check the real artifact before it reports success, and your job is to make "the real artifact" checkable. This page covers stating a finish condition, generating a verification skill for your app, opening the PR, and addressing review and CI through merge-ready.
+ 
+ ![A prototype plane flies a real test course while she times it with a stopwatch and robots film and checklist the run; the terminal reads verify: pass, evidence: captured.](./images/verification.jpg)
+ 
+@@ -74,14 +74,6 @@ Babysit watches the PR with a bundled watcher and takes blockers in order: confl
+ 
+ Babysit stops at merge-ready. It never merges, even with everything green, because merging is a different decision.
+ 
+-## Land the stack with Shipping
++Landing is a separate user decision. This local package ends at reviewed, verified work and the PR evidence; it does not merge or arm auto-merge.
+ 
+-Green is not the same as safe. When you're ready to land, say so:
+-
+-```text
+-/poteto-mode land the stack.
+-```
+-
+-The [Shipping playbook](../../skills/poteto-mode/playbooks/shipping.md) verifies each PR independently before it arms anything. One fresh agent per PR proves the behavior live, and the agent that judges a change is never the one that wrote it. Then Shipping lands only the contiguous verified run from the bottom, one PR at a time through GitHub by default or Origin when its CLI is available, and reports the first PR that breaks the chain. A verified PR sitting above an unverified one waits, because merging it would pull the gap in underneath.
+-
+-Next: [Run work while you sleep](./07-overnight.md).
++Next: [Audit a local run](./07-overnight.md).
+diff --git a/docs/guide/07-overnight.md b/docs/guide/07-overnight.md
+index 9ff66b7..77db025 100644
+--- a/docs/guide/07-overnight.md
++++ b/docs/guide/07-overnight.md
+@@ -1,32 +1,26 @@
+-# Run work while you sleep
++# Audit a local run
+ 
+-This is the payoff for everything before it. An agent you can trust to verify its own work is an agent you can leave alone with a hard task. What makes that safe isn't hope. It's a checkable finish condition, an isolated worktree, and a decision log you audit in the morning.
++A run you can trust has a checkable finish condition, an isolated worktree, and a decision log. Local children remain tied to their live Pi parent session; this package does not schedule wakeups or keep workers alive after the parent exits.
+ 
+-![She waves goodnight from the door while robots keep the factory running, one updating a DECISION LOG wall board under a BUILD LOOP ACTIVE sign.](./images/overnight.jpg)
+-
+-## The overnight contract
++## Define the task
+ 
+ A good handoff has the goal, the finish condition, permissions, and an escape hatch. It doesn't need to be long:
+ 
+ ```text
+-/poteto-mode im going to bed. migrate every caller to the new parser in a fresh worktree off <base>.
++/poteto-mode migrate every caller to the new parser in a fresh worktree off <base>.
+ done means zero old callers, all parser fixtures pass, old api deleted.
+ keep a decision log. don't ask me before committing.
+-/loop until done. if you're truly stuck after a few hours, stop and write up why.
++if you're truly stuck, stop and write up why.
+ ```
+ 
+-Walk through what each line buys you:
+-
+-- "im going to bed" is a session override. The agent stops asking and keeps going.
+ - "done means..." turns the goal into checks every iteration can run.
+-- "fresh worktree off `<base>`" keeps the run from colliding with anything else you have open.
+-- "don't ask me before committing" pre-answers the permission the agent would otherwise block on.
+-- `/loop` is Cursor's built-in wake mechanism, not a pstack skill. The [Autonomous run playbook](../../skills/poteto-mode/playbooks/autonomous-run.md) uses it to re-check the finish condition on events or a heartbeat.
+-- The escape hatch lets it stop at a genuine dead end and write up why, which beats eight hours of creative goal reinterpretation.
++- "fresh worktree off <base>" keeps writes from colliding with other work.
++- "don't ask me before committing" states the permission for local commits, not publishing or merging.
++- The escape hatch permits reporting a genuine dead end, not weakening the finish condition.
+ 
+-Because you'll review this work after stepping away, `/poteto-mode` routes it through [`/figure-it-out`](../../skills/figure-it-out/SKILL.md), which designs the run's phases before any code and wires in the decision log.
++Large work routes through [figure-it-out](../../skills/figure-it-out/SKILL.md), which designs the run's phases before code and wires in the decision log.
+ 
+-## What the loop does all night
++## Iterate against evidence
+ 
+ ```mermaid
+ flowchart TD
+@@ -42,40 +36,14 @@ flowchart TD
+ 
+ One change, one check, one log row, every iteration. Changes that didn't help get discarded, not left to ride. A plateau means pivot, not stop, and the finish condition never quietly relaxes to declare victory.
+ 
+-## The morning audit
+-
+-[`/show-me-your-work`](../../skills/show-me-your-work/SKILL.md) is what makes the run reviewable. Each row records the time, phase, decision, reason, an evidence pointer, and the result, in a TSV at `decisions.tsv` (or `.audit/<task-slug>.tsv` when several runs share a directory). It stays local by default. Commit it when the work is ambitious enough that a reviewer needs the trail to trust the result.
+-
+-When you're back, ask for the run in review form:
+-
+-```text
+-/show-me-your-work catch me up on what you did last night
+-```
+-
+-Before the skill hands back its summary, it spawns a reviewer on a different model family to read the trail and the transcript, and the reply ends with an Attention section listing what deserves your scrutiny. Read that section first, then the log rows it points at. You're auditing decisions, not re-reading the whole night.
++## Audit the decisions
+ 
+-## When the night holds a queue, not a task
++[show-me-your-work](../../skills/show-me-your-work/SKILL.md) makes the run reviewable. Each row records the time, phase, decision, reason, an evidence pointer, and the result, in a TSV at `decisions.tsv` (or `.audit/<task-slug>.tsv` when several runs share a directory). It stays local by default. Commit it when a reviewer needs the trail to trust the result.
+ 
+-The contract above drives one task to one finish condition. Some nights hold more, a queue of independent changes or a whole program. Three playbooks scale the same trust up.
++Before handoff, a reviewer on a different model family reads the trail and this run's exact transcript. The reply ends with an Attention section listing what deserves scrutiny. Read that section first, then the log rows it points at. Missing transcript evidence is a gap, not a completed audit.
+ 
+-[Autopilot-full](../../skills/poteto-mode/playbooks/autopilot-full.md) runs a queue of independent PRs to merged. Each PR gets one owner agent that carries it from build through merge, and no owner merges on its own verdict. A swarm of fresh verifiers starts a round at the owner's code-ready head and again at every later push that changes the patch. Only a clean verdict on the patch that merges authorizes the merge:
+-
+-```text
+-/poteto-mode full autopilot on this queue. each item is independent. i want them merged by morning.
+-```
+-
+-[Autopilot-stack](../../skills/poteto-mode/playbooks/autopilot-stack.md) runs the same owner loop but ships nothing. You wake up to one linear base-branch stack with a verifier's verdict on every link, and you review and land it yourself. Pick it over Autopilot-full when the changes are coupled, or when you want your own eyes on the work before anything merges:
+-
+-```text
+-/poteto-mode autopilot these five changes but stack them, don't ship. i'll land the stack in the morning.
+-```
+-
+-[Orchestrate](../../skills/poteto-mode/playbooks/orchestrate.md) is for a program that outlives any single agent: multi-day, many stacked PRs, fleets of subagents under one standing coordinator chat. The coordinator authors briefs, collects what its subagents finish, keeps the lowest unmerged PR green, and never writes code itself. It's deliberately heavy machinery. If one agent could finish the work in a session, the playbook itself routes you back to the overnight contract above:
+-
+-```text
+-/poteto-mode orchestrate the store migration. own it until every package is converted and merged. i'll check in twice a day.
+-```
++For a multi-phase change, the [Multi-phase plan playbook](../../skills/poteto-mode/playbooks/multi-phase-plan.md) retains explicit dependencies, ten live verification lanes, performance comparisons, independent audits, and operator review gates. Planning does not authorize execution or landing.
+ 
+-**Pitfall:** a duration is not a finish condition. "work on this for 4 hours" gives the agent nothing to check, and you'll wake up to four hours of motion instead of a result. Give `/loop` a predicate that can pass or fail.
++**Pitfall:** a duration is not a finish condition. "work on this for 4 hours" gives the agent nothing to check. Give a predicate that can pass or fail.
+ 
+ Next: [Steer with principle names](./08-principles.md).
+diff --git a/docs/guide/10-recipes-and-pitfalls.md b/docs/guide/10-recipes-and-pitfalls.md
+index da0af5e..37423ff 100644
+--- a/docs/guide/10-recipes-and-pitfalls.md
++++ b/docs/guide/10-recipes-and-pitfalls.md
+@@ -81,7 +81,7 @@ That's the whole prompt. [`/bro`](../../skills/bro/SKILL.md) restates the last m
+ ## The pitfalls
+ 
+ - **Enumerating skills in the prompt.** "use /how then /architect then /arena" reorders steps the playbook already sequences. State the goal and constraints. Name a skill only to override a default.
+-- **A vague finish condition.** "make it better" gives `/loop` nothing to check. Give a command or artifact that can pass or fail.
++- **A vague finish condition.** "make it better" gives the agent nothing to check. Give a command or artifact that can pass or fail.
+ - **Parallel agents in one worktree.** They overwrite each other and the diff becomes archaeology. Say "own worktree per attempt" and the isolation is free.
+ - **Using `/arena` for coverage.** `/arena` repeats one design or code brief, then picks a base and grafts the best parts. `/swarm` partitions slices or declared race arms and aggregates one report.
+ - **Accepting every review comment.** Bots and humans both file real catches and noise in one list. `/interrogate` sorts findings into act-on and dismissed buckets with reasons, and you can override either way.
+diff --git a/docs/guide/README.md b/docs/guide/README.md
+index b8b1b07..55419a4 100644
+--- a/docs/guide/README.md
++++ b/docs/guide/README.md
+@@ -1,5 +1,7 @@
+ # The pstack guide
+ 
++These pages retain upstream examples with excluded workflows removed. Their command spellings and host setup are source reference. Use the Pi package's [README](../../../../README.md) for registered commands, installation, and support boundaries.
++
+ pstack works best when you stop micromanaging the agent. You describe what you want and how you'll know it's done. `/poteto-mode` picks the playbook, runs the other skills as the steps need them, and shows you the evidence. This guide teaches that habit with realistic prompts.
+ 
+ Here's what you'll learn:
+@@ -9,8 +11,8 @@ Here's what you'll learn:
+ 3. [Understand the code](./03-understand.md). `/how`, `/why`, `/teach`, and `/recall` before you edit anything.
+ 4. [Design the change](./04-design.md). `/architect`, `/arena`, `/swarm`, and `/interrogate` before code locks in a shape.
+ 5. [Build and clean the change](./05-build-and-clean.md). The build playbooks, `/tdd`, `/unslop`, and `/no-comments`.
+-6. [Verify and ship](./06-verify-and-ship.md). Prove behavior on the real app, then open a focused PR and drive it to merged.
+-7. [Run work while you sleep](./07-overnight.md). An overnight contract, a decision log you can audit, and the playbooks that scale past one agent.
++6. [Verify and open a PR](./06-verify-and-ship.md). Prove behavior on the real app, then open a focused PR and address review and CI.
++7. [Audit a local run](./07-overnight.md). A checkable finish condition and a decision log you can audit.
+ 8. [Steer with principle names](./08-principles.md). The 23 names that redirect an agent mid-task.
+ 9. [Make it yours](./09-make-it-yours.md). Your own mode, plus how to test a skill change.
+ 10. [Recipes and pitfalls](./10-recipes-and-pitfalls.md). Prompts to copy and mistakes to skip.
