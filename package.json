@@ -24,7 +24,10 @@
       "./content/pstack/skills/unslop",
       "./content/pstack/skills/no-comments",
       "./content/pstack/skills/technical-writing",
-      "./content/pstack/skills/principle-*/SKILL.md"
+      "./content/pstack/skills/principle-*/SKILL.md",
+      "./content/pstack/skills/deslop",
+      "./content/pstack/skills/control-cli",
+      "./content/pstack/skills/control-ui"
     ]
   },
   "scripts": {

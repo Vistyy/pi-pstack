@@ -1,6 +1,52 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { git, pluginVersion, readLock, replay, type UpstreamLock, unpack } from "./source-files.ts";
+import {
+  composeKitSnapshot,
+  contentDiff,
+  copyTree,
+  git,
+  kitSkills,
+  pluginVersion,
+  readLock,
+  replay,
+  treeId,
+  type UpstreamLock,
+  unpack,
+} from "./source-files.ts";
+
+async function selectedKit(cache: string, commit: string, directory: string) {
+  const { execFileSync } = await import("node:child_process");
+
+  const archive = execFileSync("git", [
+    "-C",
+    cache,
+    "archive",
+    "--format=tar",
+    commit,
+    "cursor-team-kit",
+  ]);
+
+  const staging = path.join(directory, "kit-extract");
+  await mkdir(staging, { recursive: true });
+  execFileSync("tar", ["-xf", "-", "-C", staging], { input: archive });
+  const source = path.join(staging, "cursor-team-kit");
+  const selected = path.join(directory, "selected-kit");
+  await mkdir(path.join(selected, ".cursor-plugin"), { recursive: true });
+  await copyTree(path.join(source, "LICENSE"), path.join(selected, "LICENSE"));
+  await copyTree(
+    path.join(source, ".cursor-plugin/plugin.json"),
+    path.join(selected, ".cursor-plugin/plugin.json"),
+  );
+
+  for (const skill of kitSkills)
+    await copyTree(path.join(source, "skills", skill), path.join(selected, "skills", skill));
+
+  return selected;
+}
+
+async function selectedKitDiff(before: string, after: string) {
+  return contentDiff(before, after);
+}
 
 async function workspace(root: string, prefix: string) {
   const work = path.join(root, ".work");
@@ -9,7 +55,7 @@ async function workspace(root: string, prefix: string) {
   return mkdtemp(path.join(work, prefix));
 }
 
-async function fetchSource(directory: string, lock: UpstreamLock, ref: string) {
+async function fetchSource(root: string, directory: string, lock: UpstreamLock, ref: string) {
   if (ref === "" || ref.startsWith("-"))
     throw new Error("An upstream ref must not be empty or an option.");
   git(directory, ["init", "--quiet", "--bare", "source.git"]);
@@ -18,6 +64,7 @@ async function fetchSource(directory: string, lock: UpstreamLock, ref: string) {
   const commit = git(cache, ["rev-parse", "FETCH_HEAD^{commit}"]);
   git(cache, ["fetch", "--no-tags", "--depth=1", lock.repository, lock.commit]);
   const tree = git(cache, ["rev-parse", `${commit}:${lock.path}`]);
+  const kitSourceTree = git(cache, ["rev-parse", `${commit}:cursor-team-kit`]);
 
   const changes = git(cache, [
     "diff",
@@ -26,26 +73,44 @@ async function fetchSource(directory: string, lock: UpstreamLock, ref: string) {
     `${commit}:${lock.path}`,
   ]);
 
+  const toolkit = await selectedKit(cache, commit, directory);
+  const activeKit = path.join(directory, "selected-kit-before");
+  await copyTree(path.join(root, "upstream/cursor-team-kit"), activeKit);
+  const kitChanges = await selectedKitDiff(activeKit, toolkit);
   await writeFile(path.join(directory, "upstream.diff"), changes === "" ? "" : `${changes}\n`);
+  await writeFile(path.join(directory, "cursor-team-kit.diff"), kitChanges);
 
-  return { cache, commit, tree, changes };
+  return { cache, commit, tree, kitSourceTree, toolkit, changes, kitChanges };
 }
 
 export async function checkUpstream(root: string, ref = "main") {
   const lock = await readLock(root);
   const directory = await workspace(root, "check-");
-  const source = await fetchSource(directory, lock, ref);
+  const source = await fetchSource(root, directory, lock, ref);
 
   const report = {
-    pinned: { commit: lock.commit, tree: lock.tree, version: lock.version },
-    requested: { ref, commit: source.commit, tree: source.tree },
+    pinned: {
+      commit: lock.commit,
+      tree: lock.tree,
+      version: lock.version,
+      cursorTeamKit: lock.cursorTeamKit,
+    },
+    requested: {
+      ref,
+      commit: source.commit,
+      tree: source.tree,
+      cursorTeamKitSourceTree: source.kitSourceTree,
+    },
     changed: source.tree !== lock.tree,
+    selectedCursorTeamKitChanged: source.kitChanges !== "",
     diff: path.join(directory, "upstream.diff"),
+    selectedCursorTeamKitDiff: path.join(directory, "cursor-team-kit.diff"),
   };
 
   await writeFile(path.join(directory, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
   console.log(JSON.stringify(report, null, 2));
   console.log(source.changes === "" ? "No PStack subtree changes." : source.changes);
+  console.log(`Selected Cursor Team Kit changes:\n${source.kitChanges || "(none)"}`);
 }
 
 export async function prepareUpdate(root: string, revision: string | undefined) {
@@ -55,25 +120,34 @@ export async function prepareUpdate(root: string, revision: string | undefined) 
   const directory = await workspace(root, `candidate-${revision.slice(0, 12)}-`);
 
   try {
-    const source = await fetchSource(directory, lock, revision);
+    const source = await fetchSource(root, directory, lock, revision);
 
     if (source.commit !== revision)
       throw new Error("Fetched identity does not match the requested commit.");
     const snapshot = path.join(directory, "upstream/pstack");
     await unpack(source.cache, `${source.commit}:${lock.path}`, snapshot);
+    const kitSnapshot = path.join(directory, "upstream/cursor-team-kit");
+    await copyTree(source.toolkit, kitSnapshot);
 
     const candidate = {
       ...lock,
       commit: source.commit,
       tree: source.tree,
       version: await pluginVersion(snapshot),
+      cursorTeamKit: {
+        sourceTree: source.kitSourceTree,
+        selectedTree: await treeId(kitSnapshot),
+        version: await pluginVersion(kitSnapshot),
+      },
     };
 
     await writeFile(
       path.join(directory, "upstream.lock.json"),
       `${JSON.stringify(candidate, null, 2)}\n`,
     );
-    await replay(root, snapshot, path.join(directory, "content/pstack"));
+    const generated = path.join(directory, "content/pstack");
+    await replay(root, snapshot, generated);
+    await composeKitSnapshot(kitSnapshot, generated);
     await writeFile(
       path.join(directory, "result.json"),
       `${JSON.stringify({ status: "prepared", semanticReview: "required" }, null, 2)}\n`,

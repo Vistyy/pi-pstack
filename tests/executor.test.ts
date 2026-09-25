@@ -15,6 +15,7 @@ import {
   type AgentSession,
   createAgentSession,
   DefaultResourceLoader,
+  loadSkillsFromDir,
   ModelRuntime,
   SessionManager,
   SettingsManager,
@@ -23,6 +24,19 @@ import { Type } from "typebox";
 import { Check } from "typebox/value";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
+
+await test("Pi native skill loader discovers the bundled companion methods", async () => {
+  const packageJson = await readFile(join(root, "package.json"), "utf8");
+  const result = loadSkillsFromDir({ dir: join(root, "content/pstack/skills"), source: "package" });
+
+  for (const name of ["deslop", "control-cli", "control-ui"]) {
+    assert.ok(
+      result.skills.some((skill) => skill.name === name),
+      `missing native skill ${name}`,
+    );
+    assert.ok(packageJson.includes(`./content/pstack/skills/${name}`));
+  }
+});
 
 await test("native child receives a fresh conversation and returns the entire final result", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "pstack-child-"));
@@ -352,9 +366,21 @@ export default (pi) => {
   assert.doesNotMatch(resumedHistory, /Parent secret/);
 
   let systemText = "";
+  const childMethodsRead: string[] = [];
   nestedProvider.setResponses([
-    (context) => {
+    async (context) => {
       systemText = getCurrentSystemPrompt(context.messages);
+
+      const injectedSkills = systemText.match(/Packaged PStack skills directory: ([^\n]+)/)?.[1];
+      assert.equal(injectedSkills, join(root, "content/pstack/skills"));
+      assert.ok(injectedSkills);
+
+      for (const name of ["deslop", "control-cli", "control-ui"]) {
+        const body = await readFile(join(injectedSkills, name, "SKILL.md"), "utf8");
+        assert.match(body, /^---\nname: /);
+        childMethodsRead.push(name);
+      }
+
       const user = context.messages.findLast((message) => message.role === "user");
       assert.ok(user?.role === "user");
       assert.deepEqual(user.content, [{ type: "text", text: "Poteto assignment" }]);
@@ -384,6 +410,8 @@ export default (pi) => {
   );
   assert.doesNotMatch(systemText, /Poteto assignment/);
   assert.match(systemText, /Packaged PStack skills directory/);
+  assert.deepEqual(childMethodsRead, ["deslop", "control-cli", "control-ui"]);
+
   assert.doesNotMatch(systemText, /Parent secret/);
 
   let started = 0;

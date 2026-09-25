@@ -32,6 +32,46 @@ function command(cwd: string, executable: string, args: string[]) {
   return spawnSync(executable, args, { cwd, encoding: "utf8" });
 }
 
+async function treeId(directory: string) {
+  const workspace = await mkdtemp(path.join(tmpdir(), "pstack-tree-test-"));
+
+  try {
+    const repository = path.join(workspace, "objects.git");
+    const init = command(workspace, "git", ["init", "--quiet", "--bare", repository]);
+    assert.equal(init.status, 0, init.stderr);
+
+    const add = command(directory, "git", [
+      "--git-dir",
+      repository,
+      "--work-tree",
+      directory,
+      "-c",
+      "core.filemode=true",
+      "add",
+      "--force",
+      "--all",
+      "--",
+      ".",
+    ]);
+
+    assert.equal(add.status, 0, add.stderr);
+
+    const tree = command(directory, "git", [
+      "--git-dir",
+      repository,
+      "--work-tree",
+      directory,
+      "write-tree",
+    ]);
+
+    assert.equal(tree.status, 0, tree.stderr);
+
+    return tree.stdout.trim();
+  } finally {
+    await rm(workspace, { recursive: true, force: true });
+  }
+}
+
 async function fixture(t: TestContext) {
   const directory = await mkdtemp(path.join(tmpdir(), "pstack-cli-test-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -45,6 +85,11 @@ async function fixture(t: TestContext) {
   await chmod(path.join(remote, "pstack/run.sh"), 0o755);
   await symlink("base.txt", path.join(remote, "pstack/link"));
   await symlink("retired", path.join(remote, "pstack/retired-link"));
+  await put(remote, "cursor-team-kit/.cursor-plugin/plugin.json", '{"version":"1.2.0"}\n');
+  await put(remote, "cursor-team-kit/LICENSE", "toolkit license\n");
+
+  for (const skill of ["deslop", "control-cli", "control-ui"])
+    await put(remote, `cursor-team-kit/skills/${skill}/SKILL.md`, `${skill} source\n`);
 
   const git = (...args: string[]) => {
     const result = command(remote, "git", args);
@@ -60,17 +105,24 @@ async function fixture(t: TestContext) {
   git("commit", "--quiet", "-m", "source");
   const commit = git("rev-parse", "HEAD");
 
+  const kitTree = git("rev-parse", "HEAD:cursor-team-kit");
+
   const lock = {
     repository: remote,
     path: "pstack",
     commit,
     tree: git("rev-parse", "HEAD:pstack"),
     version: "1.0.0",
+    cursorTeamKit: { sourceTree: kitTree, selectedTree: kitTree, version: "1.2.0" },
   };
 
   await mkdir(path.join(root, "patches"), { recursive: true });
   await cp(path.join(repo, "scripts"), path.join(root, "scripts"), { recursive: true });
   await cp(path.join(remote, "pstack"), path.join(root, "upstream/pstack"), {
+    recursive: true,
+    verbatimSymlinks: true,
+  });
+  await cp(path.join(remote, "cursor-team-kit"), path.join(root, "upstream/cursor-team-kit"), {
     recursive: true,
     verbatimSymlinks: true,
   });
@@ -95,9 +147,14 @@ function success(result: SpawnSyncReturns<string>) {
 
 async function activeState(root: string) {
   return Promise.all(
-    ["upstream.lock.json", "upstream/pstack/base.txt", "content/pstack/base.txt"].map((name) =>
-      readFile(path.join(root, name), "utf8"),
-    ),
+    [
+      "upstream.lock.json",
+      "upstream/pstack/base.txt",
+      "content/pstack/base.txt",
+      "upstream/cursor-team-kit/skills/deslop/SKILL.md",
+      "content/pstack/skills/deslop/SKILL.md",
+      "content/pstack/licenses/cursor-team-kit.LICENSE",
+    ].map((name) => readFile(path.join(root, name), "utf8")),
   );
 }
 
@@ -113,6 +170,7 @@ async function candidateDirectory(root: string) {
 
 await test("generate and verify work without upstream Git objects, preserve source identity, and detect drift", async (t) => {
   const f = await fixture(t);
+  await rm(f.remote, { recursive: true, force: true });
   await put(f.root, "patches/001.patch", patch);
   success(f.run("generate"));
   success(f.run("verify"));
@@ -131,6 +189,39 @@ await test("generate and verify work without upstream Git objects, preserve sour
   assert.match(changedSource.stderr, /snapshot differs/);
 });
 
+await test("companion bytes, snapshot and generated drift, missing inputs, and PStack collisions are guarded", async (t) => {
+  const f = await fixture(t);
+  success(f.run("generate"));
+
+  for (const name of ["deslop", "control-cli", "control-ui"])
+    assert.equal(
+      await treeId(path.join(f.root, "content/pstack/skills", name)),
+      await treeId(path.join(f.root, "upstream/cursor-team-kit/skills", name)),
+    );
+  assert.equal(
+    await readFile(path.join(f.root, "content/pstack/licenses/cursor-team-kit.LICENSE"), "utf8"),
+    "toolkit license\n",
+  );
+
+  await put(f.root, "content/pstack/skills/deslop/SKILL.md", "generated drift\n");
+  assert.match(f.run("verify").stderr, /Generated drift/);
+  success(f.run("generate"));
+  await rm(path.join(f.root, "upstream/cursor-team-kit/skills/control-ui"), { recursive: true });
+  assert.notEqual(f.run("verify").status, 0);
+
+  await cp(
+    path.join(f.remote, "cursor-team-kit/skills/control-ui"),
+    path.join(f.root, "upstream/cursor-team-kit/skills/control-ui"),
+    { recursive: true },
+  );
+  await put(
+    f.root,
+    "patches/999.patch",
+    "--- /dev/null\n+++ b/skills/deslop/SKILL.md\n@@ -0,0 +1 @@\n+adapted collision\n",
+  );
+  assert.match(f.run("generate").stderr, /Companion destination collision/);
+});
+
 await test("upstream check and preparation expose changes and new version without changing active files", async (t) => {
   const f = await fixture(t);
   await put(f.root, "patches/001.patch", patch);
@@ -138,10 +229,16 @@ await test("upstream check and preparation expose changes and new version withou
   const before = await activeState(f.root);
   await put(f.remote, "pstack/.cursor-plugin/plugin.json", '{"version":"2.0.0"}\n');
   await put(f.remote, "pstack/new.txt", "new upstream evidence\n");
+  await put(f.remote, "cursor-team-kit/.cursor-plugin/plugin.json", '{"version":"1.3.0"}\n');
+  await put(f.remote, "cursor-team-kit/skills/deslop/SKILL.md", "updated selected method\n");
+  await put(f.remote, "cursor-team-kit/README.md", "unselected toolkit change\n");
   f.git("add", ".");
   f.git("commit", "--quiet", "-m", "new source");
   const next = f.git("rev-parse", "HEAD");
-  assert.match(success(f.run("check-upstream")), /new upstream evidence/);
+  const check = success(f.run("check-upstream"));
+  assert.match(check, /new upstream evidence/);
+  assert.match(check, /updated selected method/);
+  assert.doesNotMatch(check, /unselected toolkit change/);
   success(f.run("prepare-update", next));
   const candidate = await candidateDirectory(f.root);
 
@@ -155,6 +252,11 @@ await test("upstream check and preparation expose changes and new version withou
     commit: next,
     tree: f.git("rev-parse", `${next}:pstack`),
     version: "2.0.0",
+    cursorTeamKit: {
+      sourceTree: f.git("rev-parse", `${next}:cursor-team-kit`),
+      selectedTree: await treeId(path.join(candidate, "upstream/cursor-team-kit")),
+      version: "1.3.0",
+    },
   });
   assert.equal(
     await readFile(path.join(candidate, "content/pstack/base.txt"), "utf8"),
@@ -163,6 +265,18 @@ await test("upstream check and preparation expose changes and new version withou
   assert.match(
     await readFile(path.join(candidate, "upstream.diff"), "utf8"),
     /new upstream evidence/,
+  );
+  assert.equal(
+    await readFile(path.join(candidate, "upstream/cursor-team-kit/skills/deslop/SKILL.md"), "utf8"),
+    "updated selected method\n",
+  );
+  assert.equal(
+    await readFile(path.join(candidate, "content/pstack/skills/deslop/SKILL.md"), "utf8"),
+    "updated selected method\n",
+  );
+  assert.equal(
+    await readFile(path.join(candidate, "content/pstack/licenses/cursor-team-kit.LICENSE"), "utf8"),
+    "toolkit license\n",
   );
   assert.deepEqual(await activeState(f.root), before);
 });
@@ -173,7 +287,7 @@ await test("literal exclusions preserve the snapshot and replay across edits to 
   await put(f.root, "patches/001.patch", patch);
   success(f.run("generate"));
   success(f.run("verify"));
-  const expected = [".cursor-plugin", "base.txt", "retired-link", "run.sh"];
+  const expected = [".cursor-plugin", "base.txt", "licenses", "retired-link", "run.sh", "skills"];
   assert.deepEqual((await readdir(path.join(f.root, "content/pstack"))).sort(), expected);
   assert.equal(await readFile(path.join(f.root, "content/pstack/base.txt"), "utf8"), "adapted\n");
   assert.equal(await readlink(path.join(f.root, "upstream/pstack/link")), "base.txt");

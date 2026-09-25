@@ -9,6 +9,11 @@ export type UpstreamLock = {
   commit: string;
   tree: string;
   version: string;
+  cursorTeamKit: {
+    sourceTree: string;
+    selectedTree: string;
+    version: string;
+  };
 };
 
 export function git(cwd: string, args: string[]) {
@@ -67,7 +72,40 @@ export async function readLock(root: string): Promise<UpstreamLock> {
   )
     throw new Error("Invalid upstream.lock.json: expected an exact PStack source identity.");
 
-  return { repository, commit, tree, version, path: subtree };
+  if (
+    !("cursorTeamKit" in lock) ||
+    typeof lock.cursorTeamKit !== "object" ||
+    lock.cursorTeamKit === null
+  )
+    throw new Error("Invalid upstream.lock.json: missing cursorTeamKit identity.");
+
+  const kit = lock.cursorTeamKit as {
+    sourceTree: unknown;
+    selectedTree: unknown;
+    version: unknown;
+  };
+
+  if (
+    typeof kit.sourceTree !== "string" ||
+    !/^[a-f0-9]{40}$/.test(kit.sourceTree) ||
+    typeof kit.selectedTree !== "string" ||
+    !/^[a-f0-9]{40}$/.test(kit.selectedTree) ||
+    typeof kit.version !== "string"
+  )
+    throw new Error("Invalid cursorTeamKit identity.");
+
+  return {
+    repository,
+    commit,
+    tree,
+    version,
+    path: subtree,
+    cursorTeamKit: {
+      sourceTree: kit.sourceTree,
+      selectedTree: kit.selectedTree,
+      version: kit.version,
+    },
+  };
 }
 /* oxlint-enable anti-slop/no-runtime-typeof */
 
@@ -128,6 +166,58 @@ export async function pluginVersion(directory: string) {
   return manifest.version;
 }
 /* oxlint-enable anti-slop/no-runtime-typeof */
+
+export const kitSkills = ["deslop", "control-cli", "control-ui"] as const;
+
+export async function verifyKitSnapshot(root: string, lock: UpstreamLock) {
+  const snapshot = path.join(root, "upstream/cursor-team-kit");
+  const manifest = await pluginVersion(snapshot);
+
+  if (manifest !== lock.cursorTeamKit.version)
+    throw new Error("Cursor Team Kit manifest version differs from upstream.lock.json.");
+  const selectedTree = await treeId(snapshot);
+
+  if (selectedTree !== lock.cursorTeamKit.selectedTree)
+    throw new Error("Selected Cursor Team Kit snapshot differs from its locked Git tree.");
+
+  for (const skill of kitSkills) {
+    const skillPath = path.join(snapshot, "skills", skill);
+
+    if (!(await lstat(skillPath)).isDirectory())
+      throw new Error(`Missing selected skill: ${skill}`);
+  }
+}
+
+export async function composeKitSnapshot(snapshot: string, target: string) {
+  for (const skill of kitSkills) {
+    const destination = path.join(target, "skills", skill);
+
+    try {
+      await lstat(destination);
+      throw new Error(`Companion destination collision: ${destination}`);
+    } catch (error) {
+      if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+    }
+
+    await copyTree(path.join(snapshot, "skills", skill), destination);
+  }
+
+  const license = path.join(target, "licenses/cursor-team-kit.LICENSE");
+
+  try {
+    await lstat(license);
+    throw new Error(`Companion destination collision: ${license}`);
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+  }
+
+  await copyTree(path.join(snapshot, "LICENSE"), license);
+}
+
+export async function composeKit(root: string, target: string) {
+  await verifyKitSnapshot(root, await readLock(root));
+  await composeKitSnapshot(path.join(root, "upstream/cursor-team-kit"), target);
+}
 
 export async function verifySnapshot(root: string, lock: UpstreamLock) {
   const snapshot = path.join(root, "upstream/pstack");

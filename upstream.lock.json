@@ -3,5 +3,10 @@
   "path": "pstack",
   "commit": "12d587dfb20741cafc376c42c696c5f6e2a64487",
   "tree": "975600f2f90dc6f755d58cccdccee27f950edcd2",
-  "version": "0.15.5"
+  "version": "0.15.5",
+  "cursorTeamKit": {
+    "sourceTree": "6ccaf3821c0e9f82780c5224a2f2cd5ef3f580ee",
+    "selectedTree": "fd1e9b904ac2e6aa4d40cb94b76bcd33cb3446d3",
+    "version": "1.2.0"
+  }
 }

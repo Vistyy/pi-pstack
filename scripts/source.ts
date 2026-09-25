@@ -3,12 +3,14 @@ import { readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  composeKit,
   contentDiff,
   copyTree,
   readLock,
   replay,
   temporary,
   treeId,
+  verifyKitSnapshot,
   verifySnapshot,
 } from "./source-files.ts";
 import { checkUpstream, prepareUpdate } from "./upstream.ts";
@@ -18,10 +20,13 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 async function build(staging: string) {
   const content = path.join(staging, "content/pstack");
   await replay(root, path.join(root, "upstream/pstack"), content);
+  await composeKit(root, content);
 }
 
 async function generate() {
-  await verifySnapshot(root, await readLock(root));
+  const lock = await readLock(root);
+  await verifySnapshot(root, lock);
+  await verifyKitSnapshot(root, lock);
   await temporary("pstack-generate-", async (staging) => {
     await build(staging);
 
@@ -33,7 +38,9 @@ async function generate() {
 }
 
 async function verify() {
-  await verifySnapshot(root, await readLock(root));
+  const lock = await readLock(root);
+  await verifySnapshot(root, lock);
+  await verifyKitSnapshot(root, lock);
   await temporary("pstack-verify-", async (staging) => {
     await build(staging);
 
@@ -80,6 +87,9 @@ async function diff() {
     (await contentDiff(path.join(root, "upstream/pstack"), path.join(root, "content/pstack"))) ||
       "(none)",
   );
+  console.log("\nSelected Cursor Team Kit additions (not unselected toolkit content):");
+
+  for (const skill of ["deslop", "control-cli", "control-ui"]) console.log(`skills/${skill}`);
   console.log("\nPi-owned implementation files (not upstream translations):");
 
   for (const directory of ["extensions", "src", "instructions", "scripts"]) {
