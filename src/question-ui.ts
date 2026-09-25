@@ -234,7 +234,7 @@ function createQuestionnaire(
       return true;
     }
 
-    if (matchesKey(data, Key.right) && page < pages.length && answers.has(current().question.id)) {
+    if (matchesKey(data, Key.right) && page < pages.length) {
       selectPage(page + 1);
 
       return true;
@@ -244,7 +244,14 @@ function createQuestionnaire(
   };
 
   const submit = (data: string) => {
-    if (!keys.matches(data, "tui.select.confirm") || answers.size !== questions.length) return;
+    if (!keys.matches(data, "tui.select.confirm")) return;
+
+    if (answers.size !== questions.length) {
+      warning = "Answer every question";
+      refresh();
+
+      return;
+    }
 
     const ordered = questions.map((question) => {
       const answer = answers.get(question.id);
@@ -291,12 +298,12 @@ function createQuestionnaire(
     const cancel = hint("tui.select.cancel");
 
     if (editing)
-      return `${hint("tui.input.submit")} save • ${cancel} choices • ${hint("tui.input.newLine")} newline`;
+      return `${hint("tui.input.submit")} save & next • ${cancel} choices • ${hint("tui.input.newLine")} newline`;
 
     if (page === pages.length)
-      return `← edit • ${hint("tui.select.confirm")} Submit • ${cancel} cancel • PgUp/PgDn`;
+      return `← questions • ${hint("tui.select.confirm")} Submit • ${cancel} cancel • PgUp/PgDn scroll text`;
 
-    return `${hint("tui.select.up")}/${hint("tui.select.down")} choose • ${hint("tui.select.confirm")} answer • ←→ pages • PgUp/PgDn • ${cancel} cancel`;
+    return `${hint("tui.select.up")}/${hint("tui.select.down")} choose • ${hint("tui.select.confirm")} answer & next • ←→ questions • PgUp/PgDn scroll text • ${cancel} cancel`;
   };
 
   return {
@@ -341,7 +348,7 @@ function createQuestionnaire(
       const isReview = page === pages.length;
 
       const title = isReview
-        ? `Review • ${questions.length} questions`
+        ? `Review • ${answers.size}/${questions.length} answered`
         : `Question ${page + 1}/${questions.length}${editing ? " • Other" : ""}`;
 
       const helpLines = wrapTextWithAnsi(theme.fg("dim", help()), w);

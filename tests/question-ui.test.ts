@@ -110,6 +110,35 @@ await test("answers remain ordered and require explicit review, including a sing
   assert.deepEqual(await single.result, { status: "cancelled", answers: [] });
 });
 
+await test("unanswered questions can be browsed and answered out of order, but not submitted", async (t) => {
+  const f = await uiFixture(t);
+  const h = await f.start();
+  h.input(key.right);
+  assert.match(h.screen(), /Question 2\/2/);
+  h.input(key.right);
+  assert.match(h.screen(), /Review • 0\/2 answered/);
+  assert.match(h.screen(), /first: Unanswered/);
+  assert.match(h.screen(), /second: Unanswered/);
+  h.input(key.enter);
+  assert.match(h.screen(), /Answer every question/);
+  h.input(key.left, key.enter);
+  assert.match(h.screen(), /Review • 1\/2 answered/);
+  assert.match(h.screen(), /second: one/);
+  h.input(key.enter);
+  assert.match(h.screen(), /Answer every question/);
+  h.input(key.left, key.left, key.down, key.enter, key.right);
+  assert.match(h.screen(), /Review • 2\/2 answered/);
+  assert.doesNotMatch(h.screen(), /Unanswered|Answer every question/);
+  h.input(key.enter);
+  assert.deepEqual(await h.result, {
+    status: "answered",
+    answers: [
+      { id: "first", kind: "option", value: "no" },
+      { id: "second", kind: "option", value: "one" },
+    ],
+  });
+});
+
 await test("Other preserves multiline text verbatim, receives focus, and can be revised", async (t) => {
   const f = await uiFixture(t);
   const h = await f.start();
