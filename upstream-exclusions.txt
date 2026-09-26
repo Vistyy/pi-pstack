@@ -18,4 +18,3 @@ skills/poteto-mode/scripts/orch/
 
 # Cleanup depends on Cursor chat ownership and macOS-specific tooling.
 skills/poteto-mode/playbooks/worktree-cleanup.md
-skills/poteto-mode/scripts/worktree-audit.sh
