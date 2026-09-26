@@ -1,68 +1,273 @@
 diff --git a/skills/poteto-mode/scripts/worktree-audit.mjs b/skills/poteto-mode/scripts/worktree-audit.mjs
 new file mode 100644
-index 0000000..b23778a
+index 0000000..4a4ba43
 --- /dev/null
 +++ b/skills/poteto-mode/scripts/worktree-audit.mjs
-@@ -0,0 +1,59 @@
+@@ -0,0 +1,264 @@
 +#!/usr/bin/env node
-+// Advisory inventory only: refreshes Git refs and queries the forge; never deletes.
-+import { execFile } from "node:child_process";
-+import { promisify } from "node:util";
-+import { readdir, readFile, realpath, lstat } from "node:fs/promises";
-+import path from "node:path";
-+import os from "node:os";
-+const run = promisify(execFile);
-+const call = async (cmd, args, opts={}) => run(cmd,args,{encoding:"utf8",maxBuffer:32*1024*1024,...opts});
-+const usage = `Usage: node worktree-audit.mjs [repo-path] [--history-scope '<JSON>']...\nScopes are {cwd,directory} absolute-path pairs; the audit is advisory, non-deleting, refreshes origin/main and queries gh.`;
-+const fail = (msg) => { console.error(msg); process.exitCode=1; };
-+const resolve = async p => { try { return await realpath(p); } catch { return path.resolve(p); } };
-+function scopes(args) {
-+ const out=[]; for(let i=0;i<args.length;i++) { if(args[i]==="--help") { console.log(usage); process.exit(0); }
-+  if(args[i]==="--history-scope") { try { const s=JSON.parse(args[++i]); if(!s||typeof s.cwd!=="string"||typeof s.directory!=="string"||!path.isAbsolute(s.cwd)||!path.isAbsolute(s.directory)) throw Error(); out.push(s); } catch { throw Error("--history-scope requires JSON with nonempty absolute cwd and directory"); } }
-+  else if(args[i].startsWith("--")) throw Error(`Unknown option ${args[i]}`); else if(!args.repo) args.repo=args[i]; else throw Error("Only one repo path is allowed");
-+ } return out;
-+}
-+function worktrees(s) { const chunks=s.split("\0"), out=[]; for(let i=0;i<chunks.length;i++) if(chunks[i].startsWith("worktree ")) out.push(chunks[i].slice(9)); return out; }
-+function statusCount(buf) { const a=buf.split("\0"); let tracked=0,scratch=0; for(let i=0;i<a.length;i++){ const r=a[i]; if(!r)continue; if(r.slice(0,2)==="??")scratch++; else {tracked++; if(/[RC]/.test(r.slice(0,2))) i++;} } return {tracked,scratch}; }
-+const enc = cwd => `--${cwd.replace(/^[/\\]+/,"").replace(/[\\/:]/g,"-")}--`;
-+function strings(v, out=[]) { if(typeof v==="string") out.push(v); else if(Array.isArray(v)) for(const x of v) strings(x,out); else if(v&&typeof v==="object") for(const [k,x] of Object.entries(v)) if(!["systemPrompt","tools","toolDefinitions","images","data"].includes(k)) strings(x,out); return out; }
-+async function sessionHeader(file) { const fh=await import('node:fs/promises').then(m=>m.open(file,'r')); try { const b=Buffer.alloc(65536); const {bytesRead}=await fh.read(b,0,b.length,0); const line=b.subarray(0,bytesRead).toString('utf8').split(/\r?\n/,1)[0]; const h=JSON.parse(line); if(h.type!=="session"||typeof h.id!=="string"||typeof h.cwd!=="string") throw Error("invalid Pi session header"); return h; } finally { await fh.close(); } }
-+async function main() {
-+ const args=process.argv.slice(2), explicit=scopes(args); let repo=args.repo;
-+ if(!repo) { try { repo=(await call("git",["rev-parse","--show-toplevel"])).stdout.trim(); } catch { throw Error("not in a git repo; pass a repo path"); } }
-+ const git=async a=>call("git",a,{cwd:repo}); const listing=(await git(["worktree","list","--porcelain","-z"])).stdout, wts=worktrees(listing), main= wts[0];
-+ const now=Date.now(), gaps=[]; let fetchOk=true, prs=[];
-+ try { await git(["fetch","origin","main","--quiet"]); } catch(e) { fetchOk=false; gaps.push(`fetch origin/main failed: ${e.message}`); }
-+ let prOk=true; try { prs=JSON.parse((await call("gh",["pr","list","--author","@me","--state","all","--limit","1000","--json","number,state,headRefName"],{cwd:repo})).stdout); if(!Array.isArray(prs)) throw Error("expected array"); } catch(e) { prOk=false; gaps.push(`gh PR query failed: ${e.message}`); }
-+ const agent=(process.env.PI_CODING_AGENT_DIR||path.join(os.homedir(),".pi","agent")).replace(/^~(?=$|[/\\])/,os.homedir());
-+ const roots=new Map(); for(const wt of wts) { const cwd=await resolve(wt), dir=path.join(agent,"sessions",enc(cwd)); if(!roots.has(dir)) roots.set(dir,new Set()); roots.get(dir).add(cwd); }
-+ for(const s of explicit) { const d=await resolve(s.directory), c=await resolve(s.cwd); if(!roots.has(d)) roots.set(d,new Set()); roots.get(d).add(c); }
-+ const allowed=new Map(), evidenceGaps=[]; for(const [dir,cwds] of roots) { let entries; try { entries=await readdir(dir,{withFileTypes:true}); } catch(e) { evidenceGaps.push(e.code==="ENOENT"?`no stored history in scoped directory ${dir}`:`history directory unreadable ${dir}: ${e.message}`); continue; }
-+  for(const ent of entries) { if(!ent.name.endsWith(".jsonl")) continue; const file=path.join(dir,ent.name); try { const st=await lstat(file); if(st.isSymbolicLink()) { evidenceGaps.push(`skipped symlink session ${file}`); continue; } if(!st.isFile()) continue; const h=await sessionHeader(file), cwd=await resolve(h.cwd); if(cwds.has(cwd)) allowed.set(file,cwd); } catch(e) { evidenceGaps.push(`invalid/unreadable session header ${file}: ${e.message}`); }
++// Advisory only. History is admitted by its first line before any transcript body is read.
++import { execFile } from 'node:child_process';
++import { promisify } from 'node:util';
++import { open, readdir, lstat, readFile } from 'node:fs/promises';
++import path from 'node:path';
++import os from 'node:os';
++
++const exec = promisify(execFile);
++const call = (command, args, options = {}) => exec(command, args, {
++  encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, ...options,
++});
++const usage = "Usage: node worktree-audit.mjs [repo-path] [--history-scope '{\"cwd\":\"/absolute\",\"directory\":\"/absolute\"}']...";
++const gaps = [];
++const error = (label) => { gaps.push(label); };
++const absolute = value => typeof value === 'string' && value.length > 0 && path.isAbsolute(value);
++const normalized = value => path.resolve(value);
++
++function argumentsFor(argv) {
++  let repo;
++  const scopes = [];
++  for (let i = 0; i < argv.length; i++) {
++    const arg = argv[i];
++    if (arg === '--help') { console.log(usage); process.exit(0); }
++    if (arg === '--history-scope') {
++      let scope;
++      try { scope = JSON.parse(argv[++i]); } catch { throw Error('Invalid --history-scope JSON'); }
++      if (!scope || !absolute(scope.cwd) || !absolute(scope.directory)) {
++        throw Error('--history-scope requires nonempty absolute cwd and directory');
++      }
++      scopes.push({ cwd: normalized(scope.cwd), directory: normalized(scope.directory) });
++    } else if (arg.startsWith('--') || repo) throw Error(`Unexpected argument: ${arg}`);
++    else repo = arg;
 +  }
-+ }
-+ const current=process.env.PI_SESSION_FILE; if(current) { try { const file=path.resolve(current), st=await lstat(file); if(st.isSymbolicLink()||!st.isFile()) throw Error("not a regular file"); await sessionHeader(file); allowed.set(file,"<current transcript>"); } catch(e) { evidenceGaps.push(`current PI_SESSION_FILE invalid/unreadable ${current}: ${e.message}`); } }
-+ const matches=new Map(wts.map(w=>[w,{time:0,files:[]} ]));
-+ // Inspect only validated, admitted transcripts; branch entries are all considered.
-+ for(const [file,authorized] of allowed) { try { const text=await readFile(file,"utf8"), lines=text.split(/\r?\n/); const h=JSON.parse(lines.shift()); const cwd=await resolve(h.cwd); const contents=[]; for(const line of lines) if(line) { try { const x=JSON.parse(line); if(x.type!=="message"&&!/summary|custom-title|file/.test(x.type||"")) continue; strings(x,contents); } catch { evidenceGaps.push(`malformed/partial session entry ${file}`); } }
-+   const body=contents.join("\n"); for(const wt of wts.slice(1)) { if(authorized!=="<current transcript>"&&cwd!==await resolve(wt)) continue; const escaped=wt.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"); const re=new RegExp(`${escaped}(?=[/\\\\"'\\s]|$)`); if(re.test(body)) { const st=await import('node:fs/promises').then(m=>m.stat(file)); const x=matches.get(wt); if(st.mtimeMs>x.time){x.time=st.mtimeMs;x.files=[`${h.id}:${file}`]} else if(st.mtimeMs===x.time)x.files.push(`${h.id}:${file}`); } }
-+  } catch(e) { evidenceGaps.push(`session body unreadable ${file}: ${e.message}`); } }
-+ const rows=[]; for(const wt of wts.slice(1)) { let size="?", head="", ts=0, merged="?", dirty="?", remote="?", branch="", prRecords=[]; try { size=(await call("du",["-s","-B1","--",wt])).stdout.trim().split(/\s+/)[0]; } catch(e){gaps.push(`du failed ${wt}: ${e.message}`)}
-+  try { head=(await call("git",["-C",wt,"rev-parse","HEAD"])).stdout.trim(); ts=Number((await call("git",["-C",wt,"log","-1","--format=%ct","HEAD"])).stdout.trim())||0; } catch(e){gaps.push(`Git head read failed ${wt}: ${e.message}`)}
-+  if(head&&fetchOk) { try { await git(["merge-base","--is-ancestor",head,"origin/main"]); merged="YES"; } catch(e){ if(e.code===1) merged="no"; else gaps.push(`merge check failed ${wt}: ${e.message}`); } }
-+  try { const s=await call("git",["--no-optional-locks","-C",wt,"status","--porcelain=v1","-z","--untracked-files=all","--ignore-submodules=none"]); const c=statusCount(s.stdout); dirty=c.tracked?`wip:${c.tracked}`:c.scratch?`scratch:${c.scratch}`:"clean"; } catch(e){gaps.push(`status failed ${wt}: ${e.message}`)}
-+  try { branch=(await call("git",["-C",wt,"symbolic-ref","--quiet","--short","HEAD"])).stdout.trim(); if(!branch) remote="detached"; else { const ref=`refs/remotes/origin/${branch}`; try { await call("git",["-C",wt,"show-ref","--verify","--quiet",ref]); const r=(await call("git",["-C",wt,"rev-parse",`origin/${branch}`])).stdout.trim(); remote=r===head?"pushed":`ahead${(await call("git",["-C",wt,"rev-list","--count",`origin/${branch}..HEAD`])).stdout.trim()}`; } catch{remote="no-remote";} } } catch(e){gaps.push(`branch read failed ${wt}: ${e.message}`)}
-+  if(prOk&&branch) prRecords=prs.filter(p=>p.headRefName===branch); const pr=prRecords.length?prRecords.map(p=>`#${p.number}/${p.state}`).join(","):"-";
-+  const m=matches.get(wt), days=m.time?Math.floor((now-m.time)/86400000):Infinity, last=m.time?new Date(m.time).toISOString().slice(0,10):"-";
-+  let bucket="review"; if(dirty.startsWith("wip:")) bucket="hold-wip"; else if(prRecords.some(p=>p.state==="OPEN")) bucket="hold-open-pr"; else if(days<=4) bucket="verify-recent-chat"; else if(merged==="YES"||prRecords.some(p=>p.state!=="OPEN")) bucket="safe";
-+  if(!fetchOk||!prOk||dirty==="?"||merged==="?"||size==="?"||gaps.some(g=>g.includes(wt))) bucket="review";
-+  rows.push({size:Number(size)||0, age:ts?`${Math.floor((now-ts*1000)/86400000)}d`:"?",merged,dirty,remote,pr,last,bucket,wt, refs:m.files}); }
-+ rows.sort((a,b)=>a.size-b.size); console.log("SIZE\tAGE\tMERGED\tDIRTY\tREMOTE\tPR\tLAST_CHAT\tBUCKET\tWORKTREE"); for(const r of rows) console.log(`${r.size} B\t${r.age}\t${r.merged}\t${r.dirty}\t${r.remote}\t${r.pr}\t${r.last}\t${r.bucket}\t${r.wt}`);
-+ if(!fetchOk||!prOk||evidenceGaps.length||gaps.length) { console.error("Evidence gaps (no inactivity or cleanup inference):"); for(const g of [...gaps,...evidenceGaps]) console.error(`- ${g}`); }
-+ for(const r of rows) if(r.refs.length) console.error(`History evidence ${r.wt}: ${r.refs.join(", ")}`);
-+ console.error("Advisory, non-deleting audit; refreshes Git refs and queries forge. Live/pinned usage is not discovered.");
++  return { repo, scopes };
 +}
-+try { await main(); } catch(e) { fail(e.message); }
++
++function pathsFromListing(text) {
++  return text.split('\0').filter(x => x.startsWith('worktree ')).map(x => x.slice(9));
++}
++function status(text) {
++  let tracked = 0, scratch = 0;
++  const parts = text.split('\0');
++  for (let i = 0; i < parts.length; i++) {
++    const record = parts[i];
++    if (!record) continue;
++    const code = record.slice(0, 2);
++    if (code === '??') scratch++;
++    else {
++      tracked++;
++      if (/[RC]/.test(code)) i++; // porcelain -z rename/copy has an extra NUL name
++    }
++  }
++  return tracked ? `wip:${tracked}` : scratch ? `scratch:${scratch}` : 'clean';
++}
++function encoded(cwd) {
++  return `--${cwd.replace(/^[/\\]+/, '').replace(/[\\/:]/g, '-')}--`;
++}
++
++// Read a bounded FIRST line, not an arbitrary prefix of an unadmitted body.
++async function header(file) {
++  const handle = await open(file, 'r');
++  try {
++    const bytes = [];
++    const byte = Buffer.alloc(1);
++    for (let offset = 0; offset < 65536; offset++) {
++      const { bytesRead } = await handle.read(byte, 0, 1, offset);
++      if (!bytesRead || byte[0] === 10) break;
++      bytes.push(byte[0]);
++    }
++    if (bytes.length === 65536) throw Error('oversize header');
++    let value;
++    try { value = JSON.parse(Buffer.from(bytes).toString('utf8')); }
++    catch { throw Error('invalid header JSON'); }
++    if (value?.type !== 'session' || typeof value.id !== 'string' || !value.id.trim() ||
++        !absolute(value.cwd)) throw Error('invalid Pi session header');
++    return { id: value.id, cwd: normalized(value.cwd) };
++  } finally { await handle.close(); }
++}
++
++// Only Pi textual entry fields count. Never walk an arbitrary object (system prompts,
++// tool definitions, image payloads and unknown metadata must not create activity).
++function textual(value) {
++  if (typeof value === 'string') return [value];
++  if (Array.isArray(value)) return value.flatMap(textual);
++  if (!value || typeof value !== 'object') return [];
++  if (value.type === 'image' || value.type === 'binary') return [];
++  return ['text', 'thinking', 'arguments', 'result', 'output', 'command', 'path',
++    'file', 'files', 'summary', 'content'].flatMap(key => textual(value[key]));
++}
++function entryText(entry) {
++  if (!entry || typeof entry !== 'object') return [];
++  if (entry.type === 'message') {
++    const message = entry.message;
++    if (!message || !['user', 'assistant', 'toolResult', 'tool', 'bashExecution'].includes(message.role)) return [];
++    return textual(message.content).concat(textual(message.arguments), textual(message.command),
++      textual(message.output), textual(message.result));
++  }
++  if (/summary|compaction|file|bash/i.test(entry.type || '')) {
++    return textual(entry.summary).concat(textual(entry.content), textual(entry.files),
++      textual(entry.path), textual(entry.command), textual(entry.output));
++  }
++  return [];
++}
++function mentions(text, location) {
++  // Both boundaries: reject prefix siblings, but accept quoted paths and descendants.
++  const escape = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
++  return new RegExp(`(^|[^\\w/\\.\\-])${escape(location)}(?=$|[/\\s"'\\)\\],;:])`).test(text);
++}
++
++async function history(worktrees, scopes) {
++  const agent = (process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), '.pi', 'agent'))
++    .replace(/^~(?=$|[/\\])/, os.homedir());
++  const directories = new Map();
++  const add = (directory, cwd) => {
++    const dir = normalized(directory);
++    if (!directories.has(dir)) directories.set(dir, new Set(worktrees));
++    directories.get(dir).add(cwd);
++  };
++  for (const wt of worktrees) add(path.join(agent, 'sessions', encoded(wt)), wt);
++  for (const scope of scopes) add(scope.directory, scope.cwd);
++  const admitted = new Map();
++  let uncertain = false;
++  for (const [dir, cwds] of directories) {
++    let entries;
++    try { entries = await readdir(dir, { withFileTypes: true }); }
++    catch (e) {
++      if (e.code === 'ENOENT') error(`No stored history: ${dir}`);
++      else { uncertain = true; error(`History directory unreadable: ${dir}`); }
++      continue;
++    }
++    for (const entry of entries) {
++      if (!entry.name.endsWith('.jsonl')) continue;
++      const file = path.join(dir, entry.name);
++      try {
++        const stat = await lstat(file);
++        if (stat.isSymbolicLink()) { error(`Skipped symlink session: ${file}`); continue; }
++        if (!stat.isFile()) continue;
++        const h = await header(file);
++        if (cwds.has(h.cwd)) admitted.set(file, h);
++      } catch {
++        uncertain = true;
++        error(`Invalid/unreadable session header: ${file}`);
++      }
++    }
++  }
++  // Native session file permits precisely this file, not its containing directory.
++  if (process.env.PI_SESSION_FILE) {
++    const file = normalized(process.env.PI_SESSION_FILE);
++    try {
++      const st = await lstat(file);
++      if (!st.isFile() || st.isSymbolicLink()) throw Error('not regular');
++      admitted.set(file, await header(file));
++    } catch { uncertain = true; error(`Invalid/unreadable current session: ${file}`); }
++  }
++  const activity = new Map(worktrees.map(wt => [wt, { time: 0, refs: [] }]));
++  for (const [file, h] of admitted) {
++    try {
++      const lines = (await readFile(file, 'utf8')).split(/\r?\n/);
++      lines.shift();
++      const chunks = [];
++      for (const line of lines) {
++        if (!line) continue;
++        try { chunks.push(...entryText(JSON.parse(line))); }
++        catch { uncertain = true; error(`Malformed/partial session entry: ${file}`); }
++      }
++      const mtime = (await lstat(file)).mtimeMs;
++      const body = chunks.join('\n');
++      for (const wt of worktrees) {
++        if (h.cwd !== wt && !mentions(body, wt)) continue;
++        const found = activity.get(wt);
++        if (mtime > found.time) { found.time = mtime; found.refs = [`${h.id}:${file}`]; }
++        else if (mtime === found.time) found.refs.push(`${h.id}:${file}`);
++      }
++    } catch { uncertain = true; error(`Session body unreadable: ${file}`); }
++  }
++  return { activity, uncertain };
++}
++
++async function main() {
++  const { repo: requested, scopes } = argumentsFor(process.argv.slice(2));
++  let repo = requested;
++  if (!repo) repo = (await call('git', ['rev-parse', '--show-toplevel'])).stdout.trim();
++  const git = args => call('git', args, { cwd: repo });
++  const worktrees = pathsFromListing((await git(['worktree', 'list', '--porcelain', '-z'])).stdout)
++    .map(normalized);
++  if (!worktrees.length) throw Error('No Git worktrees found');
++  const { activity, uncertain } = await history(worktrees, scopes);
++  let fetchOk = true, prOk = true, prs = [];
++  try { await git(['fetch', 'origin', 'main', '--quiet']); }
++  catch { fetchOk = false; error('Fetch origin main failed'); }
++  try {
++    prs = JSON.parse((await call('gh', ['pr', 'list', '--author', '@me', '--state', 'all',
++      '--limit', '1000', '--json', 'number,state,headRefName'], { cwd: repo })).stdout);
++    if (!Array.isArray(prs) || prs.some(p => !p || !Number.isInteger(p.number) ||
++        p.number <= 0 || typeof p.headRefName !== 'string' || !p.headRefName ||
++        !['OPEN', 'CLOSED', 'MERGED'].includes(p.state))) throw Error('invalid records');
++  } catch { prOk = false; error('PR query failed or returned malformed records'); }
++  const now = Date.now(), rows = [];
++  for (const wt of worktrees.slice(1)) {
++    let size = 0, sizeOk = true, head, timestamp, merged = '?', dirty = '?';
++    let remote = '?', branch = '', gitOk = true;
++    try {
++      const value = (await call('du', ['-s', '-B1', '--', wt])).stdout.split(/\s/)[0];
++      size = Number(value);
++      if (!Number.isFinite(size)) throw Error('invalid size');
++    } catch { sizeOk = false; error(`Size unreadable: ${wt}`); }
++    try {
++      head = (await call('git', ['-C', wt, 'rev-parse', 'HEAD'])).stdout.trim();
++      timestamp = Number((await call('git', ['-C', wt, 'log', '-1', '--format=%ct', 'HEAD'])).stdout.trim());
++      if (!head || !timestamp) throw Error('invalid HEAD');
++    } catch { gitOk = false; error(`Git HEAD unreadable: ${wt}`); }
++    if (head && fetchOk) {
++      try { await git(['merge-base', '--is-ancestor', head, 'origin/main']); merged = 'YES'; }
++      catch (e) {
++        if (e.code === 1) merged = 'no';
++        else { gitOk = false; error(`Merge check failed: ${wt}`); }
++      }
++    }
++    try {
++      dirty = status((await call('git', ['--no-optional-locks', '-C', wt, 'status',
++        '--porcelain=v1', '-z', '--untracked-files=all', '--ignore-submodules=none'])).stdout);
++    } catch { gitOk = false; error(`Git status unreadable: ${wt}`); }
++    try {
++      branch = (await call('git', ['-C', wt, 'symbolic-ref', '--quiet', '--short', 'HEAD'])).stdout.trim();
++    } catch (e) { if (e.code !== 1) { gitOk = false; error(`Git branch unreadable: ${wt}`); } }
++    if (!branch) remote = gitOk ? 'detached' : '?';
++    else {
++      const ref = `refs/remotes/origin/${branch}`;
++      try {
++        await call('git', ['-C', wt, 'show-ref', '--verify', '--quiet', ref]);
++        const remoteHead = (await call('git', ['-C', wt, 'rev-parse', ref])).stdout.trim();
++        remote = remoteHead === head ? 'pushed' : `ahead${(await call('git', ['-C', wt,
++          'rev-list', '--count', `${ref}..HEAD`])).stdout.trim()}`;
++      } catch (e) {
++        if (e.code === 1) remote = 'no-remote';
++        else { gitOk = false; error(`Remote ref unreadable: ${wt}`); }
++      }
++    }
++    const records = prOk && branch ? prs.filter(p => p.headRefName === branch) : [];
++    const evidence = activity.get(wt);
++    const age = evidence.time ? Math.floor((now - evidence.time) / 86400000) : Infinity;
++    let bucket = 'review';
++    if (dirty.startsWith('wip:')) bucket = 'hold-wip';
++    else if (records.some(p => p.state === 'OPEN')) bucket = 'hold-open-pr';
++    else if (age <= 4) bucket = 'verify-recent-chat';
++    else if (!uncertain && fetchOk && prOk && gitOk && sizeOk && merged !== '?' &&
++      dirty !== '?' && (merged === 'YES' || records.length)) bucket = 'safe';
++    rows.push({ size, age: timestamp ? `${Math.floor((now - timestamp * 1000) / 86400000)}d` : '?',
++      merged, dirty, remote, pr: records.map(p => `#${p.number}/${p.state}`).join(',') || '-',
++      last: evidence.time ? new Date(evidence.time).toISOString().slice(0, 10) : '-',
++      bucket, wt, refs: evidence.refs });
++  }
++  rows.sort((a, b) => a.size - b.size);
++  console.log('SIZE\tAGE\tMERGED\tDIRTY\tREMOTE\tPR\tLAST_CHAT\tBUCKET\tWORKTREE');
++  for (const r of rows) console.log(`${r.size} B\t${r.age}\t${r.merged}\t${r.dirty}\t${r.remote}\t${r.pr}\t${r.last}\t${r.bucket}\t${r.wt}`);
++  for (const r of rows) if (r.refs.length) console.error(`History evidence ${r.wt}: ${r.refs.join(', ')}`);
++  if (gaps.length) {
++    console.error('Evidence gaps (not proof of inactivity):');
++    for (const gap of gaps) console.error(`- ${gap}`);
++  }
++  console.error('Advisory, non-deleting; Git refs refreshed and forge queried. Live/pinned usage is not discovered; no cleanup authority.');
++}
++try { await main(); } catch { console.error('Audit failed: invalid arguments or Git inventory unavailable'); process.exitCode = 1; }
 diff --git a/skills/poteto-mode/scripts/worktree-audit.sh b/skills/poteto-mode/scripts/worktree-audit.sh
 deleted file mode 100755
 index b9af081..0000000
