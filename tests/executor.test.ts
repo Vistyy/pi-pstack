@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
@@ -15,7 +15,6 @@ import {
   type AgentSession,
   createAgentSession,
   DefaultResourceLoader,
-  loadSkillsFromDir,
   ModelRuntime,
   SessionManager,
   SettingsManager,
@@ -25,16 +24,27 @@ import { Check } from "typebox/value";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 
-await test("Pi native skill loader discovers the bundled companion methods", async () => {
-  const packageJson = await readFile(join(root, "package.json"), "utf8");
-  const result = loadSkillsFromDir({ dir: join(root, "content/pstack/skills"), source: "package" });
+await test("Pi package registration discovers the bundled companion methods", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "pstack-discovery-"));
+
+  t.after(() => rm(directory, { recursive: true, force: true }));
+
+  const loader = new DefaultResourceLoader({
+    cwd: directory,
+    agentDir: directory,
+    settingsManager: SettingsManager.inMemory({ packages: [root] }),
+    noExtensions: true,
+    noPromptTemplates: true,
+    noThemes: true,
+  });
+
+  await loader.reload();
+  const result = loader.getSkills();
+  assert.deepEqual(result.diagnostics, []);
 
   for (const name of ["deslop", "control-cli", "control-ui"]) {
-    assert.ok(
-      result.skills.some((skill) => skill.name === name),
-      `missing native skill ${name}`,
-    );
-    assert.ok(packageJson.includes(`./content/pstack/skills/${name}`));
+    const skill = result.skills.find((item) => item.name === name);
+    assert.equal(skill?.filePath, join(root, "content/pstack/skills", name, "SKILL.md"));
   }
 });
 
@@ -129,7 +139,7 @@ export default (pi) => {
     model: provider.getModel(),
     thinkingLevel: "high",
     settingsManager: settings,
-    sessionManager: SessionManager.inMemory(project),
+    sessionManager: SessionManager.create(project, join(dir, "parent-history")),
   });
 
   ownedSession = session;
@@ -137,15 +147,23 @@ export default (pi) => {
   let childPrompt = "";
   let childContext = 0;
   provider.setResponses([
-    fauxAssistantMessage(
-      fauxToolCall("pstack_task", {
-        prompt: "Inspect the project",
-        model: "fixture/child:rev1:low",
-        subagent_type: "generalPurpose",
-        readonly: true,
-      }),
-      { stopReason: "toolUse" },
-    ),
+    (context) => {
+      assert.ok(
+        getCurrentSystemPrompt(context.messages).includes(
+          `Current Pi history scope: ${JSON.stringify({ cwd: project, directory: join(dir, "parent-history") })}`,
+        ),
+      );
+
+      return fauxAssistantMessage(
+        fauxToolCall("pstack_task", {
+          prompt: "Inspect the project",
+          model: "fixture/child:rev1:low",
+          subagent_type: "generalPurpose",
+          readonly: true,
+        }),
+        { stopReason: "toolUse" },
+      );
+    },
     (context) => {
       childPrompt = getCurrentSystemPrompt(context.messages);
       childContext = context.messages.filter((message) => message.role === "user").length;
@@ -186,6 +204,11 @@ export default (pi) => {
   assert.equal(payload.model, "fixture/child:rev1:low");
   assert.equal(payload.readonly, true);
   assert.equal(childContext, 1);
+  assert.ok(
+    childPrompt.includes(
+      `Current Pi history scope: ${JSON.stringify({ cwd: project, directory: dirname(payload.transcript) })}`,
+    ),
+  );
   assert.match(childPrompt, /Project instruction sentinel/);
   assert.doesNotMatch(childPrompt, /Parent secret/);
   assert.match(await readFile(payload.transcript, "utf8"), /child evidence/);
@@ -366,24 +389,43 @@ export default (pi) => {
   assert.doesNotMatch(resumedHistory, /Parent secret/);
 
   let systemText = "";
-  const childMethodsRead: string[] = [];
+  let childMethodsRead = false;
   nestedProvider.setResponses([
-    async (context) => {
+    (context) => {
       systemText = getCurrentSystemPrompt(context.messages);
 
       const injectedSkills = systemText.match(/Packaged PStack skills directory: ([^\n]+)/)?.[1];
       assert.equal(injectedSkills, join(root, "content/pstack/skills"));
       assert.ok(injectedSkills);
 
-      for (const name of ["deslop", "control-cli", "control-ui"]) {
-        const body = await readFile(join(injectedSkills, name, "SKILL.md"), "utf8");
-        assert.match(body, /^---\nname: /);
-        childMethodsRead.push(name);
-      }
-
       const user = context.messages.findLast((message) => message.role === "user");
       assert.ok(user?.role === "user");
       assert.deepEqual(user.content, [{ type: "text", text: "Poteto assignment" }]);
+
+      return fauxAssistantMessage(
+        ["deslop", "control-cli", "control-ui"].map((name) =>
+          fauxToolCall("read", { path: join(injectedSkills, name, "SKILL.md") }, { id: name }),
+        ),
+        { stopReason: "toolUse" },
+      );
+    },
+    (context) => {
+      for (const name of ["deslop", "control-cli", "control-ui"]) {
+        const result = context.messages.find(
+          (message) => message.role === "toolResult" && message.toolCallId === name,
+        );
+
+        assert.ok(result?.role === "toolResult", name);
+        assert.equal(result.isError, false, name);
+        assert.ok(
+          result.content.some(
+            (part) => part.type === "text" && part.text.includes(`name: ${name}\n`),
+          ),
+          name,
+        );
+      }
+
+      childMethodsRead = true;
 
       return fauxAssistantMessage("poteto result");
     },
@@ -410,7 +452,7 @@ export default (pi) => {
   );
   assert.doesNotMatch(systemText, /Poteto assignment/);
   assert.match(systemText, /Packaged PStack skills directory/);
-  assert.deepEqual(childMethodsRead, ["deslop", "control-cli", "control-ui"]);
+  assert.equal(childMethodsRead, true);
 
   assert.doesNotMatch(systemText, /Parent secret/);
 

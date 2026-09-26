@@ -1,0 +1,98 @@
+diff --git a/README.md b/README.md
+index 818b9f1..bd9c210 100644
+--- a/README.md
++++ b/README.md
+@@ -212,15 +212,17 @@ twenty-three short skills, one principle each. `poteto-mode` indexes them inline
+ 
+ </details>
+ 
+-## not shipped here
++## companion methods in this Pi package
+ 
+-a few things `poteto-mode` references but doesn't bundle:
++This package includes three unchanged `cursor-team-kit` methods at the same upstream pin as PStack:
+ 
+-- `/deslop` and the `deslop` skill ship in the `cursor-team-kit` plugin.
+-- `control-cli` (for CLIs and TUIs) and `control-ui` (for browser, Electron, web) ship in `cursor-team-kit` too.
+-- `/create-skill` is a cursor built-in. cursor also ships a built-in `/babysit`; inside `poteto-mode`, the [babysit playbook](./skills/poteto-mode/playbooks/babysit.md) supersedes it for pr-status requests.
++- [`deslop`](./skills/deslop/SKILL.md) cleans the code diff before a commit.
++- [`control-cli`](./skills/control-cli/SKILL.md) drives CLIs and TUIs.
++- [`control-ui`](./skills/control-ui/SKILL.md) drives browser, Electron, and web UIs.
+ 
+-install `cursor-team-kit` alongside pstack if you want the full set.
++Read them through the same packaged skill directory as PStack's own methods, or invoke `/skill:deslop`, `/skill:control-cli`, or `/skill:control-ui`. The separate [Cursor MIT notice](./licenses/cursor-team-kit.LICENSE) ships with them. No separate toolkit installation is needed; its other skills are not bundled.
++
++The [Authoring or modifying a skill playbook](./skills/poteto-mode/playbooks/authoring-a-skill.md) supplies the Pi authoring procedure in place of Cursor's built-in `create-skill`. The packaged [Babysit playbook](./skills/poteto-mode/playbooks/babysit.md) owns requested PR-status work, not Cursor's built-in command.
+ 
+ ## why are there no planning skills?
+ 
+diff --git a/docs/guide/05-build-and-clean.md b/docs/guide/05-build-and-clean.md
+index c38bc44..46d6add 100644
+--- a/docs/guide/05-build-and-clean.md
++++ b/docs/guide/05-build-and-clean.md
+@@ -48,7 +48,7 @@ In context, that's enough. [`/tdd`](../../skills/tdd/SKILL.md) writes the smalle
+ 
+ ## Clean before you commit
+ 
+-The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) runs `/deslop` on the diff before each commit and applies [`/unslop`](../../skills/unslop/SKILL.md) to the PR description and commit bodies. `/deslop` ships in the `cursor-team-kit` plugin, not in pstack. If you don't have it, ask for the same outcome in plain words: remove narrating comments, unsupported guards, dead compatibility paths, and unrelated edits.
++The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) runs `/deslop` on the diff before each commit and applies [`/unslop`](../../skills/unslop/SKILL.md) to the PR description and commit bodies. The original [`deslop` method](../../skills/deslop/SKILL.md) from `cursor-team-kit` is bundled in this Pi package as `/skill:deslop`. Follow that method rather than substituting a summary of it.
+ 
+ For prose, `/unslop` takes a target and any extra rules you have:
+ 
+diff --git a/skills/poteto-mode/SKILL.md b/skills/poteto-mode/SKILL.md
+index e15e8d0..036c358 100644
+--- a/skills/poteto-mode/SKILL.md
++++ b/skills/poteto-mode/SKILL.md
+@@ -26,9 +26,9 @@ Remaining triggers:
+ - Nontrivial multi-step → write the throughput checkpoint (Feature step 3).
+ - Any prose surface → the **unslop** skill. Your reply is a prose surface. Write it per **Writing the reply**. Agent-facing prose follows the [Authoring or modifying a skill playbook](playbooks/authoring-a-skill.md), using Pi's own skill mechanics.
+ - Docs, RFCs, readmes, PR descriptions, or commit messages → the **technical-writing** skill (`/skill:technical-writing`).
+-- Before commit → the `deslop` skill from the `cursor-team-kit` plugin (`/deslop`).
++- Before commit → the bundled `deslop` skill from `cursor-team-kit` (`/skill:deslop`).
+ - Before review → the **no-comments** skill (`/skill:no-comments`).
+-- Shipping UI / IDE / CLI → the matching control skill. `cursor-team-kit` publishes `control-cli` (CLIs and TUIs) and `control-ui` (browser / Electron / web UIs). For bug fixes, reproduce first on the same surface yourself. Hand to the user only under the narrow Bug fix step 1 exception.
++- Shipping UI / IDE / CLI → the matching bundled `cursor-team-kit` control skill: `control-cli` (CLIs and TUIs) or `control-ui` (browser / Electron / web UIs). For bug fixes, reproduce first on the same surface yourself. Hand to the user only under the narrow Bug fix step 1 exception.
+ - Any PR-status request → the packaged **Babysit** playbook (`playbooks/babysit.md`). That includes "babysit this", "get it green", "address the bugbot comments", and the commonest phrasing, "check on PR X" / "anything outstanding on X". Never triggered by merely opening a PR. Declare its mode before polling. The playbook's step 1 owns the request-to-mode mapping. Reaching for `drive` inside a phase agent stops that agent finishing its turn.
+ - Bugbot or the agentic security review commented → skeptical posture. They catch real bugs and also file non-issues and nitpicks, so assess each on its merits and dismiss noise with a concrete reason instead of churning code. Triage fix / dismiss / ask per `references/bugbot-triage.md`.
+ - Broken skill mid-task → fix it in its own PR. Don't block. Don't silently work around it.
+diff --git a/skills/poteto-mode/playbooks/multi-phase-plan.md b/skills/poteto-mode/playbooks/multi-phase-plan.md
+index ae09552..9e109bd 100644
+--- a/skills/poteto-mode/playbooks/multi-phase-plan.md
++++ b/skills/poteto-mode/playbooks/multi-phase-plan.md
+@@ -51,7 +51,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
+ - [ ] Resolve the forge once. Default to `gh`; if `command -v origin` succeeds and Origin can resolve the repository, use `origin pr` for every PR operation. Record any fallback to `gh`. Never require `gt`.
+ - [ ] Open the PR ready, never draft, with `origin pr create --status open --base <base-branch>` or `gh pr create --base <base-branch>` according to the resolved forge. A stack child targets its parent branch.
+ - [ ] Run the repo's lint and typecheck once before the PR-facing push. Push with hooks on.
+-- [ ] Run the actual external **deslop** method before each commit and **no-comments** before review. An unavailable method is a gap, not a waived check.
++- [ ] Run the bundled **deslop** method before each commit and **no-comments** before review. An unavailable method is a gap, not a waived check.
+ - [ ] Triage every Bugbot and security-reviewer comment per `../references/bugbot-triage.md`.
+ - [ ] Rebase onto current trunk before the code-ready report and babysit. Keep that merge base in fix rounds unless a conflict or a CI failure from trunk requires another rebase. Any changed head must pass the verification round again.
+ 
+@@ -63,7 +63,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
+ 
+ ### Boot recipe, for every live lane
+ 
+-Each live lane runs in its own local worktree at the PR head. Drive through the actual `control-ui` or `control-cli` method from `cursor-team-kit`. Worktrees do not isolate processes or services. Give lanes independent writable data, profiles, ports, and outputs; if required isolation or a control capability is unavailable, report the lane blocked rather than reducing the ten-lane requirement.
++Each live lane runs in its own local worktree at the PR head. Drive through the bundled `control-ui` or `control-cli` method from `cursor-team-kit`. Worktrees do not isolate processes or services. Give lanes independent writable data, profiles, ports, and outputs; if required isolation or a control capability is unavailable, report the lane blocked rather than reducing the ten-lane requirement.
+ 
+ - [ ] Prepare the lane's worktree at `<head SHA>` and pass its absolute path as the child's `cwd`.
+ - [ ] <Start the backend and the surface. Wait for ready.>
+diff --git a/skills/poteto-mode/playbooks/opening-a-pr.md b/skills/poteto-mode/playbooks/opening-a-pr.md
+index 5850d55..e16246e 100644
+--- a/skills/poteto-mode/playbooks/opening-a-pr.md
++++ b/skills/poteto-mode/playbooks/opening-a-pr.md
+@@ -6,7 +6,7 @@ Invoked at the end of a change-producing playbook when publishing a PR is author
+ 
+ **Commits.** Commit liberally. Rebase into small, ordered commits before opening PRs. Each commit is a future PR: landable, ordered to tell the story. Amend when the fix belongs in a just-made commit. New commit when separable.
+ 
+-**PRs.** Run `/deslop` from `cursor-team-kit` over the diff before commit. Follow **no-comments** before review. Write every PR title, PR description, and commit body with **technical-writing**, then apply **unslop**. Apply every technical-writing layer except Diátaxis. Use one word for each action, keep articles, and avoid `-ing` when a plain verb works.
++**PRs.** Run the bundled `deslop` method from `cursor-team-kit` over the diff before commit (`/skill:deslop`). Follow **no-comments** before review. Write every PR title, PR description, and commit body with **technical-writing**, then apply **unslop**. Apply every technical-writing layer except Diátaxis. Use one word for each action, keep articles, and avoid `-ing` when a plain verb works.
+ 
+ **Titles.** Use Conventional Commits in the form `type(scope): subject`. Use `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, or `perf` as the type. Use the changed area, such as `pstack` or `poteto-mode`, as the scope. Keep the subject short and imperative. Name a real symbol when one carries the change. For example, `fix(pstack): retarget opening-a-pr babysit trigger`. Do not add a trailing period.
+ 
+@@ -30,4 +30,4 @@ After these sections, attach videos or screenshots when they prove a claim. Do n
+ 
+ **Babysit.** Opening a PR does not start a babysit. Post the URL and keep building. Finish the phase or stack first. Run a separate babysit pass only when the user asks for one after the whole stack exists. A babysit for each new PR stalls the build and spends checks on commits that later waves restart. Push back when feedback drifts from intent.
+ 
+-A subagent that opens a PR follows **interrogate**, the external `deslop` method, and **no-comments**, and posts the URL. Then it returns to the parent without babysitting. A separate user request starts the Babysit playbook (`playbooks/babysit.md`); neither opening a PR nor babysitting authorizes merging.
++A subagent that opens a PR follows **interrogate**, the bundled `deslop` method, and **no-comments**, and posts the URL. Then it returns to the parent without babysitting. A separate user request starts the Babysit playbook (`playbooks/babysit.md`); neither opening a PR nor babysitting authorizes merging.

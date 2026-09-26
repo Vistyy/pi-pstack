@@ -6,16 +6,17 @@ Port the pinned PStack methodology to Pi; do not replace its procedures, roles, 
 
 | Path | Responsibility |
 | --- | --- |
-| `upstream/pstack/` | Unmodified snapshot identified by `upstream.lock.json`. Never edit it to make a local translation. |
+| `upstream/pstack/` | Unmodified PStack snapshot identified by `upstream.lock.json`. Never edit it to make a local translation. |
+| `upstream/cursor-team-kit/` | Unmodified selected snapshot at the same repository commit: original license, plugin manifest, and the `deslop`, `control-cli`, and `control-ui` directories. |
 | `upstream-exclusions.txt` | Exact upstream files or directories omitted from the adopted content, before patch replay. |
 | `patches/*.patch` | Ordered, focused Pi translations of retained files. Author upstream-derived instruction changes here. |
-| `content/pstack/` | Generated snapshot minus exclusions, plus patches. Never hand-edit it. |
+| `content/pstack/` | Generated PStack minus exclusions, plus patches, then the unchanged companion skills and their separate license. Never hand-edit it. |
 | `instructions/pi-host.md` | Shared packaged-skill access, path resolution, and remaining upstream tool aliases. Edit directly; executor mechanics belong in tool descriptions and schemas. |
 | `src/`, `extensions/` | Pi runtime, model/question/todo helpers, and the private child-session adapter. |
 | `scripts/` | Source verification, generation, comparison, and upstream-update preparation. |
 | `README.md` | User-facing setup, supported behavior, and limitations. Keep maintainer instructions in `AGENTS.md`. |
 
-To modify retained upstream-derived files, edit a scratch copy of the current generated tree and capture the difference with normal `git diff --binary` as a new ordered patch. Keep patches focused on a workflow or concern, then run `pnpm source:generate` and inspect the regenerated result. Preserve unrelated generated files and the locked upstream identity.
+To modify retained upstream-derived files, edit a scratch copy of the current generated tree and capture the difference with normal `git diff --binary` as a new ordered patch. Keep patches focused on a workflow or concern, then run `pnpm source:generate` and inspect the regenerated result. Preserve unrelated generated files and the locked upstream identity. Companion bodies are not patched: adapt their PStack callers instead. Generation rejects a PStack or patch-created path that collides with a companion destination.
 
 For whole-file or directory removals, edit `upstream-exclusions.txt` instead. Use one normalized slash-separated path relative to `upstream/pstack/` per line, without `.` or `..` segments. Blank lines and full-line `#` comments are allowed; a trailing directory slash is optional. Paths are literal, not glob patterns or negation rules. Directories include all descendants, including future upstream additions. Entries must exist and must not overlap. Missing targets fail generation or update preparation for review rather than silently passing. Symlinked ancestor directories are rejected; excluding a symlink itself removes only that link.
 
@@ -50,7 +51,7 @@ pnpm check
 
 `pnpm source:diff` is a compact review display: whole-file deletions show headers without the removed contents. Do not use its output as a replayable patch.
 
-`pnpm check` verifies the locked snapshot, exclusions, and patch replay, runs source CLI and real-SDK Faux-provider tests, and applies the shared `@syzom/typescript-quality` checks. Generated and untouched upstream content is excluded from code linting. Source verification needs no upstream Git objects or network connection and checks executable-file and symlink identity as well as text.
+`pnpm check` verifies both locked snapshots, exclusions, patch replay, and companion composition, runs source CLI and real-SDK Faux-provider tests, and applies the shared `@syzom/typescript-quality` checks. Generated and untouched upstream content is excluded from code linting. Source verification needs no upstream Git objects or network connection and checks executable-file and symlink identity as well as text.
 
 Exercise changed runtime promises through supported Pi entry points. Faux-provider tests establish host mechanics, not reliable LLM adherence to the methodology. For instruction changes, inspect what the parent and fresh children actually receive, including referenced files and tool availability; retain tests only for distinct behavioral protection.
 
@@ -67,6 +68,6 @@ pnpm upstream:check main
 pnpm upstream:prepare <full-commit-sha>
 ```
 
-These commands fetch the requested source and retain evidence under `.work/`. Preparation records source identities, the upstream diff, and generated content in a candidate directory using the current exclusions and patches. Invalid exclusions or patch conflicts fail with retained evidence. Neither command adopts the candidate or changes the active lock, snapshot, or generated content.
+These commands fetch the requested source and retain evidence under `.work/`. Both sources advance together at the requested repository commit. The report separates PStack changes from selected toolkit changes; unrelated toolkit files are not adopted or included in the selected diff. Preparation records both snapshots and their identities, `upstream.diff`, `cursor-team-kit.diff`, and the combined generated content in a candidate directory using the current exclusions and patches. The toolkit's `sourceTree` records the full original subtree; `selectedTree` identifies the smaller retained snapshot used by offline verification. Invalid exclusions or patch conflicts fail with retained evidence. Neither command adopts the candidate or changes the active lock, snapshot, or generated content.
 
-Review the upstream methodology changes, exclusion scope, and each translation hunk before adopting a prepared candidate. Replace the active snapshot and lock only with an explicitly selected candidate, then regenerate and verify. A clean patch replay proves textual applicability, not semantic fidelity. Never silently advance the pin.
+Review the upstream methodology changes, exclusion scope, and each translation hunk before adopting a prepared candidate. Replace both active snapshots and the lock only with an explicitly selected candidate, then regenerate and verify. A clean patch replay proves textual applicability, not semantic fidelity. Never silently advance the pin.

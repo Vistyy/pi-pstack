@@ -3,9 +3,10 @@ import { readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  composeKit,
+  composeKitSnapshot,
   contentDiff,
   copyTree,
+  kitSkills,
   readLock,
   replay,
   temporary,
@@ -20,7 +21,7 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 async function build(staging: string) {
   const content = path.join(staging, "content/pstack");
   await replay(root, path.join(root, "upstream/pstack"), content);
-  await composeKit(root, content);
+  await composeKitSnapshot(path.join(root, "upstream/cursor-team-kit"), content);
 }
 
 async function generate() {
@@ -89,7 +90,7 @@ async function diff() {
   );
   console.log("\nSelected Cursor Team Kit additions (not unselected toolkit content):");
 
-  for (const skill of ["deslop", "control-cli", "control-ui"]) console.log(`skills/${skill}`);
+  for (const skill of kitSkills) console.log(`skills/${skill}`);
   console.log("\nPi-owned implementation files (not upstream translations):");
 
   for (const directory of ["extensions", "src", "instructions", "scripts"]) {

@@ -212,15 +212,17 @@ twenty-three short skills, one principle each. `poteto-mode` indexes them inline
 
 </details>
 
-## not shipped here
+## companion methods in this Pi package
 
-a few things `poteto-mode` references but doesn't bundle:
+This package includes three unchanged `cursor-team-kit` methods at the same upstream pin as PStack:
 
-- `/deslop` and the `deslop` skill ship in the `cursor-team-kit` plugin.
-- `control-cli` (for CLIs and TUIs) and `control-ui` (for browser, Electron, web) ship in `cursor-team-kit` too.
-- `/create-skill` is a cursor built-in. cursor also ships a built-in `/babysit`; inside `poteto-mode`, the [babysit playbook](./skills/poteto-mode/playbooks/babysit.md) supersedes it for pr-status requests.
+- [`deslop`](./skills/deslop/SKILL.md) cleans the code diff before a commit.
+- [`control-cli`](./skills/control-cli/SKILL.md) drives CLIs and TUIs.
+- [`control-ui`](./skills/control-ui/SKILL.md) drives browser, Electron, and web UIs.
 
-install `cursor-team-kit` alongside pstack if you want the full set.
+Read them through the same packaged skill directory as PStack's own methods, or invoke `/skill:deslop`, `/skill:control-cli`, or `/skill:control-ui`. The separate [Cursor MIT notice](./licenses/cursor-team-kit.LICENSE) ships with them. No separate toolkit installation is needed; its other skills are not bundled.
+
+The [Authoring or modifying a skill playbook](./skills/poteto-mode/playbooks/authoring-a-skill.md) supplies the Pi authoring procedure in place of Cursor's built-in `create-skill`. The packaged [Babysit playbook](./skills/poteto-mode/playbooks/babysit.md) owns requested PR-status work, not Cursor's built-in command.
 
 ## why are there no planning skills?
 

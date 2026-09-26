@@ -1,0 +1,236 @@
+diff --git a/docs/guide/06-verify-and-ship.md b/docs/guide/06-verify-and-ship.md
+index 44813eb..1036a49 100644
+--- a/docs/guide/06-verify-and-ship.md
++++ b/docs/guide/06-verify-and-ship.md
+@@ -34,7 +34,7 @@ The UI bullet above hides a real requirement. The agent needs a scripted way to
+ 
+ [`/create-verification-skill`](../../skills/create-verification-skill/SKILL.md) interviews the repository, not you. It works out what a user touches, how the app launches locally, what can drive it (an existing harness first, otherwise browser and CDP, a PTY, or plain HTTP), what evidence proves behavior, and whether two instances can run side by side. It asks you only what the code can't answer.
+ 
+-It writes `.cursor/skills/verify-<app>/`, agent-facing instructions with exact Launch, Doctor, Drive, Evidence, and Cleanup sections, plus a feature map under `features/` that indexes what the app does and what result proves each feature works. The skill ships a [worked feature-map example](../../skills/create-verification-skill/references/feature-map-example/) with a README index and one file per feature using the four required H2s. Before handing it over, the generator proves the skill once end to end: launch, doctor check, drive one feature, capture evidence, clean up. If that proof fails, don't use the output.
++It writes `.pi/skills/verify-<app>/`, agent-facing instructions with exact Launch, Doctor, Drive, Evidence, and Cleanup sections, plus a feature map under `features/` that indexes what the app does and what result proves each feature works. The skill ships a [worked feature-map example](../../skills/create-verification-skill/references/feature-map-example/) with a README index and one file per feature using the four required H2s. Before handing it over, the generator proves the skill once end to end: launch, doctor check, drive one feature, capture evidence, clean up. If that proof fails, don't use the output.
+ 
+ From then on, "verify it in the app" is a step any agent can execute, in this repo, with no setup conversation.
+ 
+diff --git a/docs/guide/09-make-it-yours.md b/docs/guide/09-make-it-yours.md
+index 6723069..1c0d211 100644
+--- a/docs/guide/09-make-it-yours.md
++++ b/docs/guide/09-make-it-yours.md
+@@ -8,7 +8,7 @@ poteto-mode is one person's style. The machinery underneath, playbooks, routing,
+ /automate-me
+ ```
+ 
+-You don't describe your style, because [`/automate-me`](../../skills/automate-me/SKILL.md) reads it out of your history. It mines your recent transcripts in the active workspace for repeated preferences, in how you like replies, delegation, verification, code, prose, and process, then asks you which patterns are really you. It drafts `.cursor/skills/<your-name>-mode/SKILL.md` through Cursor's built-in `create-skill` flow, runs the draft through [`/unslop`](../../skills/unslop/SKILL.md), and opens a PR from a worktree so you review it like any other change.
++You don't describe your style, because [`/automate-me`](../../skills/automate-me/SKILL.md) reads it out of your history. It mines your recent transcripts in the active workspace for repeated preferences, in how you like replies, delegation, verification, code, prose, and process, then asks you which patterns are really you. It drafts `.pi/skills/<your-name>-mode/SKILL.md` through the [Pi authoring playbook](../../skills/poteto-mode/playbooks/authoring-a-skill.md), runs the draft through [`/unslop`](../../skills/unslop/SKILL.md), and opens a PR from a worktree so you review it like any other change.
+ 
+ Run it again whenever your habits drift:
+ 
+@@ -36,7 +36,7 @@ When you already know the workflow you want to capture:
+ /poteto-mode write a skill for verifying database migrations in this repo
+ ```
+ 
+-Writing a skill matches the [Authoring or modifying a skill playbook](../../skills/poteto-mode/playbooks/authoring-a-skill.md), which routes through Cursor's built-in `create-skill`, validates the frontmatter and links, and ships the result through the Opening a PR playbook. Agent-facing prose has a higher bar than human prose, because an unhelpful sentence becomes an instruction some future agent follows. Let the playbook hold that bar rather than writing a `SKILL.md` freehand.
++Writing a skill matches the [Authoring or modifying a skill playbook](../../skills/poteto-mode/playbooks/authoring-a-skill.md), which uses the running Pi version's skill documentation and Anthropic's writing guidance, checks native discovery and links, and follows the Opening a PR playbook within the agreed delivery authority. Agent-facing prose has a higher bar than human prose, because an unhelpful sentence becomes an instruction some future agent follows. Let the playbook hold that bar rather than writing a `SKILL.md` freehand.
+ 
+ One special case has its own generator. A skill that must drive your app and prove behavior is a verification skill, so use [`/create-verification-skill`](../../skills/create-verification-skill/SKILL.md) and [`/maintain-verification-skill`](../../skills/maintain-verification-skill/SKILL.md) instead. [Verify and ship](./06-verify-and-ship.md#create-a-project-verification-skill) covers both.
+ 
+diff --git a/skills/automate-me/SKILL.md b/skills/automate-me/SKILL.md
+index cd3636e..1519085 100644
+--- a/skills/automate-me/SKILL.md
++++ b/skills/automate-me/SKILL.md
+@@ -1,6 +1,6 @@
+ ---
+ name: automate-me
+-description: "Use for \"automate me\", \"create/update/refresh my -mode skill\", \"turn/capture my preferences or working style into a skill\", or wanting agents to follow how the user works. Drafts or revises a personal -mode skill via create-skill + unslop, optionally pulling fresh evidence from recent transcripts."
++description: "Use for \"automate me\", \"create/update/refresh my -mode skill\", \"turn/capture my preferences or working style into a skill\", or wanting agents to follow how the user works. Drafts or revises a personal -mode skill via the Pi authoring playbook and unslop, optionally pulling fresh evidence from recent transcripts."
+ disable-model-invocation: true
+ ---
+ 
+@@ -8,13 +8,13 @@ disable-model-invocation: true
+ 
+ A guided flow for turning the user's working conventions into a skill agents will follow. The output is one `-mode` skill tailored to them (e.g. `jay-mode`, `priya-mode`).
+ 
+-This skill orchestrates three others: an inline mining pass (see step 1), Cursor's built-in `create-skill` (authoring), and the **unslop** skill (prose discipline). It sequences them. It doesn't replace them.
++This skill sequences an inline mining pass (step 1), the [Authoring or modifying a skill playbook](../poteto-mode/playbooks/authoring-a-skill.md), and the **unslop** skill (prose discipline). It doesn't replace their methods.
+ 
+ ## Flow
+ 
+ ### 0. Check for an existing skill
+ 
+-Look recursively for `.cursor/skills/**/*-mode/SKILL.md` and `~/.cursor/skills/*-mode/SKILL.md` matching the user's handle. Mode skills can live in a personal category directory (`.cursor/skills/<handle>/`), not only at the top level. If one exists, confirm intent with `AskQuestion` (unless they already said "update my skill" or similar):
++Use the running Pi version's skill discovery locations (`docs/skills.md`) and current skill paths to find an existing `<handle>-mode` skill. Honor configured paths and packages; a mode may live in a category directory rather than at the top level. If one exists, confirm intent with `AskQuestion` (unless they already said "update my skill" or similar):
+ 
+ - Update the existing skill (default for repeat runs)
+ - Start fresh (rare, ask why before doing it)
+@@ -64,17 +64,17 @@ The **poteto-mode** skill shows the shape. Read it for granularity. Don't copy i
+ 
+ ### 4. Draft the skill
+ 
+-Use Cursor's built-in `create-skill` skill to author the skill. Placement:
++Follow the [Authoring or modifying a skill playbook](../poteto-mode/playbooks/authoring-a-skill.md). Placement:
+ 
+-- Path: preserve an existing mode skill's category. For a new mode, use `.cursor/skills/<handle>/<handle>-mode/SKILL.md` when the repo has an established personal category for that handle. Otherwise default to `.cursor/skills/<handle>-mode/SKILL.md` in the project (or `~/.cursor/skills/<handle>-mode/` if the user prefers a personal skill).
++- Path: preserve an existing mode skill's location and category, editing its source if generated or packaged. For a new mode, use `.pi/skills/<handle>/<handle>-mode/SKILL.md` when the repo has an established personal category for that handle. Otherwise default to `.pi/skills/<handle>-mode/SKILL.md` in the project, or the user's configured personal Pi skill directory if they prefer a global skill.
+ - Handle: the user's first name or chosen identifier.
+-- Frontmatter `description`: trigger on their name + `/<handle>-mode` + "work in their style", not on generic keywords like "write code" or "review PR".
+-- Frontmatter formatting: follow `create-skill`'s YAML rules. Keep `description` as one YAML scalar. Quote it or use `description: >-` with indented continuation lines when punctuation or wrapping requires it.
+-- Frontmatter `disable-model-invocation: true` by default. Opt out only if the user explicitly wants their mode to apply on every turn.
++- Frontmatter `description`: trigger on their name + `/skill:<handle>-mode` + "work in their style", not on generic keywords like "write code" or "review PR".
++- Frontmatter formatting: follow Pi's supported fields. Keep `description` as one YAML scalar. Quote it or use `description: >-` with indented continuation lines when punctuation or wrapping requires it.
++- Frontmatter `disable-model-invocation: true` by default, for manual invocation. Remove it only if the user wants automatic discovery. Discovery is not an always-on mode; do not promise every-turn application from this flag.
+ 
+ ### 5. Iterate on prose
+ 
+-Apply the **unslop** skill and `create-skill`'s writing guidelines to every line.
++Apply the **unslop** skill and the authoring playbook's writing guidance to every line.
+ 
+ Show the draft to the user and take feedback. Expect multiple iterations. Cut ruthlessly. A mode skill is not a manual.
+ 
+@@ -93,12 +93,12 @@ Work in a worktree off main. Commit and open a PR. Don't push to main directly.
+ 
+ ## Evaluation
+ 
+-A `-mode` skill is subjective output. A `create-skill`-style test/iterate benchmark loop isn't useful here. Vibe-check with the user: does it read like them? Did it miss anything? Then ship.
++A `-mode` skill is subjective output. A benchmark loop isn't useful here. Vibe-check with the user: does it read like them? Did it miss anything? Then ship.
+ 
+-Run a description-optimization loop only if the skill's trigger accuracy turns out to be a problem in practice.
++Revisit discovery metadata after an observed trigger miss. Check registration and visibility before changing its wording.
+ 
+ ## When not to use
+ 
+-- User wants a task-specific skill (not working conventions): `create-skill` alone, no mining required.
++- User wants a task-specific skill (not working conventions): the authoring playbook alone, no mining required.
+ - User wants to capture one narrow workflow (e.g. "how I write commit messages"). That's a regular skill, not a mode skill.
+ 
+diff --git a/skills/create-verification-skill/SKILL.md b/skills/create-verification-skill/SKILL.md
+index f869e26..02a0df5 100644
+--- a/skills/create-verification-skill/SKILL.md
++++ b/skills/create-verification-skill/SKILL.md
+@@ -6,7 +6,7 @@ disable-model-invocation: true
+ 
+ # Create a verification skill
+ 
+-Every serious project needs a scripted way to drive the real app and prove behavior: launch it, exercise a feature the way a user would, and capture evidence. This skill generates that as a project-local skill (`.cursor/skills/verify-<app>/`) tailored to the repo. You write the generator's output for the next agent, not for a human: it will be read cold, mid-task, by an agent that has never seen the app.
++Every serious project needs a scripted way to drive the real app and prove behavior: launch it, exercise a feature the way a user would, and capture evidence. This skill generates that as a project-local skill (`.pi/skills/verify-<app>/`) tailored to the repo. You write the generator's output for the next agent, not for a human: it will be read cold, mid-task, by an agent that has never seen the app.
+ 
+ ## 1. Interview the repo, not the user
+ 
+@@ -22,7 +22,7 @@ If the checkout doesn't build or start as-is, fix that first (or report it preci
+ 
+ ## 2. Generate the skill
+ 
+-Write `.cursor/skills/verify-<app>/SKILL.md` with YAML frontmatter (`name: verify-<app>` and a `description` that names the app, the surface, and when to reach for it — without frontmatter the skill never registers) and these sections, each grounded in what the interview actually found (no placeholders left):
++Write `.pi/skills/verify-<app>/SKILL.md` with YAML frontmatter (`name: verify-<app>` and a `description` that names the app, the surface, and when to reach for it — without frontmatter the skill never registers) and these sections, each grounded in what the interview actually found (no placeholders left):
+ 
+ - **Launch:** the exact command that starts the app for verification, and how to tell it's ready (a log line, a port answering, a prompt). Include teardown. For a short-lived CLI or TUI there is no server to keep alive: launch means build the binary (or install deps) once, then start each drive in its own isolated PTY or tmux session.
+ - **Doctor:** one read-only check that answers "is this instance worth driving?" — process up, right version/build, port owned by us, auth valid. An agent runs this first whenever anything looks off.
+@@ -33,11 +33,11 @@ Write `.cursor/skills/verify-<app>/SKILL.md` with YAML frontmatter (`name: verif
+ 
+ ## 3. Seed the feature map
+ 
+-Create `.cursor/skills/verify-<app>/features/README.md` plus one file per user-facing feature you can identify (aim for the top 3-5 to start, from routes, commands, menus, or docs). Follow the shape in [`references/feature-map-example/`](references/feature-map-example/), with a README index and one file per feature. Each file answers, from the user's point of view: what the feature is, how to reach it, how to drive it with the harness, and what observable end state proves it works. The four H2s are `Sub-features`, `How to get to it (user POV)`, `Driving it with <harness>`, and `Gotchas`. The map is the repo's maintained verification source; a proof that drives one convenient entry point is incomplete when the map lists others.
++Create `.pi/skills/verify-<app>/features/README.md` plus one file per user-facing feature you can identify (aim for the top 3-5 to start, from routes, commands, menus, or docs). Follow the shape in [`references/feature-map-example/`](references/feature-map-example/), with a README index and one file per feature. Each file answers, from the user's point of view: what the feature is, how to reach it, how to drive it with the harness, and what observable end state proves it works. The four H2s are `Sub-features`, `How to get to it (user POV)`, `Driving it with <harness>`, and `Gotchas`. The map is the repo's maintained verification source; a proof that drives one convenient entry point is incomplete when the map lists others.
+ 
+ ## 4. Prove the generated skill before handing it over
+ 
+-Run its own instructions end to end once: launch, doctor, drive ONE mapped feature (one is enough; the map exists so later runs can cover the rest), capture evidence, clean up. After cleanup, confirm the evidence still exists at the named location — a cleanup that eats the proof fails this step. Fix what fails, and run the generated cleanup after every failed iteration too, so broken attempts don't strand processes and ports. A generated skill that was never executed is a draft, not a deliverable.
++Confirm Pi discovers the generated skill with the intended metadata; report trust or configuration blockers. Run its own instructions end to end once: launch, doctor, drive ONE mapped feature (one is enough; the map exists so later runs can cover the rest), capture evidence, clean up. After cleanup, confirm the evidence still exists at the named location — a cleanup that eats the proof fails this step. Fix what fails, and run the generated cleanup after every failed iteration too, so broken attempts don't strand processes and ports. A generated skill that was never executed is a draft, not a deliverable.
+ 
+ ## 5. Offer the maintenance loop
+ 
+diff --git a/skills/maintain-verification-skill/SKILL.md b/skills/maintain-verification-skill/SKILL.md
+index a2680b9..7287c3a 100644
+--- a/skills/maintain-verification-skill/SKILL.md
++++ b/skills/maintain-verification-skill/SKILL.md
+@@ -22,7 +22,7 @@ Only edit the verification skill's own directory (its SKILL.md, features/, and a
+ 
+ ## Pass
+ 
+-0. **Locate the target.** Find the verification skill to maintain: the project-local skill whose body has launch/drive sections and a feature map (usually `.cursor/skills/verify-*/`). Several candidates → ask which one; none → stop and point at `/create-verification-skill` instead of inventing a target.
++0. **Locate the target.** Find the verification skill to maintain: the project-local skill whose body has launch/drive sections and a feature map (usually `.pi/skills/verify-*/`; honor an existing skill's configured location). Several candidates → ask which one; none → stop and point at `/create-verification-skill` instead of inventing a target.
+ 
+ 1. **Index hygiene.** Read the feature map README and glob its sibling files. Fix missing, extra, duplicate, or dead entries. Lightweight; no generated inventory.
+ 
+diff --git a/skills/poteto-mode/SKILL.md b/skills/poteto-mode/SKILL.md
+index 555bf44..e15e8d0 100644
+--- a/skills/poteto-mode/SKILL.md
++++ b/skills/poteto-mode/SKILL.md
+@@ -24,7 +24,7 @@ Remaining triggers:
+ - Parallel fan-out → the **swarm** skill for coverage matrices, races, gauntlets, and exploration partitions. Use **arena** for design or code bakeoffs with base selection and grafting.
+ - Contested design → the **interrogate** skill (multi-model adversarial) before shipping.
+ - Nontrivial multi-step → write the throughput checkpoint (Feature step 3).
+-- Any prose surface → the **unslop** skill. Your reply is a prose surface. Write it per **Writing the reply**. Agent-facing prose also follows the actual **create-skill** method required by upstream. It is an external Cursor dependency, not a Pi built-in; report its absence rather than substituting a personal authoring skill.
++- Any prose surface → the **unslop** skill. Your reply is a prose surface. Write it per **Writing the reply**. Agent-facing prose follows the [Authoring or modifying a skill playbook](playbooks/authoring-a-skill.md), using Pi's own skill mechanics.
+ - Docs, RFCs, readmes, PR descriptions, or commit messages → the **technical-writing** skill (`/skill:technical-writing`).
+ - Before commit → the `deslop` skill from the `cursor-team-kit` plugin (`/deslop`).
+ - Before review → the **no-comments** skill (`/skill:no-comments`).
+diff --git a/skills/poteto-mode/playbooks/authoring-a-skill.md b/skills/poteto-mode/playbooks/authoring-a-skill.md
+index c2949e4..a946661 100644
+--- a/skills/poteto-mode/playbooks/authoring-a-skill.md
++++ b/skills/poteto-mode/playbooks/authoring-a-skill.md
+@@ -2,10 +2,12 @@
+ 
+ **You own the skill's voice.**
+ 
+-1. Use the actual **create-skill** method required by upstream. It is an external Cursor dependency, not a Pi built-in supplied by this package. If unavailable, report the gap rather than substituting a similarly named personal skill.
+-2. Validate the skill: frontmatter has `name` and `description`, referenced files exist, cross-skill links resolve.
+-3. Test cases if structural. Skip if subjective.
+-4. Run **Opening a PR**.
++1. For Pi skill mechanics, read the running Pi version's `docs/skills.md` at the documentation location supplied by the host. It owns discovery, supported frontmatter, invocation, and validation. Use Anthropic's [Skill authoring best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices) for writing advice, not Claude-specific configuration or a mandatory evaluation framework. This is the Pi authoring procedure; it does not depend on Cursor's `create-skill`.
++2. Choose the existing home before adding a skill. Required guidance must reach the agent that needs it. Keep tool-specific inputs and effects with the tool contract. Put a conditional reference's loading trigger beside its link, where the reader can see it before opening the reference.
++3. Draft the smallest useful change. A skill description states what it does and when to use it, including a meaningful nearby non-match when needed. Choose discoverable or manual-only invocation deliberately; being discoverable does not make a skill apply on every turn. Use **principle-guard-the-context-window** to place frequently used content and supporting references.
++4. Validate through Pi's real skill loader: the intended skill is found, its metadata and visibility match the intended invocation, and there are no relevant diagnostics or name collisions. Check referenced files and cross-skill links. For packaged or generated skills, change the owning sources and verify the installed/generated output, not just the draft.
++5. Verify the affected workflow with representative tasks and actual entry points. Use available deterministic checks; report what they do not establish about autonomous skill selection. Iterate on observed failures. Subjective style needs user feedback, not a benchmark loop. Do not create a general evaluation harness or launch paid model tests by default.
++6. Run **Opening a PR** within the agreed delivery authority.
+ 
+ When in doubt, delete. Keep only prose that changes a decision. Tell it to do the thing and skip the reason. Explain only when the rule is confusing without one. Match tone to scope. Point at structural sources (types, READMEs, config) per the **encode-lessons-in-structure** principle skill. Delegate to other skills by path. Don't restate. A workflow you keep hitting but isn't captured → propose a new skill.
+ 
+diff --git a/skills/reflect/SKILL.md b/skills/reflect/SKILL.md
+index 7017a70..611a4c8 100644
+--- a/skills/reflect/SKILL.md
++++ b/skills/reflect/SKILL.md
+@@ -49,11 +49,9 @@ Backlog items file to whatever devex / backlog tracker your team uses automatica
+ For each approved Accepted item, follow the Routing field exactly:
+ 
+ - Trivial existing-skill edit (a one-line bullet, a tightened sentence, a stale fact corrected): parent does directly.
+-- Substantive existing-skill edit (a new section, a new pattern table, more than ~10 lines): follow the actual external `create-skill` method and run its draft / test / iterate loop.
+-- `tune description: <skill path>` (the skill exists but didn't trigger when it should have): hand to `create-skill` and run its description-optimization loop.
+-- `new skill via create-skill: <kebab-name>`: hand creation to `create-skill`. Do not invent the shape ad hoc.
+-
+-The `create-skill` method is an external dependency, not supplied by this Pi package. Report its absence instead of replacing it with a personal skill or silently skipping its procedure.
++- Substantive existing-skill edit (a new section, a new pattern table, more than ~10 lines): follow the [Authoring or modifying a skill playbook](../poteto-mode/playbooks/authoring-a-skill.md).
++- `tune description: <skill path>` (the skill exists but didn't trigger when it should have): use the same playbook to correct its discovery metadata and verify the intended visibility in Pi. Distinguish a missing registration or manual-only setting from unclear wording.
++- `new skill: <kebab-name>`: follow the same playbook to create and verify it. Do not invent the shape ad hoc.
+ 
+ If your environment ships a SKILL.md validator, run it on every touched skill before declaring done. Skip this step if it doesn't.
+ 
+diff --git a/skills/reflect/references/synthesizer.md b/skills/reflect/references/synthesizer.md
+index a6d5142..8d0d848 100644
+--- a/skills/reflect/references/synthesizer.md
++++ b/skills/reflect/references/synthesizer.md
+@@ -14,7 +14,7 @@ Apply each criterion to every finding:
+ 
+ - Durability: still true in 6 months once paths, SHAs, tool versions, and code shapes have changed.
+ - Specificity: broad enough to apply across tasks, precise enough that a future agent recognizes when to use it. Reject vague platitudes ("write good code") and hyper-specific facts ("`<specific-skill-name>` has 175 tokens at limit 80").
+-- Existing-skill-first: propose `new skill via create-skill:` only when no existing skill is a real home, the pattern recurs, and the topic deserves its own skill.
++- Existing-skill-first: propose `new skill:` only when no existing skill is a real home, the pattern recurs, and the topic deserves its own skill.
+ - Convergence: findings echoed by 2+ reviewers carry higher confidence. Singletons must clear a higher bar on the other criteria.
+ - Decision-changing: a future agent does something different because of the edit, not just reads more text.
+ - Structural-mechanism check: route to Backlog when a lint rule, script, metadata flag, or runtime check already enforces the rule or could enforce it cheaply. Skill prose is for things mechanisms cannot enforce.
+@@ -31,7 +31,7 @@ Keep (durable patterns):
+ - "closed regex enums for trigger detection are brittle. Prefer schema-validated structures"
+ - "skill descriptions front-load trigger keywords (60/40 trigger-vs-action)"
+ - "skill-bundled scripts run under bun with own lockfile, not pnpm workspace"
+-- "path-shaped triggers belong in `paths:`, not description prose"
++- "use the host's supported discovery mechanism; Pi ignores `paths:` frontmatter, so a file-triggered skill needs a visible description or an explicit route from loaded guidance"
+ 
+ Output exactly the format below. No preamble, no narration. One sentence per cell. A reviewer should read each Problem/Proposal pair in 5 seconds.
+ 
+@@ -41,7 +41,7 @@ Output exactly the format below. No preamble, no narration. One sentence per cel
+ |---|---|---|
+ | <failure mode in a skill the parent used> | <change to that skill's body> | <skill path + section> |
+ | <skill existed but didn't trigger> | <tune the skill's description so it fires next time> | <tune description: <skill path>> |
+-| <new pattern, no existing skill is a real home> | <draft a new skill via create-skill> | <new skill via create-skill: <kebab-name>> |
++| <new pattern, no existing skill is a real home> | <draft a new skill with the Pi authoring playbook> | <new skill: <kebab-name>> |
+ 
+ One row per finding. The user approves row by row.
+ 

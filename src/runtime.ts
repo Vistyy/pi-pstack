@@ -109,7 +109,7 @@ export function createRuntime(pi: ExtensionAPI, options?: { profile: Profile }):
         : "";
 
     return {
-      systemPrompt: `${event.systemPrompt}\n\n${content.identity}${mode}\n\nPackaged PStack skills directory: ${skillsDir}\n\n${content.host}\n\nCurrent Pi transcript (null means unavailable): ${JSON.stringify(ctx.sessionManager.getSessionFile() ?? null)}\n\n## PStack role map\n${projection}`,
+      systemPrompt: `${event.systemPrompt}\n\n${content.identity}${mode}\n\nPackaged PStack skills directory: ${skillsDir}\n\n${content.host}\n\nCurrent Pi transcript (null means unavailable): ${JSON.stringify(ctx.sessionManager.getSessionFile() ?? null)}\n\nCurrent Pi history scope: ${JSON.stringify({ cwd: ctx.cwd, directory: ctx.sessionManager.getSessionDir() })}\n\n## PStack role map\n${projection}`,
     };
   });
   pi.registerCommand("poteto-mode", {

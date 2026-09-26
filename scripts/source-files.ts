@@ -75,15 +75,14 @@ export async function readLock(root: string): Promise<UpstreamLock> {
   if (
     !("cursorTeamKit" in lock) ||
     typeof lock.cursorTeamKit !== "object" ||
-    lock.cursorTeamKit === null
+    lock.cursorTeamKit === null ||
+    !("sourceTree" in lock.cursorTeamKit) ||
+    !("selectedTree" in lock.cursorTeamKit) ||
+    !("version" in lock.cursorTeamKit)
   )
     throw new Error("Invalid upstream.lock.json: missing cursorTeamKit identity.");
 
-  const kit = lock.cursorTeamKit as {
-    sourceTree: unknown;
-    selectedTree: unknown;
-    version: unknown;
-  };
+  const kit = lock.cursorTeamKit;
 
   if (
     typeof kit.sourceTree !== "string" ||
@@ -188,35 +187,30 @@ export async function verifyKitSnapshot(root: string, lock: UpstreamLock) {
   }
 }
 
-export async function composeKitSnapshot(snapshot: string, target: string) {
-  for (const skill of kitSkills) {
-    const destination = path.join(target, "skills", skill);
-
-    try {
-      await lstat(destination);
-      throw new Error(`Companion destination collision: ${destination}`);
-    } catch (error) {
-      if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
-    }
-
-    await copyTree(path.join(snapshot, "skills", skill), destination);
-  }
-
-  const license = path.join(target, "licenses/cursor-team-kit.LICENSE");
-
+async function copyCompanion(source: string, destination: string) {
   try {
-    await lstat(license);
-    throw new Error(`Companion destination collision: ${license}`);
+    await lstat(destination);
+    throw new Error(`Companion destination collision: ${destination}`);
   } catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
   }
 
-  await copyTree(path.join(snapshot, "LICENSE"), license);
+  await copyTree(source, destination);
 }
 
-export async function composeKit(root: string, target: string) {
-  await verifyKitSnapshot(root, await readLock(root));
-  await composeKitSnapshot(path.join(root, "upstream/cursor-team-kit"), target);
+export async function composeKitSnapshot(snapshot: string, target: string) {
+  for (const skill of kitSkills) {
+    const source = path.join(snapshot, "skills", skill);
+
+    if (!(await lstat(path.join(source, "SKILL.md"))).isFile())
+      throw new Error(`Missing selected skill body: ${skill}`);
+    await copyCompanion(source, path.join(target, "skills", skill));
+  }
+
+  await copyCompanion(
+    path.join(snapshot, "LICENSE"),
+    path.join(target, "licenses/cursor-team-kit.LICENSE"),
+  );
 }
 
 export async function verifySnapshot(root: string, lock: UpstreamLock) {
@@ -327,10 +321,15 @@ export async function replay(root: string, snapshot: string, target: string) {
   }
 }
 
-export async function unpack(cache: string, revision: string, destination: string) {
+export async function unpack(
+  cache: string,
+  revision: string,
+  destination: string,
+  paths: string[] = [],
+) {
   await mkdir(destination, { recursive: true });
 
-  const archive = execFileSync("git", ["-C", cache, "archive", revision], {
+  const archive = execFileSync("git", ["-C", cache, "archive", revision, ...paths], {
     maxBuffer: 128 * 1024 * 1024,
     stdio: ["ignore", "pipe", "pipe"],
   });

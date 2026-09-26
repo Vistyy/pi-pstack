@@ -49,11 +49,9 @@ Backlog items file to whatever devex / backlog tracker your team uses automatica
 For each approved Accepted item, follow the Routing field exactly:
 
 - Trivial existing-skill edit (a one-line bullet, a tightened sentence, a stale fact corrected): parent does directly.
-- Substantive existing-skill edit (a new section, a new pattern table, more than ~10 lines): follow the actual external `create-skill` method and run its draft / test / iterate loop.
-- `tune description: <skill path>` (the skill exists but didn't trigger when it should have): hand to `create-skill` and run its description-optimization loop.
-- `new skill via create-skill: <kebab-name>`: hand creation to `create-skill`. Do not invent the shape ad hoc.
-
-The `create-skill` method is an external dependency, not supplied by this Pi package. Report its absence instead of replacing it with a personal skill or silently skipping its procedure.
+- Substantive existing-skill edit (a new section, a new pattern table, more than ~10 lines): follow the [Authoring or modifying a skill playbook](../poteto-mode/playbooks/authoring-a-skill.md).
+- `tune description: <skill path>` (the skill exists but didn't trigger when it should have): use the same playbook to correct its discovery metadata and verify the intended visibility in Pi. Distinguish a missing registration or manual-only setting from unclear wording.
+- `new skill: <kebab-name>`: follow the same playbook to create and verify it. Do not invent the shape ad hoc.
 
 If your environment ships a SKILL.md validator, run it on every touched skill before declaring done. Skip this step if it doesn't.
 

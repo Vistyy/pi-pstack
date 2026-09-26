@@ -281,6 +281,30 @@ await test("upstream check and preparation expose changes and new version withou
   assert.deepEqual(await activeState(f.root), before);
 });
 
+await test("upstream comparison uses pinned selected files and preparation requires skill bodies", async (t) => {
+  const f = await fixture(t);
+  success(f.run("generate"));
+  await put(f.remote, "cursor-team-kit/unselected.txt", "unselected payload\n".repeat(150_000));
+  f.git("add", ".");
+  f.git("commit", "--quiet", "-m", "unselected toolkit change");
+  await put(f.root, "upstream/cursor-team-kit/skills/deslop/SKILL.md", "local drift sentinel\n");
+  const before = await activeState(f.root);
+  const check = success(f.run("check-upstream"));
+  assert.match(check, /"selectedCursorTeamKitChanged": false/);
+  assert.doesNotMatch(check, /local drift sentinel|unselected payload/);
+  assert.deepEqual(await activeState(f.root), before);
+
+  await put(f.remote, "cursor-team-kit/skills/control-ui/README.md", "not a skill body\n");
+  await rm(path.join(f.remote, "cursor-team-kit/skills/control-ui/SKILL.md"));
+  f.git("add", ".");
+  f.git("commit", "--quiet", "-m", "remove a required skill body");
+  const preparation = f.run("prepare-update", f.git("rev-parse", "HEAD"));
+  assert.notEqual(preparation.status, 0);
+  const failedCandidate = await candidateDirectory(f.root);
+  assert.match(await readFile(path.join(failedCandidate, "failure.txt"), "utf8"), /SKILL.md/);
+  assert.deepEqual(await activeState(f.root), before);
+});
+
 await test("literal exclusions preserve the snapshot and replay across edits to excluded upstream content", async (t) => {
   const f = await fixture(t);
   await put(f.root, "upstream-exclusions.txt", "# local scope\nretired/\nomit.txt\nlink\n\n");

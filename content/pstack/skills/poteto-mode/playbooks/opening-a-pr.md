@@ -6,7 +6,7 @@ Invoked at the end of a change-producing playbook when publishing a PR is author
 
 **Commits.** Commit liberally. Rebase into small, ordered commits before opening PRs. Each commit is a future PR: landable, ordered to tell the story. Amend when the fix belongs in a just-made commit. New commit when separable.
 
-**PRs.** Run `/deslop` from `cursor-team-kit` over the diff before commit. Follow **no-comments** before review. Write every PR title, PR description, and commit body with **technical-writing**, then apply **unslop**. Apply every technical-writing layer except Diátaxis. Use one word for each action, keep articles, and avoid `-ing` when a plain verb works.
+**PRs.** Run the bundled `deslop` method from `cursor-team-kit` over the diff before commit (`/skill:deslop`). Follow **no-comments** before review. Write every PR title, PR description, and commit body with **technical-writing**, then apply **unslop**. Apply every technical-writing layer except Diátaxis. Use one word for each action, keep articles, and avoid `-ing` when a plain verb works.
 
 **Titles.** Use Conventional Commits in the form `type(scope): subject`. Use `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, or `perf` as the type. Use the changed area, such as `pstack` or `poteto-mode`, as the scope. Keep the subject short and imperative. Name a real symbol when one carries the change. For example, `fix(pstack): retarget opening-a-pr babysit trigger`. Do not add a trailing period.
 
@@ -30,4 +30,4 @@ After these sections, attach videos or screenshots when they prove a claim. Do n
 
 **Babysit.** Opening a PR does not start a babysit. Post the URL and keep building. Finish the phase or stack first. Run a separate babysit pass only when the user asks for one after the whole stack exists. A babysit for each new PR stalls the build and spends checks on commits that later waves restart. Push back when feedback drifts from intent.
 
-A subagent that opens a PR follows **interrogate**, the external `deslop` method, and **no-comments**, and posts the URL. Then it returns to the parent without babysitting. A separate user request starts the Babysit playbook (`playbooks/babysit.md`); neither opening a PR nor babysitting authorizes merging.
+A subagent that opens a PR follows **interrogate**, the bundled `deslop` method, and **no-comments**, and posts the URL. Then it returns to the parent without babysitting. A separate user request starts the Babysit playbook (`playbooks/babysit.md`); neither opening a PR nor babysitting authorizes merging.

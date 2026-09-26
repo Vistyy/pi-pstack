@@ -14,38 +14,12 @@ import {
   unpack,
 } from "./source-files.ts";
 
-async function selectedKit(cache: string, commit: string, directory: string) {
-  const { execFileSync } = await import("node:child_process");
-
-  const archive = execFileSync("git", [
-    "-C",
-    cache,
-    "archive",
-    "--format=tar",
-    commit,
-    "cursor-team-kit",
+async function selectedKit(cache: string, commit: string, destination: string) {
+  await unpack(cache, `${commit}:cursor-team-kit`, destination, [
+    "LICENSE",
+    ".cursor-plugin/plugin.json",
+    ...kitSkills.map((skill) => `skills/${skill}`),
   ]);
-
-  const staging = path.join(directory, "kit-extract");
-  await mkdir(staging, { recursive: true });
-  execFileSync("tar", ["-xf", "-", "-C", staging], { input: archive });
-  const source = path.join(staging, "cursor-team-kit");
-  const selected = path.join(directory, "selected-kit");
-  await mkdir(path.join(selected, ".cursor-plugin"), { recursive: true });
-  await copyTree(path.join(source, "LICENSE"), path.join(selected, "LICENSE"));
-  await copyTree(
-    path.join(source, ".cursor-plugin/plugin.json"),
-    path.join(selected, ".cursor-plugin/plugin.json"),
-  );
-
-  for (const skill of kitSkills)
-    await copyTree(path.join(source, "skills", skill), path.join(selected, "skills", skill));
-
-  return selected;
-}
-
-async function selectedKitDiff(before: string, after: string) {
-  return contentDiff(before, after);
 }
 
 async function workspace(root: string, prefix: string) {
@@ -55,7 +29,7 @@ async function workspace(root: string, prefix: string) {
   return mkdtemp(path.join(work, prefix));
 }
 
-async function fetchSource(root: string, directory: string, lock: UpstreamLock, ref: string) {
+async function fetchSource(directory: string, lock: UpstreamLock, ref: string) {
   if (ref === "" || ref.startsWith("-"))
     throw new Error("An upstream ref must not be empty or an option.");
   git(directory, ["init", "--quiet", "--bare", "source.git"]);
@@ -73,10 +47,11 @@ async function fetchSource(root: string, directory: string, lock: UpstreamLock, 
     `${commit}:${lock.path}`,
   ]);
 
-  const toolkit = await selectedKit(cache, commit, directory);
-  const activeKit = path.join(directory, "selected-kit-before");
-  await copyTree(path.join(root, "upstream/cursor-team-kit"), activeKit);
-  const kitChanges = await selectedKitDiff(activeKit, toolkit);
+  const toolkit = path.join(directory, "selected-kit");
+  const beforeKit = path.join(directory, "selected-kit-before");
+  await selectedKit(cache, commit, toolkit);
+  await selectedKit(cache, lock.commit, beforeKit);
+  const kitChanges = await contentDiff(beforeKit, toolkit);
   await writeFile(path.join(directory, "upstream.diff"), changes === "" ? "" : `${changes}\n`);
   await writeFile(path.join(directory, "cursor-team-kit.diff"), kitChanges);
 
@@ -86,7 +61,7 @@ async function fetchSource(root: string, directory: string, lock: UpstreamLock, 
 export async function checkUpstream(root: string, ref = "main") {
   const lock = await readLock(root);
   const directory = await workspace(root, "check-");
-  const source = await fetchSource(root, directory, lock, ref);
+  const source = await fetchSource(directory, lock, ref);
 
   const report = {
     pinned: {
@@ -120,7 +95,7 @@ export async function prepareUpdate(root: string, revision: string | undefined) 
   const directory = await workspace(root, `candidate-${revision.slice(0, 12)}-`);
 
   try {
-    const source = await fetchSource(root, directory, lock, revision);
+    const source = await fetchSource(directory, lock, revision);
 
     if (source.commit !== revision)
       throw new Error("Fetched identity does not match the requested commit.");
