@@ -10,7 +10,7 @@ const exec = promisify(execFile);
 const call = (command, args, options = {}) => exec(command, args, {
   encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, ...options,
 });
-const usage = "Usage: node worktree-audit.mjs [repo-path] [--history-scope '{\"cwd\":\"/absolute\",\"directory\":\"/absolute\"}']...";
+const usage = "Usage: node worktree-audit.mjs [repo-path] [--history-scope '{\"cwd\":\"/absolute\",\"directory\":\"/absolute\"}']...\nNon-deleting, not read-only: fetches origin/main and queries your GitHub PRs.";
 const gaps = [];
 const error = (label) => { gaps.push(label); };
 const absolute = value => typeof value === 'string' && value.length > 0 && path.isAbsolute(value);
@@ -78,14 +78,22 @@ async function header(file) {
   } finally { await handle.close(); }
 }
 
-// Only Pi textual entry fields count. Never walk an arbitrary object (system prompts,
-// tool definitions, image payloads and unknown metadata must not create activity).
+// Tool arguments are arbitrary JSON, unlike the typed transcript envelope.
+function argumentText(value) {
+  if (typeof value === 'string') return [value];
+  if (!value || typeof value !== 'object') return [];
+  if (value.type === 'image' || value.type === 'binary') return [];
+  return Object.values(value).flatMap(argumentText);
+}
+
+// Inspect activity fields, not system prompts, tool declarations or image payloads.
 function textual(value) {
   if (typeof value === 'string') return [value];
   if (Array.isArray(value)) return value.flatMap(textual);
   if (!value || typeof value !== 'object') return [];
   if (value.type === 'image' || value.type === 'binary') return [];
-  return ['text', 'thinking', 'arguments', 'result', 'output', 'command', 'path',
+  if (value.type === 'toolCall') return argumentText(value.arguments);
+  return ['text', 'thinking', 'result', 'output', 'command', 'path',
     'file', 'files', 'summary', 'content'].flatMap(key => textual(value[key]));
 }
 function entryText(entry) {
@@ -96,9 +104,10 @@ function entryText(entry) {
     return textual(message.content).concat(textual(message.arguments), textual(message.command),
       textual(message.output), textual(message.result));
   }
-  if (/summary|compaction|file|bash/i.test(entry.type || '')) {
-    return textual(entry.summary).concat(textual(entry.content), textual(entry.files),
-      textual(entry.path), textual(entry.command), textual(entry.output));
+  if (entry.type === 'custom_message') return textual(entry.content);
+  if (entry.type === 'compaction' || entry.type === 'branch_summary') {
+    return textual(entry.summary).concat(textual(entry.details?.readFiles),
+      textual(entry.details?.modifiedFiles));
   }
   return [];
 }
@@ -111,10 +120,12 @@ function mentions(text, location) {
 async function history(worktrees, scopes) {
   const agent = (process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), '.pi', 'agent'))
     .replace(/^~(?=$|[/\\])/, os.homedir());
+  const knownCwds = new Set(worktrees);
   const directories = new Map();
+  console.error(`Repository history cwds: ${JSON.stringify(worktrees)}`);
   const add = (directory, cwd) => {
     const dir = normalized(directory);
-    if (!directories.has(dir)) directories.set(dir, new Set(worktrees));
+    if (!directories.has(dir)) directories.set(dir, new Set());
     directories.get(dir).add(cwd);
   };
   for (const wt of worktrees) add(path.join(agent, 'sessions', encoded(wt)), wt);
@@ -122,6 +133,7 @@ async function history(worktrees, scopes) {
   const admitted = new Map();
   let uncertain = false;
   for (const [dir, cwds] of directories) {
+    console.error(`History scope: ${JSON.stringify({ directory: dir, additionalCwds: [...cwds].filter(cwd => !knownCwds.has(cwd)) })}`);
     let entries;
     try { entries = await readdir(dir, { withFileTypes: true }); }
     catch (e) {
@@ -137,7 +149,7 @@ async function history(worktrees, scopes) {
         if (stat.isSymbolicLink()) { error(`Skipped symlink session: ${file}`); continue; }
         if (!stat.isFile()) continue;
         const h = await header(file);
-        if (cwds.has(h.cwd)) admitted.set(file, h);
+        if (knownCwds.has(h.cwd) || cwds.has(h.cwd)) admitted.set(file, h);
       } catch {
         uncertain = true;
         error(`Invalid/unreadable session header: ${file}`);
@@ -147,6 +159,7 @@ async function history(worktrees, scopes) {
   // Native session file permits precisely this file, not its containing directory.
   if (process.env.PI_SESSION_FILE) {
     const file = normalized(process.env.PI_SESSION_FILE);
+    console.error(`Current transcript only: ${JSON.stringify(file)}`);
     try {
       const st = await lstat(file);
       if (!st.isFile() || st.isSymbolicLink()) throw Error('not regular');
@@ -246,19 +259,22 @@ async function main() {
     else if (age <= 4) bucket = 'verify-recent-chat';
     else if (!uncertain && fetchOk && prOk && gitOk && sizeOk && merged !== '?' &&
       dirty !== '?' && (merged === 'YES' || records.length)) bucket = 'safe';
-    rows.push({ size, age: timestamp ? `${Math.floor((now - timestamp * 1000) / 86400000)}d` : '?',
+    rows.push({ size, sizeLabel: sizeOk ? `${size} B` : '?', age: timestamp ? `${Math.floor((now - timestamp * 1000) / 86400000)}d` : '?',
       merged, dirty, remote, pr: records.map(p => `#${p.number}/${p.state}`).join(',') || '-',
       last: evidence.time ? new Date(evidence.time).toISOString().slice(0, 10) : '-',
       bucket, wt, refs: evidence.refs });
   }
   rows.sort((a, b) => a.size - b.size);
   console.log('SIZE\tAGE\tMERGED\tDIRTY\tREMOTE\tPR\tLAST_CHAT\tBUCKET\tWORKTREE');
-  for (const r of rows) console.log(`${r.size} B\t${r.age}\t${r.merged}\t${r.dirty}\t${r.remote}\t${r.pr}\t${r.last}\t${r.bucket}\t${r.wt}`);
-  for (const r of rows) if (r.refs.length) console.error(`History evidence ${r.wt}: ${r.refs.join(', ')}`);
+  for (const r of rows) {
+    const location = /[\t\r\n]/.test(r.wt) ? JSON.stringify(r.wt) : r.wt;
+    console.log(`${r.sizeLabel}\t${r.age}\t${r.merged}\t${r.dirty}\t${r.remote}\t${r.pr}\t${r.last}\t${r.bucket}\t${location}`);
+  }
+  for (const r of rows) if (r.refs.length) console.error(`History evidence ${JSON.stringify({ worktree: r.wt, sessions: r.refs })}`);
   if (gaps.length) {
     console.error('Evidence gaps (not proof of inactivity):');
     for (const gap of gaps) console.error(`- ${gap}`);
   }
-  console.error('Advisory, non-deleting; Git refs refreshed and forge queried. Live/pinned usage is not discovered; no cleanup authority.');
+  console.error('Advisory, non-deleting, not read-only: attempted Git ref refresh and PR query (author @me, limit 1000). LAST_CHAT is file mtime, not proof of activity or inactivity. Live/pinned usage is not discovered; no cleanup authority.');
 }
 try { await main(); } catch { console.error('Audit failed: invalid arguments or Git inventory unavailable'); process.exitCode = 1; }

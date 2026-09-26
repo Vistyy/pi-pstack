@@ -1,14 +1,29 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
+import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 
 const audit = path.resolve("content/pstack/skills/poteto-mode/scripts/worktree-audit.mjs");
 
+const fixtureEnv = {
+  PATH: process.env["PATH"] ?? "",
+  LANG: "C",
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_NOSYSTEM: "1",
+  GIT_TERMINAL_PROMPT: "0",
+  GIT_ALLOW_PROTOCOL: "file",
+};
+
 const git = (cwd: string, ...args: string[]) =>
-  execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+  execFileSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    env: { ...fixtureEnv, HOME: cwd },
+  }).trim();
 
 type HistoryContent =
   | string
@@ -58,7 +73,7 @@ async function fixture(t: TestContext, prs: unknown[] = []) {
   await (await import("node:fs/promises")).chmod(gh, 0o755);
 
   const env = {
-    ...process.env,
+    ...fixtureEnv,
     HOME: path.join(root, "home"),
     PI_CODING_AGENT_DIR: agent,
     PI_SESSION_FILE: "",
@@ -95,8 +110,8 @@ function row(output: string, worktree: string) {
 void test("real CLI classifies scratch/WIP, CLOSED unmerged and multiple PR OPEN precedence without mutation", async (t) => {
   const f = await fixture(t, [
     { number: 3, state: "CLOSED", headRefName: "closed" },
-    { number: 4, state: "OPEN", headRefName: "open" },
     { number: 5, state: "CLOSED", headRefName: "open" },
+    { number: 4, state: "OPEN", headRefName: "open" },
   ]);
 
   await writeFile(path.join(f.paths.scratch, "scratch-file"), "x");
@@ -120,6 +135,8 @@ void test("real CLI classifies scratch/WIP, CLOSED unmerged and multiple PR OPEN
 
   for (const k of ["scratch", "wip", "closed", "open"] as const)
     assert.equal(git(f.paths[k], "rev-parse", "HEAD"), before[k]);
+  assert.equal(await readFile(path.join(f.paths.scratch, "scratch-file"), "utf8"), "x");
+  assert.equal(await readFile(path.join(f.paths.wip, "tracked"), "utf8"), "changed");
   assert.match(r.stderr, /non-deleting/);
 });
 
@@ -167,7 +184,7 @@ void test("foreign headers do not leak body, malformed admitted history reviews,
   await mkdir(dir, { recursive: true });
   await writeFile(
     path.join(dir, "foreign.jsonl"),
-    `${JSON.stringify({ type: "session", id: "foreign", cwd: f.repo })}\n${"PRIVATE_BODY_MARKER".repeat(30000)}`,
+    `${JSON.stringify({ type: "session", id: "foreign", cwd: path.join(f.root, "foreign") })}\n${"PRIVATE_BODY_MARKER".repeat(30000)}`,
   );
   await writeFile(path.join(dir, "bad.jsonl"), "{not-json}\n");
   const linked = path.join(f.root, "linked.jsonl");
@@ -226,7 +243,7 @@ void test("NUL rename status, text-only history and malformed forge response are
   await writeFile(path.join(f.paths.wip, "tracked"), "change");
   git(f.paths.wip, "add", "tracked");
   git(f.paths.wip, "commit", "-m", "tracked change");
-  git(f.paths.wip, "mv", "tracked", "renamed");
+  git(f.paths.wip, "mv", "tracked", "renamed\n?? not-another-record");
   await f.session(f.sessionDir(f.paths.scratch), f.repo, "nontext", [
     msg("system", f.paths.scratch),
     msg("user", [{ type: "image", data: f.paths.scratch }]),
@@ -253,4 +270,82 @@ void test("detached HEAD is valid; failed Git refresh keeps otherwise eligible r
   result = failed.run();
   assert.equal(row(result.stdout, failed.paths.scratch)?.[7], "review");
   assert.match(result.stderr, /Fetch origin main failed/);
+});
+
+void test("native session arguments and branch summaries match quoted paths, not prefix siblings", async (t) => {
+  const f = await fixture(t);
+  const quoted = path.join(f.root, "space '\" worktree\nsecond line");
+  git(f.repo, "worktree", "add", "-b", "quoted", quoted, "main");
+  const directory = path.join(f.root, "native-history");
+  const session = SessionManager.create(f.repo, directory);
+  session.appendMessage(
+    fauxAssistantMessage([
+      fauxToolCall("fixture", { destination: quoted, data: { nested: f.paths.closed } }),
+      { type: "text", text: `${f.paths.scratch}-sibling /prefix${f.paths.open}` },
+    ]),
+  );
+  const r = f.run(["--history-scope", JSON.stringify({ cwd: f.paths.wip, directory })]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(row(r.stdout, JSON.stringify(quoted))?.[7], "verify-recent-chat");
+  assert.equal(row(r.stdout, f.paths.closed)?.[7], "verify-recent-chat");
+  assert.equal(row(r.stdout, f.paths.scratch)?.[7], "safe");
+  assert.equal(row(r.stdout, f.paths.open)?.[7], "safe");
+  assert.match(r.stderr, /History scope:/);
+  assert.ok(r.stderr.includes(session.getSessionId()));
+
+  await f.session(directory, f.repo, "branch", [
+    { type: "branch_summary", summary: "completed", details: { modifiedFiles: [f.paths.open] } },
+    { type: "compaction", summary: f.paths.scratch },
+  ]);
+  const summaries = f.run(["--history-scope", JSON.stringify({ cwd: f.repo, directory })]);
+  assert.equal(row(summaries.stdout, f.paths.open)?.[7], "verify-recent-chat");
+  assert.equal(row(summaries.stdout, f.paths.scratch)?.[7], "verify-recent-chat");
+});
+
+void test("default encoding collisions and outside current-file siblings cannot supply activity", async (t) => {
+  const f = await fixture(t);
+  const collision = f.paths.scratch.replace(/\//g, "-").replace(/^-/, "/");
+  assert.notEqual(collision, f.paths.scratch);
+  assert.equal(f.sessionDir(collision), f.sessionDir(f.paths.scratch));
+  await mkdir(f.sessionDir(collision), { recursive: true });
+  await writeFile(
+    path.join(f.sessionDir(collision), "collision.jsonl"),
+    `${JSON.stringify({ type: "session", id: "collision", cwd: collision })}\nNOT_JSON_PRIVATE_BODY`,
+  );
+  const before = f.run();
+  assert.equal(row(before.stdout, f.paths.scratch)?.[7], "safe");
+  assert.doesNotMatch(before.stderr, /Malformed\/partial|PRIVATE_BODY/);
+
+  const directory = path.join(f.root, "outside-current");
+  const outside = path.join(f.root, "outside-project");
+  await f.session(directory, outside, "current", [msg("user", f.paths.scratch)]);
+  await f.session(directory, outside, "sibling", [msg("user", f.paths.closed)]);
+  f.env.PI_SESSION_FILE = path.join(directory, "current.jsonl");
+  const current = f.run();
+  assert.equal(row(current.stdout, f.paths.scratch)?.[7], "verify-recent-chat");
+  assert.equal(row(current.stdout, f.paths.closed)?.[7], "safe");
+  assert.doesNotMatch(current.stderr, /sibling\.jsonl/);
+});
+
+void test("history read failures and partial bodies block eligibility without erasing known holds", async (t) => {
+  const f = await fixture(t, [{ number: 9, state: "OPEN", headRefName: "open" }]);
+  await writeFile(path.join(f.paths.wip, "tracked"), "keep me");
+  const directory = path.join(f.root, "not-a-directory");
+  await writeFile(directory, "owned fixture");
+  let r = f.run(["--history-scope", JSON.stringify({ cwd: f.repo, directory })]);
+  assert.equal(row(r.stdout, f.paths.scratch)?.[7], "review");
+  assert.equal(row(r.stdout, f.paths.wip)?.[7], "hold-wip");
+  assert.equal(row(r.stdout, f.paths.open)?.[7], "hold-open-pr");
+  assert.match(r.stderr, /History directory unreadable/);
+
+  await mkdir(f.sessionDir(f.repo), { recursive: true });
+  await writeFile(
+    path.join(f.sessionDir(f.repo), "partial.jsonl"),
+    `${JSON.stringify({ type: "session", id: "partial", cwd: f.repo })}\n{unfinished-private-text`,
+  );
+  r = f.run();
+  assert.equal(row(r.stdout, f.paths.scratch)?.[7], "review");
+  assert.equal(row(r.stdout, f.paths.wip)?.[7], "hold-wip");
+  assert.match(r.stderr, /Malformed\/partial/);
+  assert.doesNotMatch(r.stderr, /unfinished-private-text/);
 });

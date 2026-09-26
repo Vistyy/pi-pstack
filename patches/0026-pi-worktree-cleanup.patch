@@ -1,0 +1,191 @@
+diff --git a/README.md b/README.md
+index bd9c210..a5bab38 100644
+--- a/README.md
++++ b/README.md
+@@ -62,6 +62,7 @@ first, then fix and verify.
+ | [authoring a skill](./skills/poteto-mode/playbooks/authoring-a-skill.md) | writing or editing a SKILL.md. |
+ | [eval](./skills/poteto-mode/playbooks/eval.md) | test how a skill or prompt change affects agent behavior, blinded. |
+ | [babysit](./skills/poteto-mode/playbooks/babysit.md) | drive a pr or a stack to merge-ready: conflicts, review threads, ci. |
++| [worktree cleanup](./skills/poteto-mode/playbooks/worktree-cleanup.md) | reclaim disk by pruning merged or abandoned git worktrees, safety-gated with bounded Pi session evidence. |
+ | [session pickup](./skills/poteto-mode/playbooks/session-pickup.md) | resume or take over a prior agent's in-flight work. |
+ | [pause safely](./skills/poteto-mode/playbooks/pause-safely.md) | suspend in-flight work cleanly so it can be resumed later. |
+ | [multi-phase plan](./skills/poteto-mode/playbooks/multi-phase-plan.md) | work that spans phases or stacked PRs. |
+diff --git a/docs/guide/02-poteto-mode.md b/docs/guide/02-poteto-mode.md
+index ea99337..a06e56f 100644
+--- a/docs/guide/02-poteto-mode.md
++++ b/docs/guide/02-poteto-mode.md
+@@ -73,6 +73,16 @@ If you run several agents against one repository, they will fight over the worki
+ 
+ Each task in its own branch and worktree means no agent stomps another's files. The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) already works from a worktree for code changes, so mostly you only say this when a specific base or location matters.
+ 
++## Reclaim worktree space
++
++Worktrees accumulate. When disk gets tight, ask:
++
++```text
++/poteto-mode clean up safe-to-prune worktrees in this repository. keep anything pinned or still in use.
++```
++
++The [Worktree cleanup playbook](../../skills/poteto-mode/playbooks/worktree-cleanup.md) preserves the original worktree workflow with a Node audit and bounded Pi session evidence. The audit refreshes `origin/main` and reads GitHub PR state, but never deletes. Its bucket is advice: pinned/live work and tracked uncommitted edits still gate removal, and missing history is not proof of inactivity. Simulator, host application state, and unrelated cache cleanup are outside this route.
++
+ ## Leave it running
+ 
+ When you step away, say what done means and go:
+diff --git a/skills/poteto-mode/SKILL.md b/skills/poteto-mode/SKILL.md
+index dd02622..09f4b4f 100644
+--- a/skills/poteto-mode/SKILL.md
++++ b/skills/poteto-mode/SKILL.md
+@@ -132,6 +132,7 @@ A large or cross-cutting effort (a migration across many call sites, an ambitiou
+ - **Authoring or modifying a skill.** Writing or editing a SKILL.md. `playbooks/authoring-a-skill.md`.
+ - **Eval.** Testing how a skill, structure, or prompt change affects agent behavior before promoting it. `playbooks/eval.md`.
+ - **Babysit.** Driving a PR or a stack to merge-ready: conflicts, review threads, CI. `playbooks/babysit.md`.
++- **Worktree cleanup.** Reclaiming local disk by pruning merged or abandoned git worktrees ("what's using my disk", "clean up worktrees", "prune safe-to-prune worktrees", "free up space"). `playbooks/worktree-cleanup.md`. Not simulator, host application state, or general cache cleanup.
+ - **Session pickup.** Resuming or taking over a prior agent's in-flight work from a task transcript, saved checkpoint, or pushed branch. `playbooks/session-pickup.md`.
+ - **Pause safely.** Suspending in-flight work cleanly on an explicit pause, going offline, or a Pi restart. Native Pi compaction retains the live session and does not itself cancel children. A restart cancels local children; use saved evidence and a fresh assignment, not a cross-session child ID, to pick up work. The complement to Session pickup. Full steps: `playbooks/pause-safely.md`.
+ - **Multi-phase or multi-PR plan.** Work that spans phases or stacked PRs. `playbooks/multi-phase-plan.md`.
+diff --git a/skills/poteto-mode/playbooks/worktree-cleanup.md b/skills/poteto-mode/playbooks/worktree-cleanup.md
+index 39c9ef9..514e3e1 100644
+--- a/skills/poteto-mode/playbooks/worktree-cleanup.md
++++ b/skills/poteto-mode/playbooks/worktree-cleanup.md
+@@ -1,14 +1,13 @@
+-### Worktree and simulator cleanup
++### Worktree cleanup
+ 
+-**You own the disk and the safety gate.** Prune merged or abandoned git worktrees and stale iOS simulators to reclaim space. Deletion is irreversible, so every step guards against deleting something in use or holding uncommitted work.
++**You own the disk and the safety gate.** Prune merged or abandoned git worktrees to reclaim space. Deletion is irreversible, so every step guards against deleting something in use or holding uncommitted work.
+ 
+-1. Snapshot and audit. Record `df -h /`, then run `scripts/worktree-audit.sh` (principle-build-the-lever). It reads paths from `git worktree list`, never hand-typed, since a hand-typed `myrepo-worktrees/x` misses one that lives at `.cursor/worktrees/myrepo/x` (principle-encode-lessons-in-structure). It classifies each worktree by size, age, merge state, uncommitted work, PR state, and the newest chat that touched it, then suggests a bucket. The transcript scan is slow, so background it.
+-2. The bucket is advice, not permission. The pinned and active chats are the real artifact (principle-prove-it-works). Get that set from the user or sidebar and cross-check every candidate. The lever has marked `safe` a worktree the user had pinned, so the pinned set wins.
+-3. Verify usage before deleting. For every `verify-recent-chat` row, or anything you doubt, fan subagents out to read the transcripts and report whether the chat is pinned or ongoing and which worktrees it touches (principle-guard-the-context-window, transcripts are bulk). A pinned chat spawns arena and repro trees into sibling worktrees via background subagents, and those are in use even when their names never hit the sidebar.
+-4. Pause on irreversible loss. `wip:N` is N tracked uncommitted edits. Show the diff and get a decision first, since removing a clean worktree is recoverable from its branch but uncommitted work is gone. `scratch:N` is untracked throwaway, safe to drop, but name the files. Per Autonomy, clean and merged and not-in-use proceeds. `wip` and in-use pause.
+-5. Prune the confirmed set. Per path, `git worktree remove --force <path>`. If the dir survives on ignored build artifacts, `rm -rf` it, then `git worktree prune`. Branch refs survive, so no commits are lost. Confirm with `df -h /` and re-list.
+-6. Simulators and other reclaimers. Simulators are usually the next-biggest win. `xcrun simctl --set testing delete all` (XCTestDevices clones), `xcrun simctl delete unavailable`, and `xcrun simctl runtime list` then `runtime delete <id>` for old runtimes. More when needed: Xcode `DerivedData` and `iOS DeviceSupport`, `~/Library/Application Support/Cursor` (`state.vscdb.backup`, and `snapshots/roots/<root>` where a `<root>` named for a folder you opened as a workspace balloons), package caches (pnpm, uv, brew, yarn). Clear only caches the user has not said to keep.
++1. Snapshot and audit. Record `df -h /`, then run `node <poteto-mode-skill-dir>/scripts/worktree-audit.mjs <repo-path>` (principle-build-the-lever). Resolve the script against this skill, not the target repository. When the host's **Current Pi history scope** belongs to the workspace being cleaned, pass that exact JSON as one shell-quoted `--history-scope` argument. Add other `{cwd,directory}` scopes only when the user explicitly authorizes them; a current transcript outside the target repository does not authorize its siblings. Native Pi shell tools supply `PI_SESSION_FILE` for the exact current transcript when one exists. The audit reads paths from `git worktree list`, never hand-typed: worktrees can live outside the usual repository directory (principle-encode-lessons-in-structure). It classifies each worktree by size, age, merge state, uncommitted work, PR state, and the newest matching stored Pi session, then suggests a bucket. It refreshes `origin/main` and reads your GitHub PRs: non-deleting, not read-only. Background the audit if it is slow, but do not assign it to a read-only subagent. Report its evidence gaps, not just the table.
++2. The bucket is advice, not permission. The pinned and active sessions are the real artifact (principle-prove-it-works). Get that set from the user or an available host interface and cross-check every candidate. A `safe` worktree can still be pinned, so the pinned set wins. Pi labels and stored session files are not a complete roster of pinned or live sessions. Missing stored history is not evidence of inactivity, and the last-chat time is a file-mtime heuristic.
++3. Verify usage before deleting. For every `verify-recent-chat` row, or anything you doubt, fan subagents out to read the admitted session evidence and report whether the work is ongoing and which worktrees it touches (principle-guard-the-context-window, transcripts are bulk). Use the audit's session paths and IDs; read typed Pi message entries across branches, without dumping whole transcripts. Follow the [Recall access boundary](../../recall/SKILL.md#pi-transcript-access): do not scan the global history root or follow `parentSession` into another project. A live or pinned session can spawn arena and repro trees into sibling worktrees via background subagents, and those are in use even when their names never appear in a host sidebar. Reconcile transcript evidence with the pinned/active set rather than inferring pins from transcript text.
++4. Pause on irreversible loss. `wip:N` is N tracked uncommitted edits. Show the diff and get a decision first, since removing a clean worktree is recoverable from its branch but uncommitted work is gone. `scratch:N` is untracked throwaway, safe to drop, but name the files. Per Autonomy, clean and merged and not-in-use proceeds. `wip` and in-use pause. A non-open PR, including CLOSED and unmerged, can make a worktree eligible under the original abandoned-work rule; it does not override these usage and loss gates.
++5. Prune the confirmed set. Recheck each target's identity and ownership, then `git worktree remove --force <path>`. If the directory survives on ignored build artifacts, inspect what remains and verify that exact path still belongs to the confirmed target before `rm -rf` of that path, then `git worktree prune`. Keep branch refs; this workflow removes worktrees, not branches. Confirm with `df -h /` and re-list. Do not extend the cleanup to simulators, host application state, or unrelated caches.
+ 
+ This is the one playbook that deletes user state with no code review to catch a slip, so the gates above are the review.
+ 
+-**Reply:** `df -h /` before and after with space reclaimed, the worktrees pruned, and a one-line reason for each held back (in-use by which chat, or uncommitted work).
++**Reply:** `df -h /` before and after with space reclaimed, the worktrees pruned, evidence gaps, and a one-line reason for each held back (in-use by which session, or uncommitted work).
+diff --git a/skills/poteto-mode/scripts/worktree-audit.mjs b/skills/poteto-mode/scripts/worktree-audit.mjs
+index 4a4ba43..462c6fe 100644
+--- a/skills/poteto-mode/scripts/worktree-audit.mjs
++++ b/skills/poteto-mode/scripts/worktree-audit.mjs
+@@ -10,7 +10,7 @@ const exec = promisify(execFile);
+ const call = (command, args, options = {}) => exec(command, args, {
+   encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, ...options,
+ });
+-const usage = "Usage: node worktree-audit.mjs [repo-path] [--history-scope '{\"cwd\":\"/absolute\",\"directory\":\"/absolute\"}']...";
++const usage = "Usage: node worktree-audit.mjs [repo-path] [--history-scope '{\"cwd\":\"/absolute\",\"directory\":\"/absolute\"}']...\nNon-deleting, not read-only: fetches origin/main and queries your GitHub PRs.";
+ const gaps = [];
+ const error = (label) => { gaps.push(label); };
+ const absolute = value => typeof value === 'string' && value.length > 0 && path.isAbsolute(value);
+@@ -78,14 +78,22 @@ async function header(file) {
+   } finally { await handle.close(); }
+ }
+ 
+-// Only Pi textual entry fields count. Never walk an arbitrary object (system prompts,
+-// tool definitions, image payloads and unknown metadata must not create activity).
++// Tool arguments are arbitrary JSON, unlike the typed transcript envelope.
++function argumentText(value) {
++  if (typeof value === 'string') return [value];
++  if (!value || typeof value !== 'object') return [];
++  if (value.type === 'image' || value.type === 'binary') return [];
++  return Object.values(value).flatMap(argumentText);
++}
++
++// Inspect activity fields, not system prompts, tool declarations or image payloads.
+ function textual(value) {
+   if (typeof value === 'string') return [value];
+   if (Array.isArray(value)) return value.flatMap(textual);
+   if (!value || typeof value !== 'object') return [];
+   if (value.type === 'image' || value.type === 'binary') return [];
+-  return ['text', 'thinking', 'arguments', 'result', 'output', 'command', 'path',
++  if (value.type === 'toolCall') return argumentText(value.arguments);
++  return ['text', 'thinking', 'result', 'output', 'command', 'path',
+     'file', 'files', 'summary', 'content'].flatMap(key => textual(value[key]));
+ }
+ function entryText(entry) {
+@@ -96,9 +104,10 @@ function entryText(entry) {
+     return textual(message.content).concat(textual(message.arguments), textual(message.command),
+       textual(message.output), textual(message.result));
+   }
+-  if (/summary|compaction|file|bash/i.test(entry.type || '')) {
+-    return textual(entry.summary).concat(textual(entry.content), textual(entry.files),
+-      textual(entry.path), textual(entry.command), textual(entry.output));
++  if (entry.type === 'custom_message') return textual(entry.content);
++  if (entry.type === 'compaction' || entry.type === 'branch_summary') {
++    return textual(entry.summary).concat(textual(entry.details?.readFiles),
++      textual(entry.details?.modifiedFiles));
+   }
+   return [];
+ }
+@@ -111,10 +120,12 @@ function mentions(text, location) {
+ async function history(worktrees, scopes) {
+   const agent = (process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), '.pi', 'agent'))
+     .replace(/^~(?=$|[/\\])/, os.homedir());
++  const knownCwds = new Set(worktrees);
+   const directories = new Map();
++  console.error(`Repository history cwds: ${JSON.stringify(worktrees)}`);
+   const add = (directory, cwd) => {
+     const dir = normalized(directory);
+-    if (!directories.has(dir)) directories.set(dir, new Set(worktrees));
++    if (!directories.has(dir)) directories.set(dir, new Set());
+     directories.get(dir).add(cwd);
+   };
+   for (const wt of worktrees) add(path.join(agent, 'sessions', encoded(wt)), wt);
+@@ -122,6 +133,7 @@ async function history(worktrees, scopes) {
+   const admitted = new Map();
+   let uncertain = false;
+   for (const [dir, cwds] of directories) {
++    console.error(`History scope: ${JSON.stringify({ directory: dir, additionalCwds: [...cwds].filter(cwd => !knownCwds.has(cwd)) })}`);
+     let entries;
+     try { entries = await readdir(dir, { withFileTypes: true }); }
+     catch (e) {
+@@ -137,7 +149,7 @@ async function history(worktrees, scopes) {
+         if (stat.isSymbolicLink()) { error(`Skipped symlink session: ${file}`); continue; }
+         if (!stat.isFile()) continue;
+         const h = await header(file);
+-        if (cwds.has(h.cwd)) admitted.set(file, h);
++        if (knownCwds.has(h.cwd) || cwds.has(h.cwd)) admitted.set(file, h);
+       } catch {
+         uncertain = true;
+         error(`Invalid/unreadable session header: ${file}`);
+@@ -147,6 +159,7 @@ async function history(worktrees, scopes) {
+   // Native session file permits precisely this file, not its containing directory.
+   if (process.env.PI_SESSION_FILE) {
+     const file = normalized(process.env.PI_SESSION_FILE);
++    console.error(`Current transcript only: ${JSON.stringify(file)}`);
+     try {
+       const st = await lstat(file);
+       if (!st.isFile() || st.isSymbolicLink()) throw Error('not regular');
+@@ -246,19 +259,22 @@ async function main() {
+     else if (age <= 4) bucket = 'verify-recent-chat';
+     else if (!uncertain && fetchOk && prOk && gitOk && sizeOk && merged !== '?' &&
+       dirty !== '?' && (merged === 'YES' || records.length)) bucket = 'safe';
+-    rows.push({ size, age: timestamp ? `${Math.floor((now - timestamp * 1000) / 86400000)}d` : '?',
++    rows.push({ size, sizeLabel: sizeOk ? `${size} B` : '?', age: timestamp ? `${Math.floor((now - timestamp * 1000) / 86400000)}d` : '?',
+       merged, dirty, remote, pr: records.map(p => `#${p.number}/${p.state}`).join(',') || '-',
+       last: evidence.time ? new Date(evidence.time).toISOString().slice(0, 10) : '-',
+       bucket, wt, refs: evidence.refs });
+   }
+   rows.sort((a, b) => a.size - b.size);
+   console.log('SIZE\tAGE\tMERGED\tDIRTY\tREMOTE\tPR\tLAST_CHAT\tBUCKET\tWORKTREE');
+-  for (const r of rows) console.log(`${r.size} B\t${r.age}\t${r.merged}\t${r.dirty}\t${r.remote}\t${r.pr}\t${r.last}\t${r.bucket}\t${r.wt}`);
+-  for (const r of rows) if (r.refs.length) console.error(`History evidence ${r.wt}: ${r.refs.join(', ')}`);
++  for (const r of rows) {
++    const location = /[\t\r\n]/.test(r.wt) ? JSON.stringify(r.wt) : r.wt;
++    console.log(`${r.sizeLabel}\t${r.age}\t${r.merged}\t${r.dirty}\t${r.remote}\t${r.pr}\t${r.last}\t${r.bucket}\t${location}`);
++  }
++  for (const r of rows) if (r.refs.length) console.error(`History evidence ${JSON.stringify({ worktree: r.wt, sessions: r.refs })}`);
+   if (gaps.length) {
+     console.error('Evidence gaps (not proof of inactivity):');
+     for (const gap of gaps) console.error(`- ${gap}`);
+   }
+-  console.error('Advisory, non-deleting; Git refs refreshed and forge queried. Live/pinned usage is not discovered; no cleanup authority.');
++  console.error('Advisory, non-deleting, not read-only: attempted Git ref refresh and PR query (author @me, limit 1000). LAST_CHAT is file mtime, not proof of activity or inactivity. Live/pinned usage is not discovered; no cleanup authority.');
+ }
+ try { await main(); } catch { console.error('Audit failed: invalid arguments or Git inventory unavailable'); process.exitCode = 1; }

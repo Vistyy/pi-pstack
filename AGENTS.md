@@ -20,7 +20,7 @@ To modify retained upstream-derived files, edit a scratch copy of the current ge
 
 For whole-file or directory removals, edit `upstream-exclusions.txt` instead. Use one normalized slash-separated path relative to `upstream/pstack/` per line, without `.` or `..` segments. Blank lines and full-line `#` comments are allowed; a trailing directory slash is optional. Paths are literal, not glob patterns or negation rules. Directories include all descendants, including future upstream additions. Entries must exist and must not overlap. Missing targets fail generation or update preparation for review rather than silently passing. Symlinked ancestor directories are rejected; excluding a symlink itself removes only that link.
 
-Remove obsolete patch hunks when excluding a previously patched path. Exclusions run before patches, and replay rejects patches that restore an excluded path. Use patches for partial-file removals, such as incoming routes to excluded workflows. Keep the methodology of retained playbooks, including MCP examples; adapt host-specific access without inventing capabilities. Do not restore cloud, scheduled, automatic-landing, or Cursor-cleanup workflows as unsupported instructions in the adopted tree. Preserve local design/review panels and all verification/evidence requirements.
+Remove obsolete patch hunks when excluding a previously patched path. Exclusions run before patches, and replay rejects patches that restore an excluded path. Use patches for partial-file removals, such as incoming routes to excluded workflows. Keep the methodology of retained playbooks, including MCP examples; adapt host-specific access without inventing capabilities. Do not restore cloud, scheduled, automatic-landing, or macOS simulator/host-cache cleanup as unsupported instructions in the adopted tree. Git worktree cleanup retains its original policy with Pi/Linux access mechanics; its audit does not grant cleanup authority. Preserve local design/review panels and all verification/evidence requirements.
 
 ## Runtime boundary
 
@@ -54,6 +54,8 @@ pnpm check
 `pnpm check` verifies both locked snapshots, exclusions, patch replay, and companion composition, runs source CLI and real-SDK Faux-provider tests, and applies the shared `@syzom/typescript-quality` checks. Generated and untouched upstream content is excluded from code linting. Source verification needs no upstream Git objects or network connection and checks executable-file and symlink identity as well as text.
 
 Exercise changed runtime promises through supported Pi entry points. Faux-provider tests establish host mechanics, not reliable LLM adherence to the methodology. For instruction changes, inspect what the parent and fresh children actually receive, including referenced files and tool availability; retain tests only for distinct behavioral protection.
+
+Exercise the worktree audit only against owned temporary Git repositories and synthetic or native-created fixture sessions, with a controlled forge boundary; never use real user histories or run cleanup to test the audit. Protect scoped header-first admission, original bucket precedence, and evidence-gap reporting through its real CLI.
 
 Exercise the plan checker through its CLI; protect its ten live lanes, performance boxes, and operator evidence gates. Verify the retained watcher in a disposable copy of its scripts directory so its Bun dependency bootstrap does not add runtime files to the generated tree.
 

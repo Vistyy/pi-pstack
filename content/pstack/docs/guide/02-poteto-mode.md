@@ -73,6 +73,16 @@ If you run several agents against one repository, they will fight over the worki
 
 Each task in its own branch and worktree means no agent stomps another's files. The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) already works from a worktree for code changes, so mostly you only say this when a specific base or location matters.
 
+## Reclaim worktree space
+
+Worktrees accumulate. When disk gets tight, ask:
+
+```text
+/poteto-mode clean up safe-to-prune worktrees in this repository. keep anything pinned or still in use.
+```
+
+The [Worktree cleanup playbook](../../skills/poteto-mode/playbooks/worktree-cleanup.md) preserves the original worktree workflow with a Node audit and bounded Pi session evidence. The audit refreshes `origin/main` and reads GitHub PR state, but never deletes. Its bucket is advice: pinned/live work and tracked uncommitted edits still gate removal, and missing history is not proof of inactivity. Simulator, host application state, and unrelated cache cleanup are outside this route.
+
 ## Leave it running
 
 When you step away, say what done means and go:
