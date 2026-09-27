@@ -9,6 +9,8 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
 import { type ConfigureRuntime, createChildSession, selectModel } from "./child-session.js";
+import { installObserver } from "./observer.js";
+import { LiveTranscript, type ObservedTask } from "./observer-state.js";
 import {
   type Configuration,
   cancelSavedChildren,
@@ -107,7 +109,12 @@ class TaskScope {
     readonly depth: number,
     readonly readonly: boolean,
     readonly notify: Notify,
+    readonly changed: () => void = () => {},
   ) {}
+
+  views(): ObservedTask[] {
+    return [...this.children.values()].map((child) => child.view());
+  }
 
   bind(pi: ExtensionAPI, ctx: ExtensionContext) {
     this.journal = { pi, ctx };
@@ -122,6 +129,7 @@ class TaskScope {
     }
 
     this.restored = true;
+    this.changed();
   }
 
   record(data: Omit<TaskRecord, "owner" | "version">) {
@@ -131,6 +139,7 @@ class TaskScope {
       version: 1,
       owner: this.journal.ctx.sessionManager.getSessionId(),
     });
+    this.changed();
   }
 
   recovery() {
@@ -238,6 +247,7 @@ class ChildTask {
   status: Status = "interrupted";
   attempt = 0;
   assignment = "";
+  private observation: LiveTranscript | undefined;
   private sessionId: string | undefined;
   private plan: ToolPlan | undefined;
   private cancellationOutcome: "cancelled" | "interrupted" = "cancelled";
@@ -277,18 +287,47 @@ class ChildTask {
       if (record.outcome.status === "failed") this.error = record.outcome.error;
     }
 
-    this.scope = new TaskScope(parent.depth + 1, config.readonly, async (content) => {
-      if (!this.session) throw new Error("Child session is not initialized");
+    this.scope = new TaskScope(
+      parent.depth + 1,
+      config.readonly,
+      async (content) => {
+        if (!this.session) throw new Error("Child session is not initialized");
 
-      if (this.session.isIdle)
-        await this.session.sendUserMessage(content, { deliverAs: "followUp" });
-      else await this.session.sendCustomMessage(message(content), delivery);
-    });
+        if (this.session.isIdle)
+          await this.session.sendUserMessage(content, { deliverAs: "followUp" });
+        else await this.session.sendCustomMessage(message(content), delivery);
+      },
+      () => parent.changed(),
+    );
     this.scope.interrupted = record !== undefined && this.status === "interrupted";
   }
 
   get busy() {
     return this.status === "running" || this.status === "cancelling";
+  }
+
+  view(): ObservedTask {
+    const waiting =
+      this.status === "running" &&
+      this.observation?.waitingForChildren() === true &&
+      [...this.scope.children.values()].some((child) => child.busy);
+
+    const observation = this.observation;
+
+    return {
+      id: this.id,
+      title: this.assignment,
+      model: this.config.selector,
+      cwd: this.config.cwd,
+      transcript: this.transcript,
+      status: waiting ? "waiting" : this.status,
+      activity: waiting
+        ? "Waiting for nested work"
+        : (this.error ?? (this.busy ? (observation?.activity() ?? "Starting") : "")),
+      source: observation
+        ? { kind: "live", read: () => observation.read(), children: this.scope.views() }
+        : { kind: "saved", sessionId: this.sessionId },
+    };
   }
 
   private save() {
@@ -340,12 +379,7 @@ class ChildTask {
     if (this.cancelled) throw new Error("Child cancelled");
   }
 
-  start(
-    prompt: string,
-    background: boolean,
-    initialize: () => Promise<AgentSession>,
-    progress: () => void,
-  ) {
+  start(prompt: string, background: boolean, initialize: () => Promise<AgentSession>) {
     this.parent.check();
 
     if (this.busy) throw new Error("Child still active");
@@ -366,10 +400,8 @@ class ChildTask {
     const turn = Symbol();
     this.turn = turn;
     this.save();
-    progress();
     this.work = this.execute(prompt, initialize).then(() => {
       this.save();
-      progress();
 
       if (background && !this.cancelled) {
         this.parent.post(
@@ -462,6 +494,7 @@ class ChildTask {
     try {
       await this.session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
     } finally {
+      this.observation?.dispose();
       this.session.dispose();
     }
   }
@@ -492,6 +525,7 @@ class ChildTask {
         check: () => this.check(),
         attach: (session) => {
           this.session = session;
+          this.observation = new LiveTranscript(session, () => this.parent.changed());
           this.sessionId = session.sessionManager.getSessionId();
           this.save();
         },
@@ -546,12 +580,18 @@ export function installExecutor(
   owned?: TaskScope,
 ): void {
   let context: ExtensionContext | undefined;
+  let observer: ReturnType<typeof installObserver> | undefined;
 
   const fresh = () =>
-    new TaskScope(0, false, async (content) => {
-      if (context?.isIdle() === true) pi.sendUserMessage(content, { deliverAs: "followUp" });
-      else pi.sendMessage(message(content), delivery);
-    });
+    new TaskScope(
+      0,
+      false,
+      async (content) => {
+        if (context?.isIdle() === true) pi.sendUserMessage(content, { deliverAs: "followUp" });
+        else pi.sendMessage(message(content), delivery);
+      },
+      () => observer?.refresh(),
+    );
 
   let scope = owned ?? fresh();
   let shutdown = false;
@@ -559,6 +599,7 @@ export function installExecutor(
 
   const retire = async (_event: ExtensionEvent, ctx: ExtensionContext) => {
     const previous = scope;
+    observer?.reset();
     await previous.dispose();
 
     if (!owned && !shutdown) scope = fresh();
@@ -590,17 +631,19 @@ export function installExecutor(
   pi.on("before_agent_start", (_event, ctx) => {
     if (!userInput) return undefined;
     userInput = false;
+    observer?.bind(ctx);
     scope.bind(pi, ctx);
     const recovered = scope.recovery();
 
     return recovered ? { message: recovered } : undefined;
   });
 
-  const progress = (owner: TaskScope, ctx: ExtensionContext) => {
-    if (!owner.active || !ctx.hasUI) return;
-    const count = [...owner.children.values()].filter((child) => child.busy).length;
-    ctx.ui.setStatus("pstack", count ? `PStack: ${count} active` : undefined);
-  };
+  if (!owned)
+    observer = installObserver(pi, () => {
+      if (context) scope.bind(pi, context);
+
+      return scope.views();
+    });
 
   pi.registerTool({
     name: "pstack_tasks",
@@ -620,7 +663,6 @@ export function installExecutor(
       const child = owner.require(params.id ?? "");
 
       if (params.action === "cancel") await child.cancel();
-      progress(owner, ctx);
 
       return textResult(child.summary());
     },
@@ -645,12 +687,7 @@ export function installExecutor(
 
       owner.children.set(child.id, child);
       const background = request.run_in_background ?? child.config.profile === "poteto-agent";
-      child.start(
-        request.prompt,
-        background,
-        () => child.initialize(pi, ctx, configure),
-        () => progress(owner, ctx),
-      );
+      child.start(request.prompt, background, () => child.initialize(pi, ctx, configure));
 
       if (background) return textResult(child.summary());
 

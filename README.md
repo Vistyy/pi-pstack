@@ -56,7 +56,17 @@ The next user-initiated turn receives a compact notice of interrupted tasks and 
 
 The parent uses `pstack_tasks` to inspect saved results and `pstack_task` with `resume` to continue a saved conversation. Resumption retains the selected model, profile, working directory, and tool plan. An unavailable model or missing initialized transcript causes an error rather than a fallback or a replacement conversation. Explicitly cancelled tasks remain cancelled until an explicit resume request.
 
-Recovery uses native Pi session files, not a database or a persistent worker service. It preserves saved message boundaries, not an execution stack or partial streamed output. A hard crash can leave spawned tool processes running. The parent or resumed child must reconcile actual effects before repeating interrupted work. Power-loss durability and exactly-once external effects are not guaranteed.
+Recovery uses native Pi session files, not a database or a persistent worker service. It preserves saved message boundaries, not an execution stack or partial streamed output. A hard crash can leave spawned tool processes running. The parent or resumed child must reconcile actual effects before repeating interrupted work. Power-loss durability and exactly-once external effects are not guaranteed. Recovery assumes one active Pi owner of a parent session. It does not coordinate concurrent processes opening the same parent or child session files.
+
+### Subagent observer
+
+`/subagents` opens a read-only task tree and native Pi transcript in the terminal UI. It shows live children, nested work, and saved history after reopening a parent session. Opening the observer does not start or resume work, send model messages, accept results, or change transcripts. The activity rail shows running and waiting counts plus a failure indicator, without accumulating completed counts.
+
+Use Up/Down to select a task, Left/Right to fold its children, and Enter for a full-width transcript. Escape returns to the tree or closes the observer. Page Up/Down scroll the transcript, Home goes to its beginning, End follows the latest output, and Ctrl+O toggles tool detail. New output does not move a held viewport. Narrow terminals show the tree first. There are no execution controls or mouse actions in this view.
+
+The observer uses Pi's current theme and native message/tool components. Live tools use their loaded renderers. Saved integrations use generic rendering rather than loading extensions just to inspect history. Images are represented without inline image rendering. Saved transcripts are snapshots for that opening of the inspector, refreshed when reopened or when the task changes state. They are read from their recorded paths and parsed in memory, never opened as executable child sessions.
+
+The repeatable TUI check is `python3 scripts/verify-observer.py`. It requires Python 3 and tmux, uses an isolated Pi profile and scripted provider, and retains captures under `.work/observer-verification/`. It does not change the normal Pi profile or use paid models.
 
 ### Child tool exclusions
 

@@ -321,9 +321,11 @@ await test("print aliases emit native extension errors rather than dropping work
   });
   await f.session.prompt("/poteto-mode do the task");
   await f.session.prompt("/setup-pstack");
+  await f.session.prompt("/subagents");
   assert.deepEqual(f.errors, [
     "Use /skill:poteto-mode <task> in print/json mode.",
     "Use /skill:setup-pstack in print/json mode.",
+    "The subagent observer requires Pi's terminal UI.",
   ]);
   assert.equal(f.provider.state.callCount, 0);
 });
