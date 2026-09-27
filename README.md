@@ -68,6 +68,12 @@ The observer uses Pi's current theme and native message/tool components. Live to
 
 The repeatable TUI check is `python3 scripts/verify-observer.py`. It requires Python 3 and tmux, uses an isolated Pi profile and scripted provider, and retains captures under `.work/observer-verification/`. It does not change the normal Pi profile or use paid models.
 
+### Investigation tools
+
+`readonly: true` requests investigation without modifying files or external state. New children receive `read`, `bash`, `pstack_task`, `pstack_tasks`, and `pstack_todo`, subject to exclusions. They do not receive `write`, `edit`, `grep`, `find`, `ls`, or integration tools. Search and listing can use non-mutating shell commands.
+
+The child receives an explicit no-write instruction. Bash can still modify state, so `readonly` is not an enforced filesystem boundary or sandbox. Descendants inherit the restriction and cannot opt out. Writable children continue to inherit their parent's active tools, subject to exclusions. Saved tasks retain their original tool plans when resumed, including older inspection tool sets.
+
 ### Child tool exclusions
 
 Set `pi-pstack.excludedChildTools` in the global Pi `settings.json` (normally `~/.pi/agent/settings.json`) to keep selected tools out of new child sessions:

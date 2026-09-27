@@ -32,7 +32,7 @@ const ownTools = new Set([
   "pstack_question",
 ]);
 
-const readerTools = ["read", "grep", "find", "ls", "pstack_todo", "pstack_task", "pstack_tasks"];
+const inspectionTools = ["read", "bash", "pstack_todo", "pstack_task", "pstack_tasks"];
 
 export function selectModel(selector: string | undefined, ctx: ExtensionContext) {
   if (selector === "auto" || selector === "inherit-parent")
@@ -103,7 +103,7 @@ async function excludedChildTools(agentDir: string) {
 }
 
 function toolPlan(pi: ExtensionAPI, readonly: boolean, excluded: ReadonlySet<string>) {
-  if (readonly) return { tools: readerTools.filter((name) => !excluded.has(name)), paths: [] };
+  if (readonly) return { tools: inspectionTools.filter((name) => !excluded.has(name)), paths: [] };
   const active = pi.getActiveTools();
   const paths = new Set<string>();
 
@@ -212,7 +212,12 @@ export async function createChildSession(
     additionalExtensionPaths: plan.paths,
     extensionFactories: [{ name: "pstack-child", factory }],
     systemPromptOverride: () => undefined,
-    appendSystemPromptOverride: () => [],
+    appendSystemPromptOverride: () =>
+      config.readonly
+        ? [
+            "This is a read-only investigation. Do not modify files or external state. Use the available tools only for inspection. Bash is not sandboxed; its availability does not authorize writes. Keep descendants under the same restriction.",
+          ]
+        : [],
     agentsFilesOverride: (base) => ({
       agentsFiles: base.agentsFiles.filter((file) => file.path !== join(agentDir, "AGENTS.md")),
     }),

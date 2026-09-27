@@ -1,0 +1,74 @@
+diff --git a/skills/how/references/explainer-prompt.md b/skills/how/references/explainer-prompt.md
+index 856ab50..51181a1 100644
+--- a/skills/how/references/explainer-prompt.md
++++ b/skills/how/references/explainer-prompt.md
+@@ -20,7 +20,7 @@ The explorers each investigated a different angle of the same subsystem. Their f
+ 
+ Write an explanation a senior engineer unfamiliar with this area could read and walk away with a solid mental model, understanding the architecture well enough to start working in it confidently.
+ 
+-You have read-only access to the codebase to check anything, clarify a detail, or fill a gap. Use Pi's `read`, `grep`, and `find` as needed. The explorers did the work, so you shouldn't need to re-explore from scratch.
++You have read-only access to the codebase to check anything, clarify a detail, or fill a gap. Use Pi's `read` and non-mutating `bash` commands as needed. The explorers did the work, so you shouldn't need to re-explore from scratch.
+ 
+ ## Output Format
+ 
+diff --git a/skills/interrogate/references/rubric.md b/skills/interrogate/references/rubric.md
+index b91e76c..a34c92f 100644
+--- a/skills/interrogate/references/rubric.md
++++ b/skills/interrogate/references/rubric.md
+@@ -20,7 +20,7 @@ When you find a potential bug, trace the execution path. Don't just flag "this c
+ 
+ Is the code fixing the actual problem or papering over a symptom?
+ 
+-Answering this often requires looking beyond the changed files. Read the surrounding code (callers, callees, type definitions, sibling modules) and understand the architecture the change lives in. Use the Pi tools available to you (`read`, `grep`, `find`) to explore. Follow the call chain. Read the types. Understand why the code exists before judging whether the change addresses the right layer.
++Answering this often requires looking beyond the changed files. Read the surrounding code (callers, callees, type definitions, sibling modules) and understand the architecture the change lives in. Use Pi's `read` and non-mutating `bash` commands to explore. Follow the call chain. Read the types. Understand why the code exists before judging whether the change addresses the right layer.
+ 
+ - Guard clauses that mask a deeper invariant violation
+ - Retry logic that hides a broken contract
+diff --git a/skills/poteto-mode/SKILL.md b/skills/poteto-mode/SKILL.md
+index 9c7aa4e..44d6187 100644
+--- a/skills/poteto-mode/SKILL.md
++++ b/skills/poteto-mode/SKILL.md
+@@ -91,7 +91,7 @@ Read the leaf skill in full for any principle you apply. Each entry names when i
+ 
+ **Use `subagent_type: "poteto-agent"` for any subagent you spawn inside a playbook step** (code-writing delegates, ad-hoc helpers). `/poteto-mode` and `poteto-agent` route through the same wrapper. Routed workflow skills (`how`, `why`, `interrogate`, `reflect`, `swarm`) set their own `subagent_type` for diverse-model review. Respect what the skill prescribes, don't override to `poteto-agent`.
+ 
+-**Defaults for every `pstack_task` call.** `run_in_background: true`, `readonly: false`, file pointers not inlined context, and an explicit effective model selector per role configured through `/setup-pstack`. Pi's PStack read-only children omit integration tools and shell access; tool access does not authorize unrelated writes. Code delegates tier by difficulty. The hardest changes (cross-cutting design, gnarly concurrency, subtle algorithms) use the `hardest tasks` role, whether the task needs judgment on vague intent or is a precisely specified sequence of steps to execute to the letter. Trivial mechanical edits use the configured code role. Pi's injected role table and `pstack_models` action `get` provide the effective `provider/model:thinking` selectors, including resolved `inherit-parent` and `auto` choices. Pass that selector rather than omitting `model`. A missing or rejected selector requires setup or an explicit valid user choice, not a fallback to an upstream slug. Each code playbook uses its role (`feature, refactoring`, `bug-fix`, `perf-issue`, or `hillclimb`), and the hardest changes use `hardest tasks`. Prose and judgment use `judgment and prose`.
++**Defaults for every `pstack_task` call.** `run_in_background: true`, `readonly: false`, file pointers not inlined context, and an explicit effective model selector per role configured through `/setup-pstack`. Pi's PStack read-only children use read/bash and helper tools, omit integrations, and receive a no-write instruction. Bash is not sandboxed; tool access does not authorize writes. Code delegates tier by difficulty. The hardest changes (cross-cutting design, gnarly concurrency, subtle algorithms) use the `hardest tasks` role, whether the task needs judgment on vague intent or is a precisely specified sequence of steps to execute to the letter. Trivial mechanical edits use the configured code role. Pi's injected role table and `pstack_models` action `get` provide the effective `provider/model:thinking` selectors, including resolved `inherit-parent` and `auto` choices. Pass that selector rather than omitting `model`. A missing or rejected selector requires setup or an explicit valid user choice, not a fallback to an upstream slug. Each code playbook uses its role (`feature, refactoring`, `bug-fix`, `perf-issue`, or `hillclimb`), and the hardest changes use `hardest tasks`. Prose and judgment use `judgment and prose`.
+ 
+ You own every subagent's work. Review the diff and write your own summary, don't pass through what it said. Only resume an idle owned child through `pstack_task` with its ID and a follow-up prompt. Pi's adapter does not steer a running child. For a consolidated fresh assignment, start a new child rather than trusting a "done" summary. A second opinion is the same prompt against a different model. Agreement is high-signal.
+ 
+diff --git a/skills/reflect/SKILL.md b/skills/reflect/SKILL.md
+index 611a4c8..7f70bb0 100644
+--- a/skills/reflect/SKILL.md
++++ b/skills/reflect/SKILL.md
+@@ -20,7 +20,7 @@ Use the exact current Pi transcript path supplied by the host. For an owned chil
+ 
+ ### 2. Spawn three reviewers in parallel
+ 
+-One message, three `pstack_task` calls, `subagent_type: "generalPurpose"`, with the role's effective `model` selector and `readonly: false`. Reviewers may need available native integration tools, documented CLIs, or MCP-backed tools for context lookups. Pi's restricted read-only children omit integrations and shell access. Tool availability does not authorize writes during review.
++One message, three `pstack_task` calls, `subagent_type: "generalPurpose"`, with the role's effective `model` selector and `readonly: false`. Reviewers may need available native integration tools, documented CLIs, or MCP-backed tools for context lookups. Pi's read-only children omit integration tools. Tool availability does not authorize writes during review.
+ 
+ Resolve each role below through Pi's injected role table or `pstack_models` action `get`. The table's upstream defaults are reference values, not executable Pi selectors. Pass the effective selector including thinking; aliases are already resolved. Missing or rejected selectors require setup or an explicit valid choice, not fallback, omitted models, or dropped reviewers.
+ 
+diff --git a/skills/why/SKILL.md b/skills/why/SKILL.md
+index 5f2f4d3..bd42fec 100644
+--- a/skills/why/SKILL.md
++++ b/skills/why/SKILL.md
+@@ -82,7 +82,7 @@ Launch all matching investigators with `pstack_task` in a single message so they
+ Subagent config (each):
+ - `subagent_type`: `generalPurpose`
+ - `model`: the effective `why investigators` selector
+-- `readonly`: `false`. Pi's PStack read-only children expose only the restricted built-in and helper tools, not the integration tools or shell needed here. This enables the required tools; it does not authorize writes. Investigators must not edit files or modify external state.
++- `readonly`: `false`. Pi's PStack read-only children expose read/bash and helper tools, but not integration tools. This enables the required tools; it does not authorize writes. Investigators must not edit files or modify external state.
+ 
+ Before launching each investigator, read and assemble its prompt from these inputs:
+ 1. The base prompt from `references/investigator-prompt.md`
+@@ -126,7 +126,7 @@ Spawn one synthesizer subagent:
+ 
+ - `subagent_type`: `generalPurpose`
+ - `model`: the effective `why synthesizer` selector
+-- `readonly`: `false`. Citation spot-checks may need integration tools or shell commands that Pi's PStack read-only children do not expose. The synthesizer must not edit files or modify external state.
++- `readonly`: `false`. Citation spot-checks may need integration tools that Pi's PStack read-only children do not expose. The synthesizer must not edit files or modify external state.
+ 
+ Before launching the synthesizer, read the framework and prompt template below and fill the template's EPISTEMICS_PATH with the framework's absolute path. Assemble these inputs:
+ 1. The investigator findings, including any null results and any categories skipped with justification

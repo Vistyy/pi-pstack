@@ -281,9 +281,10 @@ function assertReadonlyRequests(directory: string) {
     childRequests++;
     const tools = request.tools;
 
-    for (const excluded of ["bash", "edit", "write", "recovery_fixture"])
+    for (const excluded of ["grep", "find", "ls", "edit", "write", "recovery_fixture"])
       assert.equal(tools.includes(excluded), false, `Recovered readonly child gained ${excluded}`);
     assert.ok(tools.includes("read"));
+    assert.ok(tools.includes("bash"));
   }
 
   assert.ok(childRequests > 0);
@@ -474,6 +475,15 @@ for (const scenario of [
     assert.equal(inspected.model, "recovery-fixture/child:off");
     assert.equal(inspected.readonly, scenario === "readonly");
     assert.equal(inspected.profile, scenario === "poteto" ? "poteto-agent" : "generalPurpose");
+
+    if (scenario === "readonly")
+      await writeFile(
+        join(directory, "agent/settings.json"),
+        JSON.stringify({
+          packages: [],
+          "pi-pstack": { excludedChildTools: ["bash"] },
+        }),
+      );
 
     await verifyTaskOutcome({ scenario, inspected, reopened, created, previous });
 

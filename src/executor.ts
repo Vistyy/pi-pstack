@@ -52,7 +52,7 @@ const TaskInput = Type.Object(
     readonly: Type.Optional(
       Type.Boolean({
         description:
-          "Restrict child tools and descendants, excluding shell and integration tools. Defaults to false unless inherited from a read-only parent; cannot escalate. This is not an OS sandbox, and writable tools do not authorize unrelated writes.",
+          "Request investigation without modifying files or external state. Exposes read, bash, and PStack task/todo helpers, subject to exclusions; omits write, edit, and integration tools. Bash can write, so this is an instruction-based restriction, not a sandbox. Defaults to false unless inherited from a readonly parent; descendants cannot opt out.",
       }),
     ),
     run_in_background: Type.Optional(

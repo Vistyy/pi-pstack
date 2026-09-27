@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
-import { fauxAssistantMessage, fauxToolCall, getCurrentSystemPrompt } from "@earendil-works/pi-ai";
+import {
+  type FauxResponseFactory,
+  fauxAssistantMessage,
+  fauxToolCall,
+  getCurrentSystemPrompt,
+  getCurrentTools,
+} from "@earendil-works/pi-ai";
 import { stripFrontmatter } from "@earendil-works/pi-coding-agent";
 import { childFixture, packageRoot, receipt } from "./child-fixture.js";
 
@@ -111,19 +117,112 @@ await test("global child-tool exclusions remove inherited integrations for new c
   assert.equal(await readFile(join(f.dir, "private-start.jsonl"), "utf8"), "started\n");
 });
 
+await test("readonly children and descendants inspect with read and bash under an explicit no-write instruction", {
+  timeout: 10000,
+}, async (t) => {
+  const f = await childFixture(t);
+
+  const inspect: FauxResponseFactory = (context) => {
+    assert.deepEqual(
+      getCurrentTools(context.messages)
+        .map((tool) => tool.name)
+        .sort(),
+      ["bash", "pstack_task", "pstack_tasks", "pstack_todo", "read"],
+    );
+    assert.match(getCurrentSystemPrompt(context.messages), /Do not modify files or external state/);
+    assert.match(getCurrentSystemPrompt(context.messages), /Bash is not sandboxed/);
+
+    return fauxAssistantMessage(
+      [
+        fauxToolCall("read", { path: "AGENTS.md" }),
+        fauxToolCall("bash", { command: "cat AGENTS.md" }),
+      ],
+      { stopReason: "toolUse" },
+    );
+  };
+
+  const verify = (context: Parameters<FauxResponseFactory>[0]) => {
+    for (const tool of ["read", "bash"]) {
+      const result = context.messages.findLast(
+        (message) => message.role === "toolResult" && message.toolName === tool,
+      );
+
+      assert.ok(result?.role === "toolResult");
+      assert.equal(result.isError, false);
+      assert.match(JSON.stringify(result.content), /Project-only instruction marker/);
+    }
+  };
+
+  f.nested.setResponses([
+    inspect,
+    (context) => {
+      verify(context);
+
+      return fauxAssistantMessage(
+        fauxToolCall("pstack_task", {
+          prompt: "Inspect without writing",
+          model: "leaf/reader:off",
+          subagent_type: "poteto-agent",
+          run_in_background: false,
+        }),
+        { stopReason: "toolUse" },
+      );
+    },
+    (context) => {
+      const result = context.messages.findLast(
+        (message) => message.role === "toolResult" && message.toolName === "pstack_task",
+      );
+
+      assert.ok(result?.role === "toolResult" && !result.isError);
+      assert.match(JSON.stringify(result.content), /leaf inspection verified/);
+
+      return fauxAssistantMessage("both inspections verified");
+    },
+  ]);
+  f.leaf.setResponses([
+    inspect,
+    (context) => {
+      verify(context);
+
+      return fauxAssistantMessage("leaf inspection verified");
+    },
+  ]);
+
+  const result = await f.call("pstack_task", {
+    prompt: "Inspect and delegate without writing",
+    model: "nested/child:rev1:low",
+    readonly: true,
+    run_in_background: false,
+  });
+
+  assert.equal(result.isError, false, result.text);
+  assert.match(result.text, /both inspections verified/);
+  assert.equal(
+    await readFile(join(f.project, "AGENTS.md"), "utf8"),
+    "Project-only instruction marker",
+  );
+});
+
 await test("global exclusions also subtract tools from readonly children", {
   timeout: 10000,
 }, async (t) => {
   const f = await childFixture(t);
   await writeFile(
     join(f.dir, "settings.json"),
-    JSON.stringify({ "pi-pstack": { excludedChildTools: ["read"] } }),
+    JSON.stringify({ "pi-pstack": { excludedChildTools: ["read", "bash"] } }),
   );
   f.nested.setResponses([
     fauxAssistantMessage(fauxToolCall("read", { path: join(f.project, "AGENTS.md") }), {
       stopReason: "toolUse",
     }),
+    fauxAssistantMessage(fauxToolCall("bash", { command: "pwd" }), { stopReason: "toolUse" }),
     (context) => {
+      const bash = context.messages.findLast(
+        (message) => message.role === "toolResult" && message.toolName === "bash",
+      );
+
+      assert.ok(bash?.role === "toolResult" && bash.isError);
+
       const denied = context.messages.findLast(
         (message) => message.role === "toolResult" && message.toolName === "read",
       );

@@ -183,32 +183,38 @@ export default function recoveryFixture(pi: ExtensionAPI) {
     tokensPerSecond: Infinity,
   });
 
-  provider.setResponses(
-    Array.from({ length: 100 }, () => async (...args) => {
-      const [context, , , model] = args;
-      appendFileSync(
-        join(directory, `${phase}.requests.jsonl`),
-        `${JSON.stringify({ model: model.id, context, tools: getCurrentTools(context.messages).map((tool) => tool.name) })}\n`,
-      );
+  const expectedInstructions = new Map([
+    ["readonly", [/Do not modify files or external state/, /Bash is not sandboxed/]],
+    [
+      "poteto",
+      [
+        /Reopening the owning parent restores saved task IDs without restarting work/,
+        /PStack role map/,
+      ],
+    ],
+  ]);
 
-      if (model.id === "root") return rootResponse(...args);
+  const respond: FauxResponseFactory = async (...args) => {
+    const [context, , , model] = args;
+    appendFileSync(
+      join(directory, `${phase}.requests.jsonl`),
+      `${JSON.stringify({ model: model.id, context, tools: getCurrentTools(context.messages).map((tool) => tool.name) })}\n`,
+    );
 
-      if (scenario === "poteto") {
-        assert.match(
-          getCurrentSystemPrompt(context.messages),
-          /Reopening the owning parent restores saved task IDs without restarting work/,
-        );
-        assert.match(getCurrentSystemPrompt(context.messages), /PStack role map/);
-      }
+    if (model.id === "root") return rootResponse(...args);
 
-      if (scenario === "early" && phase === "initial") return wait(args[1]?.signal, "child-ready");
+    for (const pattern of expectedInstructions.get(scenario ?? "") ?? [])
+      assert.match(getCurrentSystemPrompt(context.messages), pattern);
 
-      if (["nested", "nested-early"].includes(scenario ?? "") && model.id === "child")
-        return coordinator(...args);
+    if (scenario === "early" && phase === "initial") return wait(args[1]?.signal, "child-ready");
 
-      return worker(...args);
-    }),
-  );
+    if (["nested", "nested-early"].includes(scenario ?? "") && model.id === "child")
+      return coordinator(...args);
+
+    return worker(...args);
+  };
+
+  provider.setResponses(Array.from({ length: 100 }, () => respond));
   pi.registerProvider(provider.provider);
   pi.registerTool({
     name: "recovery_fixture",

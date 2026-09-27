@@ -107,6 +107,7 @@ export default function observerFixture(pi: ExtensionAPI) {
             fauxToolCall("pstack_task", {
               prompt: "Coordinator inspection",
               model: "observer-fixture/coordinator:off",
+              readonly: true,
               run_in_background: true,
             }),
             fauxToolCall("pstack_task", {
