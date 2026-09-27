@@ -194,12 +194,16 @@ export function createRuntime(pi: ExtensionAPI, options?: { profile: Profile }):
       "Get this session branch's todo list, or replace it with the complete supplied items list.",
     parameters: Type.Object({ items: Type.Optional(Type.Array(Type.String())) }),
     async execute(_id, params, _signal, _update, ctx) {
-      if (params.items !== undefined) pi.appendEntry(todoType, { items: params.items });
+      if (params.items !== undefined) {
+        pi.appendEntry(todoType, { items: params.items });
+
+        return result(JSON.stringify({ count: params.items.length }));
+      }
 
       const data = branchData(ctx, todoType);
       const items = Check(TodoEntry, data) ? data.items : [];
 
-      return result(JSON.stringify(params.items ?? items));
+      return result(JSON.stringify(items));
     },
   });
   installQuestionTool(pi);

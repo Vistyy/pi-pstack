@@ -268,6 +268,27 @@ await test("native tool loop persists exact model roles, applies budgets, resolv
   );
 });
 
+await test("todo replacement acknowledges the count while get preserves the complete list", async (t) => {
+  const f = await fixture(t);
+
+  const items = [
+    "Read the playbook",
+    "Verify the complete workflow",
+    `Long evidence ${"detail ".repeat(2000)}`,
+  ];
+
+  const saved = await f.call("pstack_todo", { items });
+  assert.equal(saved.isError, false, saved.text);
+  assert.equal(saved.text, '{"count":3}');
+  const read = await f.call("pstack_todo", {});
+  assert.equal(read.isError, false, read.text);
+  assert.deepEqual(JSON.parse(read.text), items);
+  const cleared = await f.call("pstack_todo", { items: [] });
+  assert.equal(cleared.isError, false, cleared.text);
+  assert.equal(cleared.text, '{"count":0}');
+  assert.equal((await f.call("pstack_todo", {})).text, "[]");
+});
+
 await test("mode and todo state follow native branches; full mode and configured roles survive subsequent prompts", async (t) => {
   const f = await fixture(t);
 
