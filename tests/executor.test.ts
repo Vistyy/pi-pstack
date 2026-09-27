@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
@@ -148,11 +148,11 @@ export default (pi) => {
   let childContext = 0;
   provider.setResponses([
     (context) => {
-      assert.ok(
-        getCurrentSystemPrompt(context.messages).includes(
-          `Current Pi history scope: ${JSON.stringify({ cwd: project, directory: join(dir, "parent-history") })}`,
-        ),
+      assert.doesNotMatch(
+        getCurrentSystemPrompt(context.messages),
+        /Current Pi (?:transcript|history scope)/,
       );
+      assert.ok(getCurrentSystemPrompt(context.messages).includes(`<cwd>\n${project}\n</cwd>`));
 
       return fauxAssistantMessage(
         fauxToolCall("pstack_task", {
@@ -204,11 +204,8 @@ export default (pi) => {
   assert.equal(payload.model, "fixture/child:rev1:low");
   assert.equal(payload.readonly, true);
   assert.equal(childContext, 1);
-  assert.ok(
-    childPrompt.includes(
-      `Current Pi history scope: ${JSON.stringify({ cwd: project, directory: dirname(payload.transcript) })}`,
-    ),
-  );
+  assert.doesNotMatch(childPrompt, /Current Pi (?:transcript|history scope)/);
+  assert.ok(childPrompt.includes(`<cwd>\n${project}\n</cwd>`));
   assert.match(childPrompt, /Project instruction sentinel/);
   assert.doesNotMatch(childPrompt, /Parent secret/);
   assert.match(await readFile(payload.transcript, "utf8"), /child evidence/);

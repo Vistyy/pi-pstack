@@ -11,7 +11,6 @@ Port the pinned PStack methodology to Pi; do not replace its procedures, roles, 
 | `upstream-exclusions.txt` | Exact upstream files or directories omitted from the adopted content, before patch replay. |
 | `patches/*.patch` | Ordered, focused Pi translations of retained files. Author upstream-derived instruction changes here. |
 | `content/pstack/` | Generated PStack minus exclusions, plus patches, then the unchanged companion skills and their separate license. Never hand-edit it. |
-| `instructions/pi-host.md` | Shared packaged-skill access, path resolution, and remaining upstream tool aliases. Edit directly; executor mechanics belong in tool descriptions and schemas. |
 | `src/`, `extensions/` | Pi runtime, model/question/todo helpers, and the private child-session adapter. |
 | `scripts/` | Source verification, generation, comparison, and upstream-update preparation. |
 | `README.md` | User-facing setup, supported behavior, and limitations. Keep maintainer instructions in `AGENTS.md`. |

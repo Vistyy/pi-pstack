@@ -14,7 +14,7 @@ This skill sequences an inline mining pass (step 1), the [Authoring or modifying
 
 ### 0. Check for an existing skill
 
-Use the running Pi version's skill discovery locations (`docs/skills.md`) and current skill paths to find an existing `<handle>-mode` skill. Honor configured paths and packages; a mode may live in a category directory rather than at the top level. If one exists, confirm intent with `AskQuestion` (unless they already said "update my skill" or similar):
+Use the running Pi version's skill discovery locations (`docs/skills.md`) and current skill paths to find an existing `<handle>-mode` skill. Honor configured paths and packages; a mode may live in a category directory rather than at the top level. If one exists, confirm intent with `pstack_question` (unless they already said "update my skill" or similar):
 
 - Update the existing skill (default for repeat runs)
 - Start fresh (rare, ask why before doing it)
@@ -26,7 +26,7 @@ Update mode changes the rest of the flow:
 
 ### 1. Mine their history
 
-Before fanning out, follow [Recall's Pi transcript access rules](../recall/SKILL.md#pi-transcript-access) to locate and scope the history from the host's exact directory and working directory. Pass only the scoped transcript paths to miners. Keep this skill's time window and preference-mining questions below; do not run Recall's separate shared-record sweep or brief-writing workflow.
+Before fanning out, follow [Recall's Pi transcript access rules](../recall/SKILL.md#pi-transcript-access) to locate and scope history using Pi's working directory and native `PI_SESSION_FILE`. Pass only the scoped transcript paths to miners. Keep this skill's time window and preference-mining questions below; do not run Recall's separate shared-record sweep or brief-writing workflow.
 
 Survey recent agent conversations within that scope for recurring patterns. Run multiple parallel subagents across slices of history (e.g. last 2-4 weeks, split into 3 slices so each has enough material). Each slice mining subagent reads transcripts from the workspace-scoped path the parent provides, looks for the signals below, and returns a short structured list of patterns it saw with evidence pointers. Default signals worth hunting:
 
@@ -41,7 +41,7 @@ Cross-check across slices before elevating a signal. Patterns seen in 2+ slices 
 
 ### 2. Ask the user directly
 
-Mining misses intent that hasn't come up yet. Use the `AskQuestion` tool (structured multi-choice) rather than asking the user to type from scratch.
+Mining misses intent that hasn't come up yet. Use the `pstack_question` tool (structured multi-choice) rather than asking the user to type from scratch.
 
 Shape: one or two questions with 4-6 options each, `allow_multiple: true` for category questions. Start broad ("Which areas matter most?"), then follow up on selected areas with specific options. After the structured rounds, one free-form chat question catches anything the options missed.
 

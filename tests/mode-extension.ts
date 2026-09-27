@@ -8,6 +8,7 @@ import {
   fauxAssistantMessage,
   fauxProvider,
   fauxToolCall,
+  getCurrentSystemPrompt,
 } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -23,7 +24,10 @@ export default function modeFixture(pi: ExtensionAPI) {
   });
 
   const respond: FauxResponseFactory = (context) => {
-    appendFileSync(join(directory, "requests.jsonl"), `${JSON.stringify({ context })}\n`);
+    appendFileSync(
+      join(directory, "requests.jsonl"),
+      `${JSON.stringify({ context, system: getCurrentSystemPrompt(context.messages) })}\n`,
+    );
     const user = context.messages.findLast((message) => message.role === "user");
 
     if (
@@ -33,7 +37,26 @@ export default function modeFixture(pi: ExtensionAPI) {
     )
       return fauxAssistantMessage(fauxToolCall("mode_hold", {}), { stopReason: "toolUse" });
 
-    return fauxAssistantMessage("Mode fixture complete.");
+    if (
+      user?.role === "user" &&
+      contentText(user.content) === "native-context" &&
+      context.messages.at(-1)?.role !== "toolResult"
+    ) {
+      return fauxAssistantMessage(
+        fauxToolCall("bash", {
+          command:
+            "node -e 'console.log(JSON.stringify({cwd:process.cwd(),transcript:process.env.PI_SESSION_FILE,directory:require(\"node:path\").dirname(process.env.PI_SESSION_FILE)}))'",
+        }),
+        { stopReason: "toolUse" },
+      );
+    }
+
+    const label =
+      user?.role === "user"
+        ? contentText(user.content).match(/tui-(?:alias|native)/)?.[0]
+        : undefined;
+
+    return fauxAssistantMessage(`Mode fixture complete.${label === undefined ? "" : ` ${label}`}`);
   };
 
   provider.setResponses(Array.from({ length: 40 }, () => respond));

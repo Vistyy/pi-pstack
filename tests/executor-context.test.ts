@@ -471,24 +471,40 @@ for (const profile of ["poteto-agent", "Comment Sicko"] as const) {
       await readFile(join(packageRoot, "content/pstack/agents", filename), "utf8"),
     ).trim();
 
-    f.nested.setResponses(
-      ["initial", "continued"].map((assignment) => (context) => {
-        assert.ok(getCurrentSystemPrompt(context.messages).includes(identity));
-        assert.equal(
-          getCurrentSystemPrompt(context.messages).split(mode).length - 1,
-          profile === "poteto-agent" ? 1 : 0,
-        );
-        const user = context.messages.findLast((item) => item.role === "user");
-        assert.ok(user?.role === "user");
-        assert.deepEqual(user.content, [{ type: "text", text: assignment }]);
+    const responses: FauxResponseFactory[] = [];
 
-        return fauxAssistantMessage(`finished ${assignment}`);
-      }),
-    );
+    for (const assignment of ["/skill:poteto-mode initial", "continued"]) {
+      responses.push(
+        (context) => {
+          const system = getCurrentSystemPrompt(context.messages);
+          assert.ok(system.includes(identity));
+          assert.equal(system.split(mode).length - 1, profile === "poteto-agent" ? 1 : 0);
+          const user = context.messages.findLast((item) => item.role === "user");
+          assert.ok(user?.role === "user");
+          assert.deepEqual(user.content, [{ type: "text", text: assignment }]);
+          const skills = /Packaged PStack skills directory: ([^\n]+)/.exec(system)?.[1];
+          assert.ok(skills !== undefined);
+
+          return fauxAssistantMessage(
+            fauxToolCall("read", { path: join(skills, "principle-prove-it-works/SKILL.md") }),
+            { stopReason: "toolUse" },
+          );
+        },
+        (context) => {
+          const result = context.messages.findLast((item) => item.role === "toolResult");
+          assert.ok(result?.role === "toolResult" && !result.isError);
+          assert.match(JSON.stringify(result.content), /# Prove It Works/);
+
+          return fauxAssistantMessage(`finished ${assignment}`);
+        },
+      );
+    }
+
+    f.nested.setResponses(responses);
 
     const first = await f.call("pstack_task", {
       subagent_type: profile,
-      prompt: "initial",
+      prompt: "/skill:poteto-mode initial",
       model: "nested/child:rev1:low",
       run_in_background: false,
     });
@@ -504,7 +520,7 @@ for (const profile of ["poteto-agent", "Comment Sicko"] as const) {
 
     assert.equal(next.isError, false, next.text);
     assert.match(next.text, /finished continued/);
-    assert.equal(f.nested.state.callCount, 2);
+    assert.equal(f.nested.state.callCount, 4);
   });
 }
 

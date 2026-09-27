@@ -28,11 +28,7 @@ After the dependency setup in [AGENTS.md](AGENTS.md#development-and-verification
 
 Real targets use `provider/model:thinking`. Cursor slugs remain source defaults, not automatic executable aliases. Explicit `inherit-parent` and `auto` resolve to the current parent's model and thinking. Panels retain their order, repeated entries, and chosen cardinality. Budget adjustment stays within the selected model's supported reasoning levels; it does not substitute another family.
 
-`/poteto-mode on` and `/poteto-mode off` change branch-local mode state. The current Pi session branch owns that state; there is no separate mode cache to restore. `/poteto-mode <task>` expands the packaged skill in interactive and RPC sessions. For print/JSON execution, use `/skill:poteto-mode <task>` directly. Enabled parent sessions receive the full generated mode on each prompt, including after native compaction.
-
-When the effective system prompt already supplies the full mode, model-facing context replaces matching copies inside this package's native skill blocks with a short reference. Task text, images, skill locations, and other skills are preserved. Saved history and native compaction inputs are not rewritten. Queued activation retains the native skill body until a system copy is available. Poteto child profiles use their injected mode rather than being instructed to read the same file again.
-
-Run `python3 scripts/verify-mode-loading.py` for the isolated normal Pi check. It captures scripted-provider requests for direct, convenience, repeated, and queued activation, subsequent prompts, and compaction. Evidence is retained under `.work/mode-loading-verification/`; it does not measure billing or autonomous adherence to the instructions.
+`/poteto-mode on` and `/poteto-mode off` change branch-local mode state. The current Pi session branch owns that state; there is no separate mode cache to restore. `/poteto-mode <task>` enables mode and starts the task in interactive and RPC sessions. For print/JSON execution, use `/skill:poteto-mode <task>` directly. Enabled parent sessions receive the full generated mode on each prompt, including after native compaction.
 
 ## Questions
 

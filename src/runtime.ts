@@ -2,10 +2,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  type ContextEvent,
   type ExtensionAPI,
   type ExtensionContext,
-  parseSkillBlock,
   stripFrontmatter,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -52,9 +50,8 @@ function result(text: string) {
 }
 
 async function resources(profile?: Profile) {
-  const [mode, host, setup] = await Promise.all([
+  const [mode, setup] = await Promise.all([
     readFile(modePath, "utf8"),
-    readFile(join(root, "instructions/pi-host.md"), "utf8"),
     readFile(join(skillsDir, "setup-pstack/SKILL.md"), "utf8"),
   ]);
 
@@ -72,33 +69,7 @@ async function resources(profile?: Profile) {
         ).trim()
       : "";
 
-  return { mode: stripFrontmatter(mode).trim(), identity, host, roles: parseRoles(setup) };
-}
-
-function modeReference(message: ContextEvent["messages"][number], mode: string) {
-  if (message.role !== "user") return message;
-
-  const project = (text: string) => {
-    const skill = parseSkillBlock(text);
-
-    if (
-      skill?.name !== "poteto-mode" ||
-      skill.location !== modePath ||
-      !skill.content.includes(mode)
-    )
-      return text;
-
-    return text.replace(mode, "Full Poteto mode instructions are supplied in the system prompt.");
-  };
-
-  return {
-    ...message,
-    content: Array.isArray(message.content)
-      ? message.content.map((part) =>
-          part.type === "text" ? { ...part, text: project(part.text) } : part,
-        )
-      : project(message.content),
-  };
+  return { mode: stripFrontmatter(mode).trim(), identity, roles: parseRoles(setup) };
 }
 
 export function createRuntime(pi: ExtensionAPI, options?: { profile: Profile }): void {
@@ -113,10 +84,17 @@ export function createRuntime(pi: ExtensionAPI, options?: { profile: Profile }):
   };
 
   pi.on("input", (event, ctx) => {
-    if (event.text === "/skill:poteto-mode" || event.text.startsWith("/skill:poteto-mode "))
-      persistMode(true, ctx);
+    if (options !== undefined) return { action: "continue" };
+    const command = "/skill:poteto-mode";
 
-    return { action: "continue" };
+    if (event.text !== command && !event.text.startsWith(`${command} `))
+      return { action: "continue" };
+    persistMode(true, ctx);
+
+    return {
+      action: "transform",
+      text: `Use Poteto mode.\n\n${event.text.slice(command.length).trim()}`.trimEnd(),
+    };
   });
   pi.on("before_agent_start", async (event, ctx) => {
     const content = await source();
@@ -133,21 +111,29 @@ export function createRuntime(pi: ExtensionAPI, options?: { profile: Profile }):
       projection = `Invalid PStack role configuration: ${String(error)}. Use /setup-pstack to replace it.`;
     }
 
-    const mode =
-      options?.profile === "poteto-agent" || (options === undefined && modeEnabled(ctx))
-        ? `\n\n${content.mode}`
-        : "";
-
-    return {
-      systemPrompt: `${event.systemPrompt}\n\n${content.identity}${mode}\n\nPackaged PStack skills directory: ${skillsDir}\n\n${content.host}\n\nCurrent Pi transcript (null means unavailable): ${JSON.stringify(ctx.sessionManager.getSessionFile() ?? null)}\n\nCurrent Pi history scope: ${JSON.stringify({ cwd: ctx.cwd, directory: ctx.sessionManager.getSessionDir() })}\n\n## PStack role map\n${projection}`,
+    event.systemPromptOptions.sections = {
+      ...event.systemPromptOptions.sections,
+      pstack:
+        `${content.identity}\n\nPackaged PStack skills directory: ${skillsDir}\n\n## PStack role map\n${projection}`.trim(),
     };
   });
   pi.on("context", async (event, ctx) => {
+    if (options?.profile !== "poteto-agent" && !(options === undefined && modeEnabled(ctx))) return;
     const { mode } = await source();
 
-    if (!ctx.getSystemPrompt().includes(mode)) return;
-
-    return { messages: event.messages.map((message) => modeReference(message, mode)) };
+    return {
+      messages: [
+        {
+          role: "system",
+          content: "",
+          timestamp: Date.now(),
+          sections: {
+            "poteto-mode": `<skill name="poteto-mode" location="${modePath}">\nReferences are relative to ${join(skillsDir, "poteto-mode")}.\n\n${mode}\n</skill>`,
+          },
+        },
+        ...event.messages,
+      ],
+    };
   });
   pi.registerCommand("poteto-mode", {
     description: "Enable or disable Poteto mode; optionally start a task",
@@ -164,7 +150,7 @@ export function createRuntime(pi: ExtensionAPI, options?: { profile: Profile }):
         throw new Error("Use /skill:poteto-mode <task> in print/json mode.");
 
       persistMode(true, ctx);
-      pi.sendUserMessage(`/skill:poteto-mode ${task}`, { expandPromptTemplates: true });
+      pi.sendUserMessage(task, { deliverAs: "followUp" });
     },
   });
   pi.registerCommand("setup-pstack", {

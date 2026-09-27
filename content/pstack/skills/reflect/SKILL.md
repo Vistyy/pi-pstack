@@ -16,7 +16,7 @@ Invoke when the user says "reflect" or "/reflect". Skip when the conversation is
 
 ### 1. Locate the active transcript
 
-Use the exact current Pi transcript path supplied by the host. For an owned child's run, use its `pstack_task` receipt or `pstack_tasks` inspection. Do not search other sessions or projects. Pi transcripts contain typed JSONL entries; inspect the actual message entries rather than assuming a Cursor transcript layout. If no transcript path is available, write a tight digest of the session and label it as a digest, not transcript evidence.
+Read `PI_SESSION_FILE` through Pi's native Bash tool for the exact current transcript path. For an owned child's run, use its `pstack_task` receipt or `pstack_tasks` inspection. Do not search other sessions or projects. Pi transcripts contain typed JSONL entries; inspect the actual message entries rather than assuming a Cursor transcript layout. If no transcript path is available, write a tight digest of the session and label it as a digest, not transcript evidence.
 
 ### 2. Spawn three reviewers in parallel
 

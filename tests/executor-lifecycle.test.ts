@@ -12,6 +12,7 @@ await test("child uses exact model/thinking and project context without ambient 
 }, async (t) => {
   const f = await childFixture(t);
   let prompt = "";
+  let nativeTranscript = "";
   f.nested.setResponses([
     (context, options, _state, model) => {
       assert.equal(model.id, "child:rev1");
@@ -21,6 +22,19 @@ await test("child uses exact model/thinking and project context without ambient 
       const user = context.messages.findLast((item) => item.role === "user");
       assert.ok(user?.role === "user");
       assert.deepEqual(user.content, [{ type: "text", text: "/ambient-override" }]);
+
+      return fauxAssistantMessage(
+        fauxToolCall("bash", { command: "printf '%s' \"$PI_SESSION_FILE\"" }),
+        { stopReason: "toolUse" },
+      );
+    },
+    (context) => {
+      const response = context.messages.findLast((item) => item.role === "toolResult");
+      assert.ok(response?.role === "toolResult" && !response.isError);
+      nativeTranscript = response.content
+        .filter((item) => item.type === "text")
+        .map((item) => item.text)
+        .join("");
 
       return fauxAssistantMessage("isolated child");
     },
@@ -35,11 +49,8 @@ await test("child uses exact model/thinking and project context without ambient 
   assert.equal(result.isError, false, result.text);
   const transcript = receipt(result.text).transcript;
   assert.ok(transcript !== undefined);
-  assert.ok(
-    prompt.includes(
-      `Current Pi transcript (null means unavailable): ${JSON.stringify(transcript)}`,
-    ),
-  );
+  assert.equal(nativeTranscript, transcript);
+  assert.doesNotMatch(prompt, /Current Pi (?:transcript|history scope)/);
   assert.match(await readFile(transcript, "utf8"), /isolated child/);
   assert.match(prompt, /Project-only instruction marker/);
   assert.doesNotMatch(prompt, /Global (?:instruction|system|append) forbidden marker/);
