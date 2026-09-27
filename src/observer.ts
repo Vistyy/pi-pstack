@@ -40,11 +40,9 @@ function renderActivityRail(snapshot: Snapshot, theme: Theme, width: number) {
       ? `${counts.running} running · ${counts.waiting} waiting`
       : "None running";
 
-  const failure = counts.failed ? theme.fg("error", " · Failure needs attention") : "";
-
   return [
     truncateToWidth(
-      `${theme.fg("accent", "Subagents")}  ${activity}${failure}  ${theme.fg("muted", "/subagents")}`,
+      `${theme.fg("accent", "Subagents")}  ${activity}  ${theme.fg("muted", "/subagents")}`,
       width,
     ),
   ];

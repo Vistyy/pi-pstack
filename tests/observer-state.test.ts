@@ -125,6 +125,5 @@ await test("activity counts omit completed totals and include live nested work",
   assert.deepEqual(activityCounts([completed, waiting, { ...completed, status: "failed" }]), {
     running: 1,
     waiting: 1,
-    failed: true,
   });
 });

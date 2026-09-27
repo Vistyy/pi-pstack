@@ -60,7 +60,7 @@ Recovery uses native Pi session files, not a database or a persistent worker ser
 
 ### Subagent observer
 
-`/subagents` opens a read-only task tree and native Pi transcript in the terminal UI. It shows live children, nested work, and saved history after reopening a parent session. Opening the observer does not start or resume work, send model messages, accept results, or change transcripts. The activity rail shows running and waiting counts plus a failure indicator, without accumulating completed counts.
+`/subagents` opens a read-only task tree and native Pi transcript in the terminal UI. It shows live children, nested work, and saved history after reopening a parent session. Opening the observer does not start or resume work, send model messages, accept results, or change transcripts. The activity rail shows running and waiting counts only. Failed tasks and their error details remain in the inspector and are delivered normally to the parent, without a persistent failure warning or an acknowledgement mechanism.
 
 Use Up/Down to select a task, Left/Right to fold its children, and Enter for a full-width transcript. Escape returns to the tree or closes the observer. Page Up/Down scroll the transcript, Home goes to its beginning, End follows the latest output, and Ctrl+O toggles tool detail. New output does not move a held viewport. Narrow terminals show the tree first. There are no execution controls or mouse actions in this view.
 

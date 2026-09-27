@@ -195,20 +195,17 @@ export class SavedTranscripts {
 }
 
 export function activityCounts(tasks: readonly ObservedTask[]) {
-  const counts = { running: 0, waiting: 0, failed: false };
+  const counts = { running: 0, waiting: 0 };
 
   for (const task of tasks) {
     if (task.status === "running" || task.status === "cancelling") counts.running++;
 
     if (task.status === "waiting") counts.waiting++;
 
-    if (task.status === "failed") counts.failed = true;
-
     if (task.source.kind === "live") {
       const nested = activityCounts(task.source.children);
       counts.running += nested.running;
       counts.waiting += nested.waiting;
-      counts.failed ||= nested.failed;
     }
   }
 

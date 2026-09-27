@@ -143,7 +143,7 @@ def run():
     assert requests(live) == before == 0
     command('observer-run')
     contains('1 running · 1 waiting', timeout=40)
-    contains('Failure needs attention')
+    assert 'Failure needs attention' not in screen()
     capture('02-live-rail')
     command('/subagents')
     contains('Coordinator inspection')
@@ -217,6 +217,7 @@ def run():
     absent('Native Pi transcript')
     assert requests(live) == count, 'Inspection triggered a model request'
     assert transcripts(live) == saved, 'Inspection changed a native transcript'
+    assert 'Failure needs attention' not in screen()
     capture('12-settled-rail')
     close_session()
 
