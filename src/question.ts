@@ -24,7 +24,7 @@ const QuestionsInput = Type.Object(
           allow_multiple: Type.Optional(
             Type.Boolean({
               description:
-                "Allow selecting multiple listed options. Other remains a separate free-text answer, not combined with listed choices.",
+                "Allow selecting multiple listed options and optionally adding an Other free-text answer alongside them.",
             }),
           ),
           options: Type.Array(Type.String({ minLength: 1, pattern: "\\S" }), {
@@ -93,10 +93,13 @@ export function installQuestionTool(pi: ExtensionAPI): void {
       const text =
         outcome.status === "answered"
           ? outcome.answers
-              .map(
-                (answer) =>
-                  `${answer.id}: ${answer.kind === "options" ? answer.values.join(", ") : answer.value}`,
-              )
+              .map((answer) => {
+                if (answer.kind !== "options") return `${answer.id}: ${answer.value}`;
+
+                const other = answer.other === undefined ? "" : `\n  Other: ${answer.other}`;
+
+                return `${answer.id}: ${answer.values.join(", ")}${other}`;
+              })
               .join("\n")
           : outcome.status === "cancelled"
             ? "Questionnaire cancelled; no answers submitted."

@@ -25,7 +25,7 @@ export type Question = {
 
 type AnswerValue =
   | { kind: "option" | "other"; value: string }
-  | { kind: "options"; values: [string, ...string[]] };
+  | { kind: "options"; values: [string, ...string[]]; other?: string };
 
 export type QuestionAnswer = AnswerValue & { id: string };
 
@@ -103,6 +103,7 @@ function createQuestionnaire(
   };
 
   const choices = new Set<number>();
+  let other: string | undefined;
 
   const choiceList = (question: Question) =>
     new SelectList(
@@ -114,7 +115,13 @@ function createQuestionnaire(
               : label,
           value: String(index),
         })),
-        { label: "Other (write an answer)", value: "other" },
+        {
+          label:
+            question.allow_multiple === true
+              ? `[${other === undefined ? " " : "x"}] Other (${other === undefined ? "write" : "edit"} an answer)`
+              : "Other (write an answer)",
+          value: "other",
+        },
       ],
       Math.min(question.options.length + 1, 5),
       listTheme,
@@ -150,32 +157,45 @@ function createQuestionnaire(
     return entry;
   };
 
+  const rebuildChoices = () => {
+    const entry = current();
+    entry.list = choiceList(entry.question);
+    entry.list.setSelectedIndex(selected);
+  };
+
   const selectPage = (index: number) => {
     page = index;
     bodyOffset = 0;
     warning = "";
 
-    if (page < pages.length) {
-      const entry = current();
-      const { question } = entry;
-      const answer = answers.get(question.id);
-      choices.clear();
+    if (page === pages.length) {
+      refresh();
 
-      if (answer?.kind === "options") {
-        question.options.forEach((value, index) => {
-          if (answer.values.includes(value)) choices.add(index);
-        });
-      }
-
-      const first = answer?.kind === "options" ? answer.values[0] : (answer?.value ?? "");
-      selected =
-        answer?.kind === "other"
-          ? question.options.length
-          : Math.max(0, question.options.indexOf(first));
-      entry.list = choiceList(question);
-      entry.list.setSelectedIndex(selected);
+      return;
     }
 
+    const { question } = current();
+    const answer = answers.get(question.id);
+    other =
+      answer?.kind === "options"
+        ? answer.other
+        : answer?.kind === "other"
+          ? answer.value
+          : undefined;
+    choices.clear();
+
+    if (answer?.kind === "options") {
+      question.options.forEach((value, index) => {
+        if (answer.values.includes(value)) choices.add(index);
+      });
+    }
+
+    const first = answer?.kind === "options" ? answer.values[0] : (answer?.value ?? "");
+    selected =
+      answer?.kind === "other"
+        ? question.options.length
+        : Math.max(0, question.options.indexOf(first));
+    rebuildChoices();
     refresh();
   };
 
@@ -199,7 +219,26 @@ function createQuestionnaire(
       return;
     }
 
-    save({ kind: "other", value: text });
+    if (current().question.allow_multiple === true) {
+      other = text;
+      editing = false;
+      editor.focused = false;
+      warning = "";
+      rebuildChoices();
+    } else save({ kind: "other", value: text });
+  };
+
+  const saveMultiple = () => {
+    const { question } = current();
+    const [first, ...rest] = question.options.filter((_value, index) => choices.has(index));
+
+    if (first !== undefined) {
+      const answer: AnswerValue = { kind: "options", values: [first, ...rest] };
+
+      if (other !== undefined) answer.other = other;
+      save(answer);
+    } else if (other !== undefined) save({ kind: "other", value: other });
+    else warning = "Select at least one option";
   };
 
   const confirmChoice = () => {
@@ -208,24 +247,29 @@ function createQuestionnaire(
     if (selected === question.options.length) {
       editing = true;
       editor.focused = focused;
-      const answer = answers.get(question.id);
-      editor.setText(answer?.kind === "other" ? answer.value : "");
-    } else if (question.allow_multiple === true) {
-      const [first, ...rest] = question.options.filter((_value, index) => choices.has(index));
+      editor.setText(other ?? "");
+      warning = "";
 
-      if (first === undefined) {
-        warning = "Select at least one option";
+      return;
+    }
 
-        return;
-      }
-
-      save({ kind: "options", values: [first, ...rest] });
-    } else {
+    if (question.allow_multiple === true) saveMultiple();
+    else {
       const value = question.options[selected];
 
       if (value === undefined) throw new Error("No selected option.");
       save({ kind: "option", value });
     }
+  };
+
+  const toggleChoice = () => {
+    if (selected === current().question.options.length) {
+      if (other === undefined) confirmChoice();
+      else other = undefined;
+    } else if (choices.has(selected)) choices.delete(selected);
+    else choices.add(selected);
+    warning = "";
+    rebuildChoices();
   };
 
   const handleChoice = (data: string) => {
@@ -239,14 +283,8 @@ function createQuestionnaire(
 
     const space = question.allow_multiple === true && matchesKey(data, Key.space);
 
-    if (space && selected === question.options.length) confirmChoice();
-    else if (space) {
-      if (choices.has(selected)) choices.delete(selected);
-      else choices.add(selected);
-      warning = "";
-      current().list = choiceList(question);
-      current().list.setSelectedIndex(selected);
-    } else if (keys.matches(data, "tui.select.confirm")) confirmChoice();
+    if (space) toggleChoice();
+    else if (keys.matches(data, "tui.select.confirm")) confirmChoice();
     refresh();
   };
 
@@ -336,9 +374,13 @@ function createQuestionnaire(
       const answer = answers.get(question.id);
 
       if (answer?.kind === "options") {
+        const values = [...answer.values];
+
+        if (answer.other !== undefined) values.push(`Other: ${answer.other}`);
+
         return [
           ...wrapTextWithAnsi(`${question.id}:`, width),
-          ...answer.values.flatMap((value) => wrapTextWithAnsi(`  [x] ${value}`, width)),
+          ...values.flatMap((value) => wrapTextWithAnsi(`  [x] ${value}`, width)),
         ];
       }
 
@@ -360,18 +402,20 @@ function createQuestionnaire(
         help: `← questions • ${hint("tui.select.confirm")} Submit • ${cancel} cancel • PgUp/PgDn scroll text`,
       };
     const title = `Question ${page + 1}/${questions.length}`;
+    const { question } = current();
+    const multiple = question.allow_multiple === true;
 
     if (editing)
       return {
         title: `${title} • Other`,
-        help: `${hint("tui.input.submit")} save & next • ${cancel} choices • ${hint("tui.input.newLine")} newline`,
+        help: `${hint("tui.input.submit")} ${multiple ? "save & choices" : "save & next"} • ${cancel} choices • ${hint("tui.input.newLine")} newline`,
       };
-    const multiple = current().question.allow_multiple === true;
-    const action = multiple ? "Space toggle • Other replaces choices • " : "";
+    const action = multiple ? "Space toggle • " : "";
+    const confirm = selected === question.options.length ? "edit Other" : "answer & next";
 
     return {
       title: `${title}${multiple ? " • Multiple choices" : ""}`,
-      help: `${hint("tui.select.up")}/${hint("tui.select.down")} choose • ${action}${hint("tui.select.confirm")} answer & next • ←→ questions • PgUp/PgDn scroll text • ${cancel} cancel`,
+      help: `${hint("tui.select.up")}/${hint("tui.select.down")} choose • ${action}${hint("tui.select.confirm")} ${confirm} • ←→ questions • PgUp/PgDn scroll text • ${cancel} cancel`,
     };
   };
 

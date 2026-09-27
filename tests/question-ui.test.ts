@@ -200,7 +200,7 @@ await test("multiple answers can be restored, deselected, and revised from revie
   });
 });
 
-await test("multiple-choice selections do not leak into the next question", async (t) => {
+await test("multiple-choice selections and Other do not leak into the next question", async (t) => {
   const f = await uiFixture(t);
 
   const h = await f.start([
@@ -208,43 +208,104 @@ await test("multiple-choice selections do not leak into the next question", asyn
     { id: "second", question: "Second", options: ["X", "Y"], allow_multiple: true },
   ]);
 
-  h.input(" ", key.enter);
+  h.input(" ", key.down, key.down, " ", "first only", key.enter, key.up, key.enter);
   assert.match(h.screen(), /\[ \] X/);
+  assert.match(h.screen(), /\[ \] Other/);
   h.input(key.enter);
   assert.match(h.screen(), /Select at least one option/);
   h.input(" ", key.enter, key.enter);
   assert.deepEqual(await h.result, {
     status: "answered",
     answers: [
-      { id: "first", kind: "options", values: ["A"] },
+      { id: "first", kind: "options", values: ["A"], other: "first only" },
       { id: "second", kind: "options", values: ["X"] },
     ],
   });
 });
 
-await test("Other replaces multiple choices only when saved; cancellation and abort return no selections", async (t) => {
+const multipleWithOther: Question[] = [
+  { id: "many", question: "Choose areas", options: ["Alpha", "Beta"], allow_multiple: true },
+];
+
+await test("Other combines with listed choices, preserves multiline text, and can be revised from review", async (t) => {
   const f = await uiFixture(t);
-
-  const items: Question[] = [
-    { id: "many", question: "Choose areas", options: ["Alpha", "Beta"], allow_multiple: true },
-  ];
-
-  const h = await f.start(items);
-  h.input(" ", key.enter, key.left, key.down, key.down, key.enter, "draft", key.escape);
+  const h = await f.start(multipleWithOther);
+  h.input(" ", key.down, " ", key.down, " ", key.enter);
+  assert.match(h.screen(), /Other cannot be blank/);
+  h.input(" custom", "\n", "answer ", key.enter);
   assert.match(h.screen(), /\[x\] Alpha/);
-  h.input(key.enter, "custom", "\n", "answer", key.enter);
-  assert.match(h.screen(), /Other: custom/);
-  assert.doesNotMatch(h.screen(), /Alpha|Beta/);
+  assert.match(h.screen(), /\[x\] Beta/);
+  assert.match(h.screen(), /\[x\] Other \(edit an answer\)/);
+  assert.doesNotMatch(h.screen(), /Review|Other cannot be blank/);
+  h.input(key.enter, "discarded", key.escape, key.up, key.enter);
+  assert.match(h.screen(), /\[x\] Other: {2}custom\nanswer /);
+  assert.doesNotMatch(h.screen(), /discarded/);
+  h.input(key.left);
+  assert.match(h.screen(), /\[x\] Alpha/);
+  assert.match(h.screen(), /\[x\] Beta/);
+  assert.match(h.screen(), /\[x\] Other/);
+  h.input(key.down, key.down, key.enter);
+  assert.match(h.screen(), /custom/);
+  assert.doesNotMatch(h.screen(), /discarded/);
+  h.input("!", key.enter, key.up, key.enter, key.enter);
+  assert.deepEqual(await h.result, {
+    status: "answered",
+    answers: [
+      { id: "many", kind: "options", values: ["Alpha", "Beta"], other: " custom\nanswer !" },
+    ],
+  });
+});
+
+await test("Other can be deselected without losing listed choices", async (t) => {
+  const f = await uiFixture(t);
+  const h = await f.start(multipleWithOther);
+  h.input(" ", key.down, key.down, " ", "extra", key.enter, key.up, key.enter, key.left);
+  h.input(key.down, key.down, " ");
+  assert.match(h.screen(), /\[ \] Other/);
+  assert.match(h.screen(), /\[x\] Alpha/);
+  h.input(key.up, key.enter);
+  assert.doesNotMatch(h.screen(), /Other|extra/);
   h.input(key.enter);
   assert.deepEqual(await h.result, {
     status: "answered",
-    answers: [{ id: "many", kind: "other", value: "custom\nanswer" }],
+    answers: [{ id: "many", kind: "options", values: ["Alpha"] }],
   });
-  const cancel = await f.start(items);
-  cancel.input(" ", key.enter, key.escape);
+});
+
+await test("Other alone is valid in multiple selection, but deselecting it cannot save an empty answer", async (t) => {
+  const f = await uiFixture(t);
+  const h = await f.start(multipleWithOther);
+  h.input(key.down, key.down, " ", "only other", key.enter, key.up, key.enter, key.left);
+  assert.match(h.screen(), /\[ \] Alpha/);
+  assert.match(h.screen(), /\[x\] Other/);
+  h.input(" ", key.up, key.enter);
+  assert.match(h.screen(), /Select at least one option/);
+  h.input(key.down, " ", "replacement", key.enter, key.up, key.enter, key.enter);
+  assert.deepEqual(await h.result, {
+    status: "answered",
+    answers: [{ id: "many", kind: "other", value: "replacement" }],
+  });
+});
+
+await test("Other drafts require saving the question; editor escape, questionnaire cancel, and abort discard unsaved input", async (t) => {
+  const f = await uiFixture(t);
+  const h = await f.start(multipleWithOther);
+  h.input(" ", key.down, key.down, " ", "discarded", key.escape);
+  assert.match(h.screen(), /\[x\] Alpha/);
+  assert.match(h.screen(), /\[ \] Other/);
+  h.input(" ", "draft", key.enter, key.right);
+  assert.match(h.screen(), /Review • 0\/1 answered/);
+  h.input(key.left);
+  assert.match(h.screen(), /\[ \] Alpha/);
+  assert.match(h.screen(), /\[ \] Other/);
+  h.input(key.escape);
+  assert.deepEqual(await h.result, { status: "cancelled", answers: [] });
+
+  const cancel = await f.start(multipleWithOther);
+  cancel.input(" ", key.down, key.down, " ", "extra", key.enter, key.up, key.enter, key.escape);
   assert.deepEqual(await cancel.result, { status: "cancelled", answers: [] });
-  const abort = await f.start(items);
-  abort.input(" ", key.enter);
+  const abort = await f.start(multipleWithOther);
+  abort.input(" ", key.down, key.down, " ", "extra", key.enter, key.up, key.enter);
   abort.controller.abort();
   assert.deepEqual(await abort.result, { status: "cancelled", answers: [] });
 });

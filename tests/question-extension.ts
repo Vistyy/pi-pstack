@@ -54,7 +54,7 @@ export default function questionFixture(pi: ExtensionAPI) {
           ? [
               {
                 id: "custom",
-                question: "Choose listed options or write Other instead.",
+                question: "Choose listed options, add Other, or combine both.",
                 options: ["Docs", "Tests"],
                 allow_multiple: true,
               },
