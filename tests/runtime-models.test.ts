@@ -6,10 +6,12 @@ import test, { type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   contentText,
+  type FauxResponseFactory,
   fauxAssistantMessage,
   fauxProvider,
   fauxToolCall,
   getCurrentSystemPrompt,
+  type ImageContent,
   InMemoryCredentialStore,
   type ToolCall,
 } from "@earendil-works/pi-ai";
@@ -311,6 +313,161 @@ await test("mode and todo state follow native branches; full mode and configured
   assert.ok((await f.prompt("after native compaction")).includes(body));
 });
 
+await test("native mode activation keeps one model-facing body without rewriting skill history", async (t) => {
+  const f = await fixture(t);
+
+  const body = stripFrontmatter(
+    await readFile(join(root, "content/pstack/skills/poteto-mode/SKILL.md"), "utf8"),
+  ).trim();
+
+  const image: ImageContent = {
+    type: "image",
+    mimeType: "image/png",
+    data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
+  };
+
+  const projected: string[] = [];
+
+  const inspect: FauxResponseFactory = (context) => {
+    const user = context.messages.findLast((message) => message.role === "user");
+    assert.ok(user?.role === "user");
+    projected.push(contentText(user.content));
+
+    if (contentText(user.content).includes("TASK-ONE")) {
+      assert.ok(Array.isArray(user.content));
+      assert.deepEqual(
+        user.content.filter((part) => part.type === "image"),
+        [image],
+      );
+    }
+
+    assert.equal(getCurrentSystemPrompt(context.messages).split(body).length - 1, 1);
+
+    for (const message of context.messages.filter((message) => message.role === "user"))
+      assert.equal(contentText(message.content).includes(body), false);
+
+    return fauxAssistantMessage("mode inspected");
+  };
+
+  f.provider.setResponses(Array.from({ length: 4 }, () => inspect));
+  await f.session.prompt("/skill:poteto-mode TASK-ONE\nKeep this second line.", {
+    images: [image],
+  });
+  await f.session.prompt("subsequent task");
+  await f.session.prompt("/skill:poteto-mode TASK-TWO");
+  await f.session.prompt("/skill:poteto-mode");
+  const users = f.session.messages.filter((message) => message.role === "user");
+  assert.equal(users.filter((message) => contentText(message.content).includes(body)).length, 3);
+  assert.ok(
+    users.some((message) =>
+      contentText(message.content).endsWith("TASK-ONE\nKeep this second line."),
+    ),
+  );
+  assert.equal(f.provider.state.callCount, 4);
+  assert.equal(projected[0]?.endsWith("TASK-ONE\nKeep this second line."), true);
+  assert.equal(
+    projected[0]?.includes(join(root, "content/pstack/skills/poteto-mode/SKILL.md")),
+    true,
+  );
+  assert.equal(projected[1], "subsequent task");
+  assert.equal(projected[2]?.endsWith("TASK-TWO"), true);
+  assert.equal(
+    f.session.messages.filter(
+      (message) =>
+        message.role === "assistant" && contentText(message.content) === "mode inspected",
+    ).length,
+    4,
+  );
+  f.provider.setResponses([
+    fauxAssistantMessage("Fixture summary."),
+    fauxAssistantMessage("Fixture turn summary."),
+  ]);
+  await f.session.compact();
+  f.provider.setResponses([inspect]);
+  await f.session.prompt("after compaction");
+  const reply = f.session.messages.at(-1);
+  assert.ok(reply?.role === "assistant");
+  assert.equal(contentText(reply.content), "mode inspected");
+  assert.deepEqual(f.errors, []);
+});
+
+await test("mode projection preserves quoted task text and other skill sources", async (t) => {
+  const f = await fixture(t);
+  const path = join(root, "content/pstack/skills/poteto-mode/SKILL.md");
+  const body = stripFrontmatter(await readFile(path, "utf8")).trim();
+  await f.session.prompt("/poteto-mode on");
+
+  for (const input of [
+    `Please discuss this text.\n${body}`,
+    `<skill name="poteto-mode" location="/different/SKILL.md">\n${body}\n</skill>`,
+    `<skill name="poteto-mode" location="${path}">\nInstructions were provided separately.\n</skill>\n\nDiscuss this quoted task text.\n${body}`,
+  ]) {
+    let received = "";
+    f.provider.setResponses([
+      (context) => {
+        const user = context.messages.findLast((message) => message.role === "user");
+        assert.ok(user?.role === "user");
+        received = contentText(user.content);
+
+        return fauxAssistantMessage("text inspected");
+      },
+    ]);
+    await f.session.prompt(input);
+    assert.equal(received, input);
+  }
+});
+
+await test("queued skill activation keeps its instructions until the system mode is available", async (t) => {
+  const f = await fixture(t);
+
+  const body = stripFrontmatter(
+    await readFile(join(root, "content/pstack/skills/poteto-mode/SKILL.md"), "utf8"),
+  ).trim();
+
+  const started = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  t.after(() => release.resolve());
+  f.provider.setResponses([
+    async () => {
+      started.resolve();
+      await release.promise;
+
+      return fauxAssistantMessage("initial work complete");
+    },
+    (context) => {
+      assert.equal(getCurrentSystemPrompt(context.messages).includes(body), false);
+      const user = context.messages.findLast((message) => message.role === "user");
+      assert.ok(user?.role === "user");
+      assert.ok(contentText(user.content).includes(body));
+      assert.ok(contentText(user.content).endsWith("QUEUED-MODE-TASK"));
+
+      return fauxAssistantMessage("queued instructions verified");
+    },
+  ]);
+  const running = f.session.prompt("ordinary work before mode activation");
+  await started.promise;
+  await f.session.followUp("/skill:poteto-mode QUEUED-MODE-TASK");
+  release.resolve();
+  await running;
+  const queued = f.session.messages.at(-1);
+  assert.ok(queued?.role === "assistant");
+  assert.equal(contentText(queued.content), "queued instructions verified");
+  f.provider.setResponses([
+    (context) => {
+      assert.equal(getCurrentSystemPrompt(context.messages).split(body).length - 1, 1);
+
+      for (const message of context.messages.filter((message) => message.role === "user"))
+        assert.equal(contentText(message.content).includes(body), false);
+
+      return fauxAssistantMessage("subsequent system mode verified");
+    },
+  ]);
+  await f.session.prompt("a new turn");
+  const subsequent = f.session.messages.at(-1);
+  assert.ok(subsequent?.role === "assistant");
+  assert.equal(contentText(subsequent.content), "subsequent system mode verified");
+});
+
 await test("print aliases emit native extension errors rather than dropping work silently", async (t) => {
   const f = await fixture(t);
   await f.session.bindExtensions({
@@ -338,11 +495,13 @@ await test("RPC convenience commands dispatch one expanded native skill turn", a
     ["/poteto-mode investigate fixture", "poteto-mode"],
   ] as const) {
     let userInput = "";
+    let system = "";
     f.provider.setResponses([
       (context) => {
         const user = context.messages.findLast((message) => message.role === "user");
         assert.ok(user?.role === "user");
         userInput = contentText(user.content);
+        system = getCurrentSystemPrompt(context.messages);
 
         return fauxAssistantMessage("fixture complete");
       },
@@ -369,6 +528,12 @@ await test("RPC convenience commands dispatch one expanded native skill turn", a
     await f.session.prompt(command);
     await ended;
     assert.ok(userInput.startsWith(`<skill name="${skill}"`));
+
+    if (skill === "poteto-mode") {
+      assert.match(system, /# Poteto mode/);
+      assert.doesNotMatch(userInput, /# Poteto mode/);
+      assert.ok(userInput.endsWith("investigate fixture"));
+    }
   }
 
   assert.equal(f.provider.state.callCount, 2);

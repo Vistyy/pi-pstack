@@ -30,6 +30,10 @@ Real targets use `provider/model:thinking`. Cursor slugs remain source defaults,
 
 `/poteto-mode on` and `/poteto-mode off` change branch-local mode state. The current Pi session branch owns that state; there is no separate mode cache to restore. `/poteto-mode <task>` expands the packaged skill in interactive and RPC sessions. For print/JSON execution, use `/skill:poteto-mode <task>` directly. Enabled parent sessions receive the full generated mode on each prompt, including after native compaction.
 
+When the effective system prompt already supplies the full mode, model-facing context replaces matching copies inside this package's native skill blocks with a short reference. Task text, images, skill locations, and other skills are preserved. Saved history and native compaction inputs are not rewritten. Queued activation retains the native skill body until a system copy is available. Poteto child profiles use their injected mode rather than being instructed to read the same file again.
+
+Run `python3 scripts/verify-mode-loading.py` for the isolated normal Pi check. It captures scripted-provider requests for direct, convenience, repeated, and queued activation, subsequent prompts, and compaction. Evidence is retained under `.work/mode-loading-verification/`; it does not measure billing or autonomous adherence to the instructions.
+
 ## Questions
 
 `pstack_question` presents one question at a time in Pi's terminal UI. Each question offers single-choice options and an **Other** multiline editor. Outside the Other editor, use ←/→ to browse freely, including unanswered questions; Enter saves an answer and advances. Page Up/Down scrolls text rather than changing questions. The final review marks unanswered questions and requires every answer before submission. Cancellation or an aborted call discards the questionnaire's answers; only explicit submission returns them to the agent.

@@ -447,7 +447,7 @@ export default (pi) => {
   assert.ok(potetoResult?.role === "toolResult" && !potetoResult.isError);
   assert.ok(
     systemText.includes(
-      "# Poteto subagent\n\nYou are operating as poteto-mode's full agent style. Read the `poteto-mode` skill's `SKILL.md` in full before doing any work, including its inline Principles index. Navigate to a leaf `principle-*` skill whenever you apply that principle.",
+      "# Poteto subagent\n\nYou are operating as poteto-mode's full agent style. The full `poteto-mode` skill, including its inline Principles index, is supplied in your system prompt. Follow it in full before doing any work. Navigate to a leaf `principle-*` skill whenever you apply that principle.",
     ),
   );
   assert.doesNotMatch(systemText, /Poteto assignment/);

@@ -463,6 +463,10 @@ for (const profile of ["poteto-agent", "Comment Sicko"] as const) {
     const f = await childFixture(t);
     const filename = profile === "poteto-agent" ? "poteto-agent.md" : "comment-sicko.md";
 
+    const mode = stripFrontmatter(
+      await readFile(join(packageRoot, "content/pstack/skills/poteto-mode/SKILL.md"), "utf8"),
+    ).trim();
+
     const identity = stripFrontmatter(
       await readFile(join(packageRoot, "content/pstack/agents", filename), "utf8"),
     ).trim();
@@ -470,6 +474,10 @@ for (const profile of ["poteto-agent", "Comment Sicko"] as const) {
     f.nested.setResponses(
       ["initial", "continued"].map((assignment) => (context) => {
         assert.ok(getCurrentSystemPrompt(context.messages).includes(identity));
+        assert.equal(
+          getCurrentSystemPrompt(context.messages).split(mode).length - 1,
+          profile === "poteto-agent" ? 1 : 0,
+        );
         const user = context.messages.findLast((item) => item.role === "user");
         assert.ok(user?.role === "user");
         assert.deepEqual(user.content, [{ type: "text", text: assignment }]);
