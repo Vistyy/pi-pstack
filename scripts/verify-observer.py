@@ -107,7 +107,6 @@ def launch(work):
     invocation = 'exec env ' + ' '.join(shlex.quote(f'{k}={v}') for k, v in env.items()) + ' ' + shlex.join(argv)
     tmux('new-session', '-d', '-s', TARGET, '-x', '128', '-y', '44', '-c', str(work), invocation)
     tmux('set-option', '-t', TARGET, 'remain-on-exit', 'on')
-    contains('Subagents')
     contains('(observer-fixture) root')
     capture(f'{work.name}-startup-{requests(work)}')
 
@@ -141,6 +140,8 @@ def run():
     key('Escape')
     absent('Native Pi transcript')
     assert requests(live) == before == 0
+    absent('Subagents')
+    capture('01b-empty-no-rail')
     command('observer-run')
     contains('1 running · 1 waiting', timeout=40)
     assert 'Failure needs attention' not in screen()
@@ -208,7 +209,7 @@ def run():
     absent('Lines ')
     key('Escape')
     absent('Native Pi transcript')
-    contains('None running')
+    absent('Subagents')
     count = requests(live)
     saved = transcripts(live)
     command('/subagents')
@@ -217,8 +218,8 @@ def run():
     absent('Native Pi transcript')
     assert requests(live) == count, 'Inspection triggered a model request'
     assert transcripts(live) == saved, 'Inspection changed a native transcript'
-    assert 'Failure needs attention' not in screen()
-    capture('12-settled-rail')
+    absent('Subagents')
+    capture('12-settled-no-rail')
     close_session()
 
     recovered = prepare('recovered')
@@ -249,6 +250,8 @@ def run():
     absent('Native Pi transcript')
     assert requests(recovered) == count, 'Inspecting recovered tasks started model work'
     assert transcripts(recovered) == saved, 'Inspecting recovered tasks rewrote history'
+    absent('Subagents')
+    capture('14b-interrupted-no-rail')
     before_resume = task_records(recovered)
     (recovered / 'release').touch()
     command('observer-resume')
@@ -262,6 +265,8 @@ def run():
     capture('16-resumed-transcript')
     key('Escape')
     absent('Native Pi transcript')
+    absent('Subagents')
+    capture('16b-resumed-no-rail')
     after_resume = task_records(recovered)
     assert set(after_resume) == set(before_resume), 'Resumption replaced task IDs'
     for task_id, before in before_resume.items():

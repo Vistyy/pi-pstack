@@ -35,10 +35,7 @@ function renderActivityRail(snapshot: Snapshot, theme: Theme, width: number) {
     return [truncateToWidth(theme.fg("error", snapshot.message), width)];
   const counts = activityCounts(snapshot.tasks);
 
-  const activity =
-    counts.running || counts.waiting
-      ? `${counts.running} running · ${counts.waiting} waiting`
-      : "None running";
+  const activity = `${counts.running} running · ${counts.waiting} waiting`;
 
   return [
     truncateToWidth(
@@ -313,16 +310,21 @@ export function installObserver(pi: ExtensionAPI, tasks: () => ObservedTask[]) {
       timer = undefined;
       const current = snapshot();
 
-      const stamp = JSON.stringify(
-        current.kind === "tasks" ? activityCounts(current.tasks) : current,
-      );
+      const counts = current.kind === "tasks" ? activityCounts(current.tasks) : undefined;
+      const stamp = JSON.stringify(counts ?? current);
 
       if (stamp !== previous) {
         previous = stamp;
-        context?.ui.setWidget("pstack-subagents", (_tui, theme) => ({
-          render: (width) => renderActivityRail(current, theme, width),
-          invalidate() {},
-        }));
+        const idle = counts !== undefined && counts.running === 0 && counts.waiting === 0;
+        context?.ui.setWidget(
+          "pstack-subagents",
+          idle
+            ? undefined
+            : (_tui, theme) => ({
+                render: (width) => renderActivityRail(current, theme, width),
+                invalidate() {},
+              }),
+        );
       }
 
       redraw?.();
