@@ -40,13 +40,23 @@ Question bodies support Pi's Markdown rendering, including tables and fenced tex
 
 `pstack_task` runs the source `generalPurpose`, `poteto-agent`, and `Comment Sicko` assignments. Each child starts with its own conversation, project `AGENTS.md` context, and selected model/thinking. Ambient system-prompt overrides, prompt templates, and skill catalogs are not inherited. Poteto children receive the full source mode; ordinary children do not inherit the parent's Poteto mode or conversation.
 
-Foreground calls return their results and can run in parallel. Background calls return an ID and deliver completion automatically. A child awaiting its own children remains active until their results and its subsequent response settle. Resuming an eligible ID preserves the child's conversation and configuration. `pstack_tasks` lists, inspects, and cancels owned children; transcripts support inspection without retaining every intermediate tool result in the parent context.
+Foreground calls return their results and can run in parallel. Background calls return an ID and deliver completion automatically. A child awaiting its own children remains active until their results and its subsequent response settle. Resuming an eligible ID preserves the child's conversation and configuration. `pstack_tasks` returns a compact list, inspects a child's saved result and transcript path, or cancels owned children. Full child transcripts do not enter the parent context unless requested.
 
 The root can delegate to children, and children to grandchildren; grandchildren cannot delegate further. Read-only assignments restrict tools and preserve that restriction through descendants. They are not operating-system sandboxes. Writable children reload the file-backed extensions supplying the parent's active tools, including configured integrations for workflows such as `why`. Read-only children do not load those integration extensions. The supported main host is normal Pi with file-backed extensions, not arbitrary SDK-embedded applications.
 
 Child sessions run in the parent's process. They share the filesystem and use the supplied working directory. Candidate worktrees or directories must be prepared and managed by the PStack workflow, not by the executor. Cancellation does not undo external effects or edits.
 
-Children belong to the live parent branch. Normal exit, reload, or starting branch navigation cancels active owned work and prevents late results from entering another conversation. Navigation cancellation or an extension veto does not disable subsequent delegation, but does not revive the cancelled children. Extension startup and shutdown hooks are awaited; an uncooperative integration hook can delay teardown in this shared process. Continuation is not a cross-session job-recovery mechanism. Transcripts may remain for inspection, but there is no persistent worker service or crash-recovery guarantee.
+Children belong to their owning parent's saved branch. Normal exit, reload, or starting branch navigation interrupts active work and prevents late results from entering another conversation. Navigation cancellation does not restart interrupted children. Extension startup and shutdown hooks are awaited. An uncooperative integration hook can delay teardown.
+
+### Recovery
+
+Reopening the same parent session restores saved task IDs, assignments, configuration, outcomes, and transcript references. It does not start child execution or trigger a parent turn. A different parent session cannot resume these IDs. Tasks created before task-record persistence was available do not gain recovery metadata retroactively.
+
+The next user-initiated turn receives a compact notice of interrupted tasks and unreceived results. Extension-origin turns do not consume the notice. Recovery information already present in the saved model context is not injected again. Normal task execution receives no additional inventory or status turns.
+
+The parent uses `pstack_tasks` to inspect saved results and `pstack_task` with `resume` to continue a saved conversation. Resumption retains the selected model, profile, working directory, and tool plan. An unavailable model or missing initialized transcript causes an error rather than a fallback or a replacement conversation. Explicitly cancelled tasks remain cancelled until an explicit resume request.
+
+Recovery uses native Pi session files, not a database or a persistent worker service. It preserves saved message boundaries, not an execution stack or partial streamed output. A hard crash can leave spawned tool processes running. The parent or resumed child must reconcile actual effects before repeating interrupted work. Power-loss durability and exactly-once external effects are not guaranteed.
 
 ### Child tool exclusions
 

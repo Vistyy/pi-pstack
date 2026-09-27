@@ -1,5 +1,6 @@
-import { readFile, stat } from "node:fs/promises";
-import { isAbsolute, join } from "node:path";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { dirname, isAbsolute, join } from "node:path";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import {
   type AgentSession,
@@ -17,6 +18,7 @@ import {
 import { Type } from "typebox";
 import { Check } from "typebox/value";
 import { resolveTarget } from "./models.js";
+import type { ToolPlan } from "./task-record.js";
 
 export type Profile = "generalPurpose" | "poteto-agent" | "Comment Sicko";
 
@@ -129,12 +131,43 @@ function toolPlan(pi: ExtensionAPI, readonly: boolean, excluded: ReadonlySet<str
   };
 }
 
+type ChildSessionConfig = {
+  cwd: string;
+  readonly: boolean;
+  selection: Selection;
+  transcript: string;
+  sessionId: string | undefined;
+  plan: ToolPlan | undefined;
+};
+
+async function openTranscript(
+  config: Pick<ChildSessionConfig, "cwd" | "transcript" | "sessionId">,
+) {
+  if (!existsSync(config.transcript)) {
+    if (config.sessionId !== undefined)
+      throw new Error(`Saved child transcript is missing: ${config.transcript}`);
+    await mkdir(dirname(config.transcript), { recursive: true });
+    await writeFile(config.transcript, "", { flag: "wx" });
+  }
+
+  const manager = SessionManager.open(config.transcript, undefined, config.cwd);
+
+  if (config.sessionId !== undefined && manager.getSessionId() !== config.sessionId)
+    throw new Error(`Saved child transcript identity changed: ${config.transcript}`);
+
+  return manager;
+}
+
 export async function createChildSession(
   pi: ExtensionAPI,
   ctx: ExtensionContext,
-  config: { cwd: string; readonly: boolean; selection: Selection },
+  config: ChildSessionConfig,
   factory: ExtensionFactory,
-  lifetime: { check: () => void; attach: (session: AgentSession) => void },
+  lifetime: {
+    check: () => void;
+    attach: (session: AgentSession) => void;
+    plan: (plan: ToolPlan) => void;
+  },
 ) {
   lifetime.check();
 
@@ -142,9 +175,10 @@ export async function createChildSession(
   lifetime.check();
   const agentDir = getAgentDir();
   const settings = SettingsManager.create(config.cwd, agentDir);
-  const excluded = await excludedChildTools(agentDir);
+  const excluded = config.plan?.excluded ?? (await excludedChildTools(agentDir));
   lifetime.check();
-  const plan = toolPlan(pi, config.readonly, new Set(excluded));
+  const plan = config.plan ?? { ...toolPlan(pi, config.readonly, new Set(excluded)), excluded };
+  lifetime.plan(plan);
 
   const modelRuntime = await ModelRuntime.create({
     authPath: join(agentDir, "auth.json"),
@@ -187,6 +221,9 @@ export async function createChildSession(
   await loader.reload();
   lifetime.check();
 
+  const manager = await openTranscript(config);
+  lifetime.check();
+
   const created = await createAgentSession({
     cwd: config.cwd,
     agentDir,
@@ -197,7 +234,7 @@ export async function createChildSession(
     thinkingLevel: config.selection.thinking,
     tools: plan.tools,
     excludeTools: excluded,
-    sessionManager: SessionManager.create(config.cwd),
+    sessionManager: manager,
   });
 
   lifetime.attach(created.session);

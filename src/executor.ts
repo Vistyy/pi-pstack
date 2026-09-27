@@ -1,19 +1,25 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
-import type {
-  AgentSession,
-  ExtensionAPI,
-  ExtensionContext,
-  ExtensionEvent,
+import {
+  type AgentSession,
+  type ExtensionAPI,
+  type ExtensionContext,
+  type ExtensionEvent,
+  SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
+import { type ConfigureRuntime, createChildSession, selectModel } from "./child-session.js";
 import {
-  type ConfigureRuntime,
-  createChildSession,
-  type Profile,
-  type Selection,
-  selectModel,
-} from "./child-session.js";
+  type Configuration,
+  cancelSavedChildren,
+  type Outcome,
+  recoveryType,
+  resultReceived,
+  type TaskRecord,
+  type ToolPlan,
+  taskRecords,
+  taskRecordType,
+} from "./task-record.js";
 
 const TaskInput = Type.Object(
   {
@@ -62,7 +68,7 @@ const TaskInput = Type.Object(
     resume: Type.Optional(
       Type.String({
         description:
-          "ID of an idle owned child to continue. Retains conversation, profile, model, working directory, and read-only configuration; these cannot change on resume. Start a new child for an independent assignment. Cannot steer an active child or resume across parent-session restarts.",
+          "ID of an idle owned child to continue. Retains conversation, profile, model, working directory, and read-only configuration; these cannot change on resume. Start a new child for an independent assignment. Cannot steer an active child. Saved children can be explicitly resumed after reopening their owning parent session. Reconcile interrupted tool effects before repeating work.",
       }),
     ),
   },
@@ -71,9 +77,7 @@ const TaskInput = Type.Object(
 
 type Request = Static<typeof TaskInput>;
 
-type Status = "running" | "cancelling" | "completed" | "failed" | "cancelled";
-
-type Configuration = { profile: Profile; cwd: string; readonly: boolean; selection: Selection };
+type Status = Outcome["status"] | "cancelling";
 
 type Notify = (content: string) => Promise<void>;
 
@@ -93,12 +97,82 @@ class TaskScope {
   readonly deliveries = new Set<Promise<void>>();
   active = true;
   deliveryError: Error | undefined;
+  private journal: { pi: ExtensionAPI; ctx: ExtensionContext } | undefined;
+  private restored = false;
+  private recoveryReported = false;
+  interrupted = false;
+  readonly recovered = new Set<string>();
 
   constructor(
     readonly depth: number,
     readonly readonly: boolean,
     readonly notify: Notify,
   ) {}
+
+  bind(pi: ExtensionAPI, ctx: ExtensionContext) {
+    this.journal = { pi, ctx };
+
+    if (this.restored) return;
+
+    for (const record of taskRecords(ctx.sessionManager)) {
+      if (this.depth >= 2 || (this.readonly && !record.config.readonly))
+        throw new Error("Saved child violates its owner's delegation policy");
+      this.children.set(record.id, new ChildTask(this, record.config, record));
+      this.recovered.add(record.id);
+    }
+
+    this.restored = true;
+  }
+
+  record(data: Omit<TaskRecord, "owner" | "version">) {
+    if (!this.journal) throw new Error("Task owner is not initialized");
+    this.journal.pi.appendEntry(taskRecordType, {
+      ...data,
+      version: 1,
+      owner: this.journal.ctx.sessionManager.getSessionId(),
+    });
+  }
+
+  recovery() {
+    if (this.recoveryReported || !this.journal) return;
+    const entries = this.journal.ctx.sessionManager.getBranch();
+
+    const tasks = this.children
+      .values()
+      .filter((child) => this.recovered.has(child.id))
+      .filter(
+        (child) =>
+          child.status === "interrupted" ||
+          ((child.status === "completed" || child.status === "failed") &&
+            !resultReceived(entries, child.id, child.attempt)),
+      )
+      .map((child) => ({
+        id: child.id,
+        status: child.status,
+        attempt: child.attempt,
+        assignment: child.assignment.slice(0, 160),
+      }))
+      .toArray();
+
+    this.recoveryReported = true;
+
+    if (tasks.length === 0 && !this.interrupted) return;
+    const content = `PStack recovery. No work was restarted. Inspect saved tasks with pstack_tasks; resume only when needed. Interrupted tools may have completed or still be running. Reconcile their actual effects before repeating them. Completed or failed tasks listed here have results not yet received in this branch.\n${JSON.stringify({ interrupted: this.interrupted, tasks })}`;
+
+    if (
+      this.journal.ctx.sessionManager
+        .buildContextEntries()
+        .some(
+          (entry) =>
+            entry.type === "custom_message" &&
+            entry.customType === recoveryType &&
+            entry.content === content,
+        )
+    )
+      return;
+
+    return { customType: recoveryType, content, display: false };
+  }
 
   check() {
     if (!this.active) throw new Error("Owner session is closing or cancelled");
@@ -143,23 +217,30 @@ class TaskScope {
     }
   }
 
-  async cancelChildren() {
+  async cancelChildren(reason: "cancelled" | "interrupted" = "cancelled") {
     this.active = false;
-    await Promise.all([...this.children.values()].map((child) => child.cancel()));
+    await Promise.all([...this.children.values()].map((child) => child.cancel(reason)));
     await Promise.all([...this.deliveries]);
   }
 
   async dispose() {
-    await this.cancelChildren();
+    await this.cancelChildren("interrupted");
     await Promise.all([...this.children.values()].map((child) => child.dispose()));
     this.children.clear();
   }
 }
 
 class ChildTask {
-  readonly id = randomUUID();
+  readonly id: string;
+  readonly transcript: string;
+  readonly sourceCallId: string;
   readonly scope: TaskScope;
-  status: Status = "completed";
+  status: Status = "interrupted";
+  attempt = 0;
+  assignment = "";
+  private sessionId: string | undefined;
+  private plan: ToolPlan | undefined;
+  private cancellationOutcome: "cancelled" | "interrupted" = "cancelled";
   session: AgentSession | undefined;
   work: Promise<void> = Promise.resolve();
   output: string | undefined;
@@ -173,7 +254,29 @@ class ChildTask {
   constructor(
     readonly parent: TaskScope,
     readonly config: Configuration,
+    record?: TaskRecord,
+    sourceCallId = "",
   ) {
+    this.id = record?.id ?? randomUUID();
+    const transcript = record?.transcript ?? SessionManager.create(config.cwd).getSessionFile();
+
+    if (transcript === undefined) throw new Error("Child transcript path is unavailable");
+    this.transcript = transcript;
+    this.sourceCallId = record?.sourceCallId ?? sourceCallId;
+
+    if (record) {
+      this.status = record.outcome.status === "running" ? "interrupted" : record.outcome.status;
+      this.attempt = record.attempt;
+      this.assignment = record.assignment;
+      this.prompt = record.prompt;
+      this.sessionId = record.sessionId;
+      this.plan = record.plan;
+
+      if (record.outcome.status === "completed") this.output = record.outcome.output;
+
+      if (record.outcome.status === "failed") this.error = record.outcome.error;
+    }
+
     this.scope = new TaskScope(parent.depth + 1, config.readonly, async (content) => {
       if (!this.session) throw new Error("Child session is not initialized");
 
@@ -181,25 +284,53 @@ class ChildTask {
         await this.session.sendUserMessage(content, { deliverAs: "followUp" });
       else await this.session.sendCustomMessage(message(content), delivery);
     });
+    this.scope.interrupted = record !== undefined && this.status === "interrupted";
   }
 
   get busy() {
     return this.status === "running" || this.status === "cancelling";
   }
 
-  summary() {
+  private save() {
+    const outcome: Outcome =
+      this.status === "completed"
+        ? { status: "completed", output: this.output ?? "" }
+        : this.status === "failed"
+          ? { status: "failed", error: this.error ?? "Child failed" }
+          : { status: this.status === "cancelling" ? this.cancellationOutcome : this.status };
+
+    const record: Omit<TaskRecord, "owner" | "version"> = {
+      id: this.id,
+      sourceCallId: this.sourceCallId,
+      config: this.config,
+      transcript: this.transcript,
+      attempt: this.attempt,
+      prompt: this.prompt,
+      assignment: this.assignment,
+      outcome,
+    };
+
+    if (this.sessionId !== undefined) record.sessionId = this.sessionId;
+
+    if (this.plan !== undefined) record.plan = this.plan;
+    this.parent.record(record);
+  }
+
+  summary(detailed = true) {
     return {
       id: this.id,
       status: this.status,
-      prompt: this.prompt,
+      prompt: detailed ? this.prompt : this.prompt.slice(0, 160),
+      attempt: this.attempt,
+      sourceCallId: this.sourceCallId,
       profile: this.config.profile,
-      model: this.config.selection.selector,
-      thinking: this.config.selection.thinking,
+      model: this.config.selector,
+      thinking: this.config.selector.slice(this.config.selector.lastIndexOf(":") + 1),
       cwd: this.config.cwd,
       readonly: this.config.readonly,
-      transcript: this.session?.sessionFile,
-      output: this.output,
-      error: this.error,
+      transcript: this.transcript,
+      output: detailed ? this.output : undefined,
+      error: detailed ? this.error : this.error?.slice(0, 160),
     };
   }
 
@@ -221,6 +352,9 @@ class ChildTask {
 
     if (this.disposed)
       throw new Error("Child session was disposed after startup failure; start a new child");
+
+    if (this.attempt === 0) this.assignment = prompt;
+    this.attempt++;
     this.status = "running";
     this.cancelled = false;
     this.cancellation = undefined;
@@ -231,8 +365,10 @@ class ChildTask {
     this.prompt = prompt;
     const turn = Symbol();
     this.turn = turn;
+    this.save();
     progress();
     this.work = this.execute(prompt, initialize).then(() => {
+      this.save();
       progress();
 
       if (background && !this.cancelled) {
@@ -252,7 +388,13 @@ class ChildTask {
       const session = this.session ?? (await initialize());
       ready = true;
       this.check();
-      await session.prompt(prompt);
+
+      const request =
+        prompt === this.assignment || session.messages.some((item) => item.role === "user")
+          ? prompt
+          : `Original assignment:\n${this.assignment}\n\nCurrent request:\n${prompt}`;
+
+      await session.prompt(request);
       this.readOutput(session);
       await this.scope.settle(session);
       this.check();
@@ -260,11 +402,14 @@ class ChildTask {
       this.status = "completed";
     } catch (error) {
       this.error = String(error);
-      await Promise.all([this.scope.cancelChildren(), this.session?.abort()]);
+      await Promise.all([
+        this.scope.cancelChildren(this.cancelled ? this.cancellationOutcome : "cancelled"),
+        this.session?.abort(),
+      ]);
 
       if (!ready && this.session) await this.disposeSession();
 
-      this.status = this.cancelled ? "cancelled" : "failed";
+      this.status = this.cancelled ? this.cancellationOutcome : "failed";
     }
   }
 
@@ -281,13 +426,29 @@ class ChildTask {
       .join("");
   }
 
-  cancel(): Promise<void> {
-    if (!this.busy) return Promise.resolve();
+  cancel(reason: "cancelled" | "interrupted" = "cancelled"): Promise<void> {
+    if (!this.busy) {
+      if (reason === "cancelled" && this.status === "interrupted") {
+        this.status = "cancelled";
+        this.save();
+        cancelSavedChildren({
+          transcript: this.transcript,
+          sessionId: this.sessionId,
+          depth: this.scope.depth,
+        });
+      }
+
+      return Promise.resolve();
+    }
+
+    if (this.cancellation) return this.cancellation;
     this.cancelled = true;
+    this.cancellationOutcome = reason;
     this.status = "cancelling";
+    this.save();
     this.scope.active = false;
-    this.cancellation ??= Promise.resolve().then(async () => {
-      await Promise.all([this.scope.cancelChildren(), this.session?.abort()]);
+    this.cancellation = Promise.resolve().then(async () => {
+      await Promise.all([this.scope.cancelChildren(reason), this.session?.abort()]);
       await this.work;
     });
 
@@ -306,7 +467,8 @@ class ChildTask {
   }
 
   async dispose() {
-    await this.cancel();
+    await this.cancel("interrupted");
+    await this.work;
     await this.scope.dispose();
     await this.disposeSession();
   }
@@ -315,7 +477,13 @@ class ChildTask {
     return createChildSession(
       pi,
       ctx,
-      this.config,
+      {
+        ...this.config,
+        selection: selectModel(this.config.selector, ctx),
+        transcript: this.transcript,
+        sessionId: this.sessionId,
+        plan: this.plan,
+      },
       (api) => {
         configure(api, { profile: this.config.profile });
         installExecutor(api, configure, this.scope);
@@ -324,6 +492,12 @@ class ChildTask {
         check: () => this.check(),
         attach: (session) => {
           this.session = session;
+          this.sessionId = session.sessionManager.getSessionId();
+          this.save();
+        },
+        plan: (plan) => {
+          this.plan = plan;
+          this.save();
         },
       },
     );
@@ -345,7 +519,7 @@ function configuration(request: Request, scope: TaskScope, ctx: ExtensionContext
     profile,
     readonly,
     cwd: resolve(ctx.cwd, request.cwd ?? "."),
-    selection: selectModel(request.model, ctx),
+    selector: selectModel(request.model, ctx).selector,
   };
 }
 
@@ -359,15 +533,13 @@ function resume(scope: TaskScope, request: Request, ctx: ExtensionContext) {
     (request.subagent_type !== undefined && request.subagent_type !== config.profile) ||
     (request.readonly !== undefined && request.readonly !== config.readonly) ||
     (request.cwd !== undefined && resolve(ctx.cwd, request.cwd) !== config.cwd) ||
-    (request.model !== undefined &&
-      selectModel(request.model, ctx).selector !== config.selection.selector);
+    (request.model !== undefined && selectModel(request.model, ctx).selector !== config.selector);
 
   if (changed) throw new Error("Resume cannot change child configuration");
 
   return child;
 }
 
-/** Owns one live parent's children; branch replacement retires the entire scope. */
 export function installExecutor(
   pi: ExtensionAPI,
   configure: ConfigureRuntime,
@@ -383,6 +555,7 @@ export function installExecutor(
 
   let scope = owned ?? fresh();
   let shutdown = false;
+  let userInput = false;
 
   const retire = async (_event: ExtensionEvent, ctx: ExtensionContext) => {
     const previous = scope;
@@ -407,6 +580,20 @@ export function installExecutor(
       shutdown = false;
       scope = fresh();
     }
+
+    scope.bind(pi, ctx);
+  });
+  pi.on("session_tree", (_event, ctx) => scope.bind(pi, ctx));
+  pi.on("input", (event) => {
+    userInput = event.source !== "extension";
+  });
+  pi.on("before_agent_start", (_event, ctx) => {
+    if (!userInput) return undefined;
+    userInput = false;
+    scope.bind(pi, ctx);
+    const recovered = scope.recovery();
+
+    return recovered ? { message: recovered } : undefined;
   });
 
   const progress = (owner: TaskScope, ctx: ExtensionContext) => {
@@ -419,16 +606,17 @@ export function installExecutor(
     name: "pstack_tasks",
     label: "PStack tasks",
     description:
-      "List this parent's children, inspect an exact child and its transcript/result, or cancel that child and its descendants. Cancellation does not undo edits. Transcripts are inspection evidence, not durable jobs. Completion reports execution, not acceptance of its work.",
+      "List this parent's children, inspect an exact child and its transcript/result, or cancel that child and its descendants. Cancellation does not undo edits. Lists are compact; inspect returns the saved result and transcript path. Reopened sessions restore owned tasks without starting them. Completion reports execution, not acceptance of its work.",
     parameters: Type.Object({
       action: Type.Union([Type.Literal("list"), Type.Literal("inspect"), Type.Literal("cancel")]),
       id: Type.Optional(Type.String()),
     }),
     async execute(_id, params, _signal, _update, ctx) {
       const owner = scope;
+      owner.bind(pi, ctx);
 
       if (params.action === "list")
-        return textResult([...owner.children.values()].map((child) => child.summary()));
+        return textResult([...owner.children.values()].map((child) => child.summary(false)));
       const child = owner.require(params.id ?? "");
 
       if (params.action === "cancel") await child.cancel();
@@ -442,17 +630,18 @@ export function installExecutor(
     label: "PStack task",
     executionMode: "parallel",
     description:
-      "Run or resume a PStack child with its own conversation. Children belong to the live parent branch: starting branch navigation, reloading, or exiting stops them; cancelling navigation does not revive them. Root and direct children can delegate; grandchildren cannot. While required background results are outstanding, end the turn without a final answer and continue when results arrive; do not poll in a waiting loop.",
+      "Run or resume a PStack child with its own conversation. Children belong to their parent's saved branch. Navigation, reload, or exit interrupts active execution. Reopening restores records only; explicitly resume an interrupted ID after reconciling prior tool effects. Root and direct children can delegate; grandchildren cannot. While required background results are outstanding, end the turn without a final answer and continue when results arrive; do not poll in a waiting loop.",
     parameters: TaskInput,
     async execute(_id, request, signal, _update, ctx) {
       signal?.throwIfAborted();
       const owner = scope;
+      owner.bind(pi, ctx);
       owner.check();
 
       const child =
         request.resume !== undefined
           ? resume(owner, request, ctx)
-          : new ChildTask(owner, configuration(request, owner, ctx));
+          : new ChildTask(owner, configuration(request, owner, ctx), undefined, _id);
 
       owner.children.set(child.id, child);
       const background = request.run_in_background ?? child.config.profile === "poteto-agent";
@@ -479,7 +668,9 @@ export function installExecutor(
       }
 
       if (child.status !== "completed")
-        throw new Error(`Child ${child.id} ${child.status}: ${child.error ?? "cancelled"}`);
+        throw new Error(
+          `Child ${child.id} attempt ${child.attempt} ${child.status}: ${child.error ?? "cancelled"}`,
+        );
 
       return textResult(child.summary());
     },
