@@ -1,0 +1,137 @@
+import json
+import pathlib
+import shlex
+import subprocess
+import tempfile
+import time
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+work = ROOT / '.work' / 'question-verification'
+work.mkdir(parents=True, exist_ok=True)
+directory = pathlib.Path(tempfile.mkdtemp(prefix='run-', dir=work))
+agent = directory / 'agent'
+agent.mkdir()
+(agent / 'settings.json').write_text(json.dumps({'retry': {'enabled': False}, 'compaction': {'enabled': False}}))
+socket = f'pstack-questions-{directory.name}'
+print(f'Evidence: {directory}', flush=True)
+
+def tmux(*args):
+    return subprocess.check_output(['tmux', '-L', socket, *args], text=True, stderr=subprocess.PIPE)
+
+def screen():
+    return tmux('capture-pane', '-p', '-t', 'questions')
+
+def wait_text(text):
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        output = screen()
+        if text in output:
+            return output
+        time.sleep(0.05)
+    raise AssertionError(f'No {text!r} in terminal:\n{output}')
+
+def keys(*values):
+    for value in values:
+        tmux('send-keys', '-t', 'questions', value)
+    time.sleep(0.05)
+
+def text(value):
+    tmux('send-keys', '-l', '-t', 'questions', value)
+
+def command(value):
+    text(value)
+    keys('Enter')
+
+def capture(name):
+    (directory / f'{name}.txt').write_text(screen())
+    (directory / f'{name}.ansi').write_text(tmux('capture-pane', '-e', '-p', '-t', 'questions'))
+
+def outcomes(count):
+    path = directory / 'outcomes.jsonl'
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        if path.exists():
+            values = [json.loads(line) for line in path.read_text().splitlines()]
+            if len(values) == count:
+                return values
+        time.sleep(0.05)
+    raise AssertionError(f'Expected {count} submitted outcomes')
+
+args = ['node', str(ROOT / 'node_modules/@earendil-works/pi-coding-agent/dist/cli.js'),
+        '--offline', '--session', str(directory / 'session.jsonl'),
+        '--no-extensions', '--no-skills', '--no-themes', '--no-context-files', '--no-prompt-templates',
+        '-e', str(ROOT / 'tests/question-extension.ts'), '-e', str(ROOT / 'extensions/index.ts'),
+        '--provider', 'question-fixture', '--model', 'root', '--thinking', 'off']
+env = {'PI_CODING_AGENT_DIR': str(agent), 'PSTACK_QUESTION_DIR': str(directory), 'PI_OFFLINE': '1'}
+invocation = 'exec env ' + ' '.join(shlex.quote(f'{key}={value}') for key, value in env.items()) + ' ' + shlex.join(args)
+tmux('new-session', '-d', '-s', 'questions', '-x', '128', '-y', '44', '-c', str(directory), invocation)
+try:
+    tmux('set-option', '-t', 'questions', 'remain-on-exit', 'on')
+    wait_text('(question-fixture) root')
+    command('questions-mixed')
+    wait_text('Question 1/2')
+    capture('01-single')
+    keys('Down', 'Enter')
+    wait_text('Multiple choices')
+    keys('Enter')
+    wait_text('Select at least one option')
+    tmux('resize-window', '-t', 'questions', '-x', '68', '-y', '18')
+    keys('PageDown', 'PageDown', 'PageDown')
+    wait_text('END OF BODY')
+    keys('Down', 'Down', 'Space', 'Up', 'Up', 'Space')
+    wait_text('[x] Correctness')
+    wait_text('[x] Performance')
+    capture('02-multiple-small-terminal')
+    keys('Enter')
+    wait_text('Review')
+    capture('03-review')
+    keys('Left')
+    wait_text('Question 2/2')
+    keys('Space', 'Down', 'Space', 'Enter')
+    wait_text('Review')
+    wait_text('[x] UX')
+    keys('Enter')
+    assert outcomes(1)[0] == {'status': 'answered', 'answers': [
+        {'id': 'storage', 'kind': 'option', 'value': 'Remote'},
+        {'id': 'areas', 'kind': 'options', 'values': ['UX', 'Performance']},
+    ]}
+    wait_text('Question fixture complete. questions-mixed')
+    tmux('resize-window', '-t', 'questions', '-x', '128', '-y', '44')
+    command('questions-other')
+    wait_text('Question 1/1')
+    keys('Space', 'Down', 'Down', 'Enter', 'Enter')
+    wait_text('Other cannot be blank')
+    text('custom first')
+    keys('C-j')
+    text('second')
+    keys('Enter')
+    wait_text('Other: custom first')
+    capture('04-other-review')
+    keys('Enter')
+    assert outcomes(2)[1] == {'status': 'answered', 'answers': [{'id': 'custom', 'kind': 'other', 'value': 'custom first\nsecond'}]}
+    wait_text('Question fixture complete. questions-other')
+    command('questions-cancel')
+    wait_text('Question 1/2')
+    keys('Enter')
+    wait_text('Question 2/2')
+    keys('Space', 'Escape')
+    assert outcomes(3)[2] == {'status': 'cancelled', 'answers': []}
+    wait_text('Question fixture complete. questions-cancel')
+    command('questions-abort')
+    wait_text('Question 1/2')
+    keys('Enter')
+    wait_text('Question 2/2')
+    keys('Space')
+    (directory / 'abort').write_text('abort this owned fixture')
+    assert outcomes(4)[3] == {'status': 'cancelled', 'answers': []}
+    capture('05-aborted')
+    command('/question-fixture-exit')
+    deadline = time.monotonic() + 15
+    while tmux('display-message', '-p', '-t', 'questions', '#{pane_dead}').strip() != '1':
+        assert time.monotonic() < deadline, 'Owned question fixture did not exit'
+        time.sleep(0.05)
+    assert tmux('display-message', '-p', '-t', 'questions', '#{pane_dead_status}').strip() == '0'
+finally:
+    capture('last-screen')
+    tmux('kill-server')
+print(json.dumps({'status': 'passed', 'directory': str(directory), 'cases': ['mixed', 'revision', 'resize', 'Other', 'cancel', 'abort']}))

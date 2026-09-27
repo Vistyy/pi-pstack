@@ -21,10 +21,16 @@ const QuestionsInput = Type.Object(
             description:
               "The complete question and relevant context in Markdown. Tables and fenced text diagrams are supported; keep diagrams narrow enough for a terminal. Put detailed option explanations here.",
           }),
+          allow_multiple: Type.Optional(
+            Type.Boolean({
+              description:
+                "Allow selecting multiple listed options. Other remains a separate free-text answer, not combined with listed choices.",
+            }),
+          ),
           options: Type.Array(Type.String({ minLength: 1, pattern: "\\S" }), {
             minItems: 1,
             description:
-              "Concise single-choice labels. The UI always adds an Other option for a multiline custom answer; do not add it yourself.",
+              "Concise option labels. The UI always adds an Other option for a multiline custom answer; do not add it yourself.",
           }),
         },
         { additionalProperties: false },
@@ -40,7 +46,7 @@ export function installQuestionTool(pi: ExtensionAPI): void {
     name: "pstack_question",
     label: "PStack questions",
     description:
-      "Ask one or more questions in the terminal with Markdown context, single-choice options, and a free-text Other answer. Users can revise answers before submitting the final review. Cancelled or unavailable requests supply no answers: never infer consent or choices. If unavailable, ask in the conversation and wait.",
+      "Ask one or more questions in the terminal with Markdown context, single-choice options by default, optional multiple selection, and a free-text Other answer. Users can revise answers before submitting the final review. Cancelled or unavailable requests supply no answers: never infer consent or choices. If unavailable, ask in the conversation and wait.",
     parameters: QuestionsInput,
     executionMode: "sequential",
     async execute(_id, params, signal, _update, ctx) {
@@ -48,6 +54,15 @@ export function installQuestionTool(pi: ExtensionAPI): void {
 
       if (new Set(params.questions.map((question) => question.id)).size !== params.questions.length)
         throw new Error("Question IDs must be unique.");
+
+      if (
+        params.questions.some(
+          (question) =>
+            question.allow_multiple === true &&
+            new Set(question.options).size !== question.options.length,
+        )
+      )
+        throw new Error("Multi-select option labels must be unique.");
 
       const outcome: QuestionOutcome =
         ctx.mode === "tui"
@@ -77,7 +92,12 @@ export function installQuestionTool(pi: ExtensionAPI): void {
 
       const text =
         outcome.status === "answered"
-          ? outcome.answers.map((answer) => `${answer.id}: ${answer.value}`).join("\n")
+          ? outcome.answers
+              .map(
+                (answer) =>
+                  `${answer.id}: ${answer.kind === "options" ? answer.values.join(", ") : answer.value}`,
+              )
+              .join("\n")
           : outcome.status === "cancelled"
             ? "Questionnaire cancelled; no answers submitted."
             : outcome.reason;

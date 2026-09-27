@@ -10,6 +10,32 @@ await test("question tool reports unavailable UI without answers and rejects inv
   const outcome: unknown = JSON.parse(unavailable.text);
   assert.partialDeepStrictEqual(outcome, { status: "unavailable", answers: [] });
 
+  const multiple = await f.call("pstack_question", {
+    questions: [{ ...question, allow_multiple: true }],
+  });
+
+  assert.equal(multiple.isError, false, multiple.text);
+  assert.partialDeepStrictEqual(JSON.parse(multiple.text), { status: "unavailable", answers: [] });
+
+  const repeated = await f.call("pstack_question", {
+    questions: [{ ...question, options: ["Local", "Local"], allow_multiple: true }],
+  });
+
+  assert.equal(repeated.isError, true);
+  assert.match(repeated.text, /Multi-select option labels must be unique/);
+
+  const singleRepeated = await f.call("pstack_question", {
+    questions: [{ ...question, options: ["Local", "Local"] }],
+  });
+
+  assert.equal(singleRepeated.isError, false);
+
+  const invalidFlag = await f.call("pstack_question", {
+    questions: [{ ...question, allow_multiple: "yes" }],
+  });
+
+  assert.equal(invalidFlag.isError, true);
+
   const empty = await f.call("pstack_question", { questions: [] });
   assert.equal(empty.isError, true);
   const duplicate = await f.call("pstack_question", { questions: [question, question] });

@@ -16,9 +16,18 @@ import {
   wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
 
-export type Question = { id: string; question: string; options: string[] };
+export type Question = {
+  id: string;
+  question: string;
+  options: string[];
+  allow_multiple?: boolean;
+};
 
-export type QuestionAnswer = { id: string; kind: "option" | "other"; value: string };
+type AnswerValue =
+  | { kind: "option" | "other"; value: string }
+  | { kind: "options"; values: [string, ...string[]] };
+
+export type QuestionAnswer = AnswerValue & { id: string };
 
 export type QuestionnaireResult =
   | { status: "answered"; answers: QuestionAnswer[] }
@@ -93,17 +102,28 @@ function createQuestionnaire(
     noMatch: (s: string) => theme.fg("warning", s),
   };
 
-  const pages = questions.map((question) => ({
-    question,
-    body: new Markdown(question.question, 0, 0, getMarkdownTheme()),
-    list: new SelectList(
+  const choices = new Set<number>();
+
+  const choiceList = (question: Question) =>
+    new SelectList(
       [
-        ...question.options.map((label, index) => ({ label, value: String(index) })),
+        ...question.options.map((label, index) => ({
+          label:
+            question.allow_multiple === true
+              ? `[${choices.has(index) ? "x" : " "}] ${label}`
+              : label,
+          value: String(index),
+        })),
         { label: "Other (write an answer)", value: "other" },
       ],
       Math.min(question.options.length + 1, 5),
       listTheme,
-    ),
+    );
+
+  const pages = questions.map((question) => ({
+    question,
+    body: new Markdown(question.question, 0, 0, getMarkdownTheme()),
+    list: choiceList(question),
   }));
 
   const editor = new Editor(tui, {
@@ -136,21 +156,32 @@ function createQuestionnaire(
     warning = "";
 
     if (page < pages.length) {
-      const { question, list } = current();
+      const entry = current();
+      const { question } = entry;
       const answer = answers.get(question.id);
+      choices.clear();
+
+      if (answer?.kind === "options") {
+        question.options.forEach((value, index) => {
+          if (answer.values.includes(value)) choices.add(index);
+        });
+      }
+
+      const first = answer?.kind === "options" ? answer.values[0] : (answer?.value ?? "");
       selected =
         answer?.kind === "other"
           ? question.options.length
-          : Math.max(0, question.options.indexOf(answer?.value ?? ""));
-      list.setSelectedIndex(selected);
+          : Math.max(0, question.options.indexOf(first));
+      entry.list = choiceList(question);
+      entry.list.setSelectedIndex(selected);
     }
 
     refresh();
   };
 
-  const save = (kind: QuestionAnswer["kind"], value: string) => {
+  const save = (answer: AnswerValue) => {
     const { question } = current();
-    answers.set(question.id, { id: question.id, kind, value });
+    answers.set(question.id, { id: question.id, ...answer });
     editing = false;
     editor.focused = false;
     selectPage(page + 1);
@@ -168,7 +199,7 @@ function createQuestionnaire(
       return;
     }
 
-    save("other", text);
+    save({ kind: "other", value: text });
   };
 
   const confirmChoice = () => {
@@ -179,11 +210,21 @@ function createQuestionnaire(
       editor.focused = focused;
       const answer = answers.get(question.id);
       editor.setText(answer?.kind === "other" ? answer.value : "");
+    } else if (question.allow_multiple === true) {
+      const [first, ...rest] = question.options.filter((_value, index) => choices.has(index));
+
+      if (first === undefined) {
+        warning = "Select at least one option";
+
+        return;
+      }
+
+      save({ kind: "options", values: [first, ...rest] });
     } else {
       const value = question.options[selected];
 
       if (value === undefined) throw new Error("No selected option.");
-      save("option", value);
+      save({ kind: "option", value });
     }
   };
 
@@ -196,7 +237,16 @@ function createQuestionnaire(
     if (keys.matches(data, "tui.select.down")) selected = (selected + 1) % count;
     list.setSelectedIndex(selected);
 
-    if (keys.matches(data, "tui.select.confirm")) confirmChoice();
+    const space = question.allow_multiple === true && matchesKey(data, Key.space);
+
+    if (space && selected === question.options.length) confirmChoice();
+    else if (space) {
+      if (choices.has(selected)) choices.delete(selected);
+      else choices.add(selected);
+      warning = "";
+      current().list = choiceList(question);
+      current().list.setSelectedIndex(selected);
+    } else if (keys.matches(data, "tui.select.confirm")) confirmChoice();
     refresh();
   };
 
@@ -285,6 +335,13 @@ function createQuestionnaire(
     questions.flatMap((question) => {
       const answer = answers.get(question.id);
 
+      if (answer?.kind === "options") {
+        return [
+          ...wrapTextWithAnsi(`${question.id}:`, width),
+          ...answer.values.flatMap((value) => wrapTextWithAnsi(`  [x] ${value}`, width)),
+        ];
+      }
+
       const value = answer
         ? `${answer.kind === "other" ? "Other: " : ""}${answer.value}`
         : "Unanswered";
@@ -294,16 +351,28 @@ function createQuestionnaire(
 
   const hint = (id: Parameters<typeof keys.getKeys>[0]) => keys.getKeys(id).join("/");
 
-  const help = () => {
+  const presentation = () => {
     const cancel = hint("tui.select.cancel");
 
-    if (editing)
-      return `${hint("tui.input.submit")} save & next • ${cancel} choices • ${hint("tui.input.newLine")} newline`;
-
     if (page === pages.length)
-      return `← questions • ${hint("tui.select.confirm")} Submit • ${cancel} cancel • PgUp/PgDn scroll text`;
+      return {
+        title: `Review • ${answers.size}/${questions.length} answered`,
+        help: `← questions • ${hint("tui.select.confirm")} Submit • ${cancel} cancel • PgUp/PgDn scroll text`,
+      };
+    const title = `Question ${page + 1}/${questions.length}`;
 
-    return `${hint("tui.select.up")}/${hint("tui.select.down")} choose • ${hint("tui.select.confirm")} answer & next • ←→ questions • PgUp/PgDn scroll text • ${cancel} cancel`;
+    if (editing)
+      return {
+        title: `${title} • Other`,
+        help: `${hint("tui.input.submit")} save & next • ${cancel} choices • ${hint("tui.input.newLine")} newline`,
+      };
+    const multiple = current().question.allow_multiple === true;
+    const action = multiple ? "Space toggle • Other replaces choices • " : "";
+
+    return {
+      title: `${title}${multiple ? " • Multiple choices" : ""}`,
+      help: `${hint("tui.select.up")}/${hint("tui.select.down")} choose • ${action}${hint("tui.select.confirm")} answer & next • ←→ questions • PgUp/PgDn scroll text • ${cancel} cancel`,
+    };
   };
 
   return {
@@ -347,11 +416,8 @@ function createQuestionnaire(
       const w = Math.max(1, width);
       const isReview = page === pages.length;
 
-      const title = isReview
-        ? `Review • ${answers.size}/${questions.length} answered`
-        : `Question ${page + 1}/${questions.length}${editing ? " • Other" : ""}`;
-
-      const helpLines = wrapTextWithAnsi(theme.fg("dim", help()), w);
+      const { title, help } = presentation();
+      const helpLines = wrapTextWithAnsi(theme.fg("dim", help), w);
       const budget = Math.max(1, tui.terminal.rows - 1 - helpLines.length - (warning ? 1 : 0));
       const lines = [theme.fg("accent", truncateToWidth(title, w))];
 

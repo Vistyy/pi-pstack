@@ -32,7 +32,7 @@ Real targets use `provider/model:thinking`. Cursor slugs remain source defaults,
 
 ## Questions
 
-`pstack_question` presents one question at a time in Pi's terminal UI. Each question offers single-choice options and an **Other** multiline editor. Outside the Other editor, use ←/→ to browse freely, including unanswered questions; Enter saves an answer and advances. Page Up/Down scrolls text rather than changing questions. The final review marks unanswered questions and requires every answer before submission. Cancellation or an aborted call discards the questionnaire's answers; only explicit submission returns them to the agent.
+`pstack_question` presents one question at a time in Pi's terminal UI. Questions default to single choice; set `allow_multiple: true` to select multiple listed options. **Other** saves a multiline free-text answer instead of listed choices. Outside the Other editor, use ←/→ to browse freely, including unanswered questions. Space toggles multi-select options; Enter saves an answer and advances. Page Up/Down scrolls text rather than changing questions. The final review marks unanswered questions and requires every answer before submission. Cancellation or an aborted call discards the questionnaire's answers; only explicit submission returns them to the agent.
 
 Question bodies support Pi's Markdown rendering, including tables and fenced text diagrams. Long bodies can be scrolled; diagrams should fit the terminal width. This is a text UI, not a Mermaid renderer or browser form. Outside the terminal UI, including RPC and private child sessions, the tool reports that UI is unavailable so the caller can ask conversationally instead.
 

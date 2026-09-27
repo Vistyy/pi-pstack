@@ -139,6 +139,116 @@ await test("unanswered questions can be browsed and answered out of order, but n
   });
 });
 
+await test("multiple choices require selection and return option order alongside unchanged single-choice answers", async (t) => {
+  const f = await uiFixture(t);
+
+  const h = await f.start([
+    {
+      id: "many",
+      question: "Choose areas",
+      options: ["Alpha", "Beta", "Gamma"],
+      allow_multiple: true,
+    },
+    { id: "one", question: "Choose one", options: ["Yes", "No"] },
+  ]);
+
+  assert.match(h.screen(), /\[ \] Alpha/);
+  h.input(key.enter);
+  assert.match(h.screen(), /Select at least one option/);
+  h.input(" ", key.right, key.enter, key.enter);
+  assert.match(h.screen(), /Review • 1\/2 answered/);
+  assert.match(h.screen(), /Answer every question/);
+  h.input(key.left, key.left);
+  assert.match(h.screen(), /\[ \] Alpha/);
+  h.input(key.down, key.down, " ", key.up, key.up, " ", key.enter);
+  assert.match(h.screen(), /Question 2\/2/);
+  assert.doesNotMatch(h.screen(), /Multiple choices|\[x\]/);
+  h.input(key.enter);
+  assert.match(h.screen(), /many:\n\s*\[x\] Alpha\n\s*\[x\] Gamma/);
+  h.input(key.enter);
+  assert.deepEqual(await h.result, {
+    status: "answered",
+    answers: [
+      { id: "many", kind: "options", values: ["Alpha", "Gamma"] },
+      { id: "one", kind: "option", value: "Yes" },
+    ],
+  });
+});
+
+await test("multiple answers can be restored, deselected, and revised from review", async (t) => {
+  const f = await uiFixture(t);
+
+  const h = await f.start([
+    {
+      id: "many",
+      question: "Choose areas",
+      options: ["Alpha", "Beta", "Gamma"],
+      allow_multiple: true,
+    },
+  ]);
+
+  h.input(" ", key.down, key.down, " ", key.enter, key.left);
+  assert.match(h.screen(), /\[x\] Alpha/);
+  assert.match(h.screen(), /\[x\] Gamma/);
+  h.input(" ", key.down, " ", key.down, " ", key.enter);
+  assert.match(h.screen(), /\[x\] Beta/);
+  assert.doesNotMatch(h.screen(), /Alpha|Gamma/);
+  h.input(key.enter);
+  assert.deepEqual(await h.result, {
+    status: "answered",
+    answers: [{ id: "many", kind: "options", values: ["Beta"] }],
+  });
+});
+
+await test("multiple-choice selections do not leak into the next question", async (t) => {
+  const f = await uiFixture(t);
+
+  const h = await f.start([
+    { id: "first", question: "First", options: ["A", "B"], allow_multiple: true },
+    { id: "second", question: "Second", options: ["X", "Y"], allow_multiple: true },
+  ]);
+
+  h.input(" ", key.enter);
+  assert.match(h.screen(), /\[ \] X/);
+  h.input(key.enter);
+  assert.match(h.screen(), /Select at least one option/);
+  h.input(" ", key.enter, key.enter);
+  assert.deepEqual(await h.result, {
+    status: "answered",
+    answers: [
+      { id: "first", kind: "options", values: ["A"] },
+      { id: "second", kind: "options", values: ["X"] },
+    ],
+  });
+});
+
+await test("Other replaces multiple choices only when saved; cancellation and abort return no selections", async (t) => {
+  const f = await uiFixture(t);
+
+  const items: Question[] = [
+    { id: "many", question: "Choose areas", options: ["Alpha", "Beta"], allow_multiple: true },
+  ];
+
+  const h = await f.start(items);
+  h.input(" ", key.enter, key.left, key.down, key.down, key.enter, "draft", key.escape);
+  assert.match(h.screen(), /\[x\] Alpha/);
+  h.input(key.enter, "custom", "\n", "answer", key.enter);
+  assert.match(h.screen(), /Other: custom/);
+  assert.doesNotMatch(h.screen(), /Alpha|Beta/);
+  h.input(key.enter);
+  assert.deepEqual(await h.result, {
+    status: "answered",
+    answers: [{ id: "many", kind: "other", value: "custom\nanswer" }],
+  });
+  const cancel = await f.start(items);
+  cancel.input(" ", key.enter, key.escape);
+  assert.deepEqual(await cancel.result, { status: "cancelled", answers: [] });
+  const abort = await f.start(items);
+  abort.input(" ", key.enter);
+  abort.controller.abort();
+  assert.deepEqual(await abort.result, { status: "cancelled", answers: [] });
+});
+
 await test("Other preserves multiline text verbatim, receives focus, and can be revised", async (t) => {
   const f = await uiFixture(t);
   const h = await f.start();
