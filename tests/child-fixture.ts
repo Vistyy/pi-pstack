@@ -40,7 +40,10 @@ export function receipt(text: string) {
   return value;
 }
 
-export async function childFixture(t: TestContext, options: { holdStartup?: boolean } = {}) {
+export async function childFixture(
+  t: TestContext,
+  options: { holdStartup?: boolean; extensionPaths?: string[] } = {},
+) {
   const dir = await mkdtemp(join(tmpdir(), "pstack-lifecycle-"));
   const previous = process.env[agentDirKey];
   process.env[agentDirKey] = dir;
@@ -191,6 +194,7 @@ export default (pi) => {
       join(packageRoot, "extensions/index.ts"),
       integration,
       privateIntegration,
+      ...(options.extensionPaths ?? []),
     ],
   });
 

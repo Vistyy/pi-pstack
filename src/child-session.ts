@@ -34,6 +34,8 @@ const ownTools = new Set([
 
 const inspectionTools = ["read", "bash", "pstack_todo", "pstack_task", "pstack_tasks"];
 
+const webTools = new Set(["web_search", "web_fetch"]);
+
 export function selectModel(selector: string | undefined, ctx: ExtensionContext) {
   if (selector === "auto" || selector === "inherit-parent")
     throw new Error("Omit model to inherit, or supply an exact provider/model:thinking selector");
@@ -103,14 +105,18 @@ async function excludedChildTools(agentDir: string) {
 }
 
 function toolPlan(pi: ExtensionAPI, readonly: boolean, excluded: ReadonlySet<string>) {
-  if (readonly) return { tools: inspectionTools.filter((name) => !excluded.has(name)), paths: [] };
   const active = pi.getActiveTools();
+
+  const candidates = readonly
+    ? [...inspectionTools, ...active.filter((name) => webTools.has(name))]
+    : [...active, "pstack_task", "pstack_tasks", "pstack_todo"];
+
+  const tools = [...new Set(candidates)].filter((name) => !excluded.has(name));
   const paths = new Set<string>();
 
   for (const tool of pi.getAllTools()) {
     if (
-      !active.includes(tool.name) ||
-      excluded.has(tool.name) ||
+      !tools.includes(tool.name) ||
       ownTools.has(tool.name) ||
       tool.sourceInfo.source === "builtin"
     )
@@ -124,9 +130,7 @@ function toolPlan(pi: ExtensionAPI, readonly: boolean, excluded: ReadonlySet<str
   }
 
   return {
-    tools: [...new Set([...active, "pstack_task", "pstack_tasks", "pstack_todo"])].filter(
-      (name) => !excluded.has(name),
-    ),
+    tools,
     paths: [...paths],
   };
 }

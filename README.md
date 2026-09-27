@@ -70,9 +70,11 @@ The repeatable TUI check is `python3 scripts/verify-observer.py`. It requires Py
 
 ### Investigation tools
 
-`readonly: true` requests investigation without modifying files or external state. New children receive `read`, `bash`, `pstack_task`, `pstack_tasks`, and `pstack_todo`, subject to exclusions. They do not receive `write`, `edit`, `grep`, `find`, `ls`, or integration tools. Search and listing can use non-mutating shell commands.
+`readonly: true` requests investigation without modifying files or external state. New children receive `read`, `bash`, `pstack_task`, `pstack_tasks`, and `pstack_todo`, subject to exclusions. They also inherit `web_search` and `web_fetch` when those tools are active in their immediate parent and not excluded. Their file-backed extensions are loaded, but unrelated tools from the same extension are not exposed. No web extension is installed or enabled automatically. Children do not receive `write`, `edit`, `grep`, `find`, `ls`, or other integration tools. Local search and listing can use non-mutating shell commands.
 
 The child receives an explicit no-write instruction. Bash can still modify state, so `readonly` is not an enforced filesystem boundary or sandbox. Descendants inherit the restriction and cannot opt out. Writable children continue to inherit their parent's active tools, subject to exclusions. Saved tasks retain their original tool plans when resumed, including older inspection tool sets.
+
+To verify the configured Exa-backed web extension through normal Pi and nested inspection children, run `python3 scripts/verify-child-web.py /absolute/path/to/web-extension/index.ts`. This requires an extension providing the documented `web_search` and `web_fetch` interfaces. The isolated check uses scripted models, mocks Exa search transport, and performs live public GitHub fetches and cached continuations. It does not verify the live Exa backend or use paid models. Evidence is retained under `.work/child-web-verification/`.
 
 ### Child tool exclusions
 
