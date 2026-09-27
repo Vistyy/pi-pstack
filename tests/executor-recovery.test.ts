@@ -38,7 +38,7 @@ const Summary = Type.Object({
   attempt: Type.Integer(),
   model: Type.String(),
   readonly: Type.Boolean(),
-  profile: Type.String(),
+  profile: Type.Optional(Type.String()),
   output: Type.Optional(Type.String()),
 });
 

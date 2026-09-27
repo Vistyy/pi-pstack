@@ -355,21 +355,27 @@ class ChildTask {
     this.parent.record(record);
   }
 
-  summary(detailed = true) {
-    return {
+  summary(view: "list" | "inspect" | "receipt") {
+    const summary = {
       id: this.id,
       status: this.status,
-      prompt: detailed ? this.prompt : this.prompt.slice(0, 160),
       attempt: this.attempt,
-      sourceCallId: this.sourceCallId,
-      profile: this.config.profile,
       model: this.config.selector,
-      thinking: this.config.selector.slice(this.config.selector.lastIndexOf(":") + 1),
-      cwd: this.config.cwd,
       readonly: this.config.readonly,
       transcript: this.transcript,
-      output: detailed ? this.output : undefined,
-      error: detailed ? this.error : this.error?.slice(0, 160),
+      output: view === "list" ? undefined : this.output,
+      error: view === "list" ? this.error?.slice(0, 160) : this.error,
+    };
+
+    if (view === "receipt") return summary;
+
+    return {
+      ...summary,
+      prompt: view === "list" ? this.prompt.slice(0, 160) : this.prompt,
+      sourceCallId: this.sourceCallId,
+      profile: this.config.profile,
+      thinking: this.config.selector.slice(this.config.selector.lastIndexOf(":") + 1),
+      cwd: this.config.cwd,
     };
   }
 
@@ -405,7 +411,7 @@ class ChildTask {
 
       if (background && !this.cancelled) {
         this.parent.post(
-          JSON.stringify(this.summary()),
+          JSON.stringify(this.summary("receipt")),
           () => this.turn === turn && !this.cancelled,
         );
       }
@@ -659,12 +665,12 @@ export function installExecutor(
       owner.bind(pi, ctx);
 
       if (params.action === "list")
-        return textResult([...owner.children.values()].map((child) => child.summary(false)));
+        return textResult([...owner.children.values()].map((child) => child.summary("list")));
       const child = owner.require(params.id ?? "");
 
       if (params.action === "cancel") await child.cancel();
 
-      return textResult(child.summary());
+      return textResult(child.summary(params.action === "inspect" ? "inspect" : "receipt"));
     },
   });
   pi.registerTool({
@@ -689,7 +695,7 @@ export function installExecutor(
       const background = request.run_in_background ?? child.config.profile === "poteto-agent";
       child.start(request.prompt, background, () => child.initialize(pi, ctx, configure));
 
-      if (background) return textResult(child.summary());
+      if (background) return textResult(child.summary("receipt"));
 
       const abort = () => {
         void child.cancel();
@@ -709,7 +715,7 @@ export function installExecutor(
           `Child ${child.id} attempt ${child.attempt} ${child.status}: ${child.error ?? "cancelled"}`,
         );
 
-      return textResult(child.summary());
+      return textResult(child.summary("receipt"));
     },
   });
 }
