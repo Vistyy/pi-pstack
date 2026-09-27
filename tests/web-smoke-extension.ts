@@ -25,7 +25,17 @@ const research: FauxResponseFactory = (context, _options, _state, model) => {
     getCurrentTools(context.messages)
       .map((tool) => tool.name)
       .sort(),
-    ["bash", "pstack_task", "pstack_tasks", "pstack_todo", "read", "web_fetch", "web_search"],
+    [
+      "bash",
+      "pstack_models",
+      "pstack_question",
+      "pstack_task",
+      "pstack_tasks",
+      "pstack_todo",
+      "read",
+      "web_fetch",
+      "web_search",
+    ],
   );
 
   const fetched = context.messages.filter(

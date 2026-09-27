@@ -20,7 +20,7 @@ Use the exact current Pi transcript path supplied by the host. For an owned chil
 
 ### 2. Spawn three reviewers in parallel
 
-One message, three `pstack_task` calls, `subagent_type: "generalPurpose"`, with the role's effective `model` selector and `readonly: false`. Reviewers may need available native integration tools, documented CLIs, or MCP-backed tools for context lookups. Pi's read-only children can inherit web_search/web_fetch, but omit other integration tools. Tool availability does not authorize writes during review.
+One message, three `pstack_task` calls, `subagent_type: "generalPurpose"`, with the role's effective `model` selector and `readonly: false`. Reviewers may need available native integration tools, documented CLIs, or MCP-backed tools for context lookups. Pi's children inherit active integrations subject to exclusions; read-only mode additionally excludes write/edit. Tool availability does not authorize writes during review.
 
 Resolve each role below through Pi's injected role table or `pstack_models` action `get`. The table's upstream defaults are reference values, not executable Pi selectors. Pass the effective selector including thinking; aliases are already resolved. Missing or rejected selectors require setup or an explicit valid choice, not fallback, omitted models, or dropped reviewers.
 

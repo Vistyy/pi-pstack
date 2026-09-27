@@ -127,7 +127,18 @@ await test("readonly children and descendants inspect with read and bash under a
       getCurrentTools(context.messages)
         .map((tool) => tool.name)
         .sort(),
-      ["bash", "pstack_task", "pstack_tasks", "pstack_todo", "read"],
+      [
+        "bash",
+        "fixture_echo",
+        "fixture_lookup",
+        "fixture_private",
+        "pstack_models",
+        "pstack_question",
+        "pstack_task",
+        "pstack_tasks",
+        "pstack_todo",
+        "read",
+      ],
     );
     assert.match(getCurrentSystemPrompt(context.messages), /Do not modify files or external state/);
     assert.match(getCurrentSystemPrompt(context.messages), /Bash is not sandboxed/);
@@ -136,12 +147,34 @@ await test("readonly children and descendants inspect with read and bash under a
       [
         fauxToolCall("read", { path: "AGENTS.md" }),
         fauxToolCall("bash", { command: "cat AGENTS.md" }),
+        fauxToolCall("fixture_lookup", {}),
+        fauxToolCall("write", { path: "AGENTS.md", content: "unexpected write" }),
+        fauxToolCall("edit", {
+          path: "AGENTS.md",
+          oldText: "Project-only instruction marker",
+          newText: "unexpected edit",
+        }),
       ],
       { stopReason: "toolUse" },
     );
   };
 
   const verify = (context: Parameters<FauxResponseFactory>[0]) => {
+    const integration = context.messages.findLast(
+      (message) => message.role === "toolResult" && message.toolName === "fixture_lookup",
+    );
+
+    assert.ok(integration?.role === "toolResult" && !integration.isError);
+    assert.ok(JSON.stringify(integration.content).includes(f.project));
+
+    for (const name of ["write", "edit"]) {
+      const denied = context.messages.findLast(
+        (message) => message.role === "toolResult" && message.toolName === name,
+      );
+
+      assert.ok(denied?.role === "toolResult" && denied.isError);
+    }
+
     for (const tool of ["read", "bash"]) {
       const result = context.messages.findLast(
         (message) => message.role === "toolResult" && message.toolName === tool,
@@ -201,6 +234,86 @@ await test("readonly children and descendants inspect with read and bash under a
     await readFile(join(f.project, "AGENTS.md"), "utf8"),
     "Project-only instruction marker",
   );
+});
+
+await test("readonly children keep inactive parent tools unavailable across resume", {
+  timeout: 10000,
+}, async (t) => {
+  const f = await childFixture(t);
+  const active = f.session.getActiveToolNames();
+  f.session.setActiveToolsByName(
+    active.filter((name) => !["bash", "fixture_private"].includes(name)),
+  );
+
+  const inspect: FauxResponseFactory = (context) => {
+    assert.deepEqual(
+      getCurrentTools(context.messages)
+        .map((tool) => tool.name)
+        .sort(),
+      [
+        "fixture_echo",
+        "fixture_lookup",
+        "pstack_models",
+        "pstack_question",
+        "pstack_task",
+        "pstack_tasks",
+        "pstack_todo",
+        "read",
+      ],
+    );
+
+    return fauxAssistantMessage(
+      [
+        fauxToolCall("read", { path: "AGENTS.md" }),
+        fauxToolCall("bash", { command: "pwd" }),
+        fauxToolCall("fixture_private", {}),
+      ],
+      { stopReason: "toolUse" },
+    );
+  };
+
+  const verify: FauxResponseFactory = (context) => {
+    for (const name of ["bash", "fixture_private"]) {
+      const denied = context.messages.findLast(
+        (message) => message.role === "toolResult" && message.toolName === name,
+      );
+
+      assert.ok(denied?.role === "toolResult" && denied.isError);
+    }
+
+    const read = context.messages.findLast(
+      (message) => message.role === "toolResult" && message.toolName === "read",
+    );
+
+    assert.ok(read?.role === "toolResult" && !read.isError);
+    assert.match(JSON.stringify(read.content), /Project-only instruction marker/);
+
+    return fauxAssistantMessage("inactive tools stayed absent");
+  };
+
+  f.nested.setResponses([inspect, verify]);
+
+  const first = await f.call("pstack_task", {
+    prompt: "Inspect available evidence",
+    readonly: true,
+    model: "nested/child:rev1:low",
+    run_in_background: false,
+  });
+
+  assert.equal(first.isError, false, first.text);
+  assert.match(first.text, /inactive tools stayed absent/);
+  f.session.setActiveToolsByName(active);
+  f.nested.setResponses([inspect, verify]);
+
+  const resumed = await f.call("pstack_task", {
+    resume: receipt(first.text).id,
+    prompt: "Recheck available evidence",
+    run_in_background: false,
+  });
+
+  assert.equal(resumed.isError, false, resumed.text);
+  assert.match(resumed.text, /inactive tools stayed absent/);
+  await assert.rejects(readFile(join(f.dir, "private-start.jsonl")), { code: "ENOENT" });
 });
 
 await test("global exclusions also subtract tools from readonly children", {

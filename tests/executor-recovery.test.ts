@@ -281,10 +281,11 @@ function assertReadonlyRequests(directory: string) {
     childRequests++;
     const tools = request.tools;
 
-    for (const excluded of ["grep", "find", "ls", "edit", "write", "recovery_fixture"])
+    for (const excluded of ["grep", "find", "ls", "edit", "write"])
       assert.equal(tools.includes(excluded), false, `Recovered readonly child gained ${excluded}`);
     assert.ok(tools.includes("read"));
     assert.ok(tools.includes("bash"));
+    assert.ok(tools.includes("recovery_fixture"));
   }
 
   assert.ok(childRequests > 0);

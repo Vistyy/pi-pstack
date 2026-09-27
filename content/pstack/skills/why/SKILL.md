@@ -82,7 +82,7 @@ Launch all matching investigators with `pstack_task` in a single message so they
 Subagent config (each):
 - `subagent_type`: `generalPurpose`
 - `model`: the effective `why investigators` selector
-- `readonly`: `false`. Pi's PStack read-only children expose read/bash, helper tools, and inherited web_search/web_fetch when available, but not other integration tools. This enables the required tools; it does not authorize writes. Investigators must not edit files or modify external state.
+- `readonly`: `false`. Pi's PStack children inherit active integrations subject to exclusions; read-only mode additionally excludes write/edit. Tool availability does not authorize writes. Investigators must not edit files or modify external state.
 
 Before launching each investigator, read and assemble its prompt from these inputs:
 1. The base prompt from `references/investigator-prompt.md`
@@ -126,7 +126,7 @@ Spawn one synthesizer subagent:
 
 - `subagent_type`: `generalPurpose`
 - `model`: the effective `why synthesizer` selector
-- `readonly`: `false`. Citation spot-checks may need integrations beyond web_search/web_fetch that Pi's PStack read-only children do not expose. The synthesizer must not edit files or modify external state.
+- `readonly`: `false`. Citation spot-checks can use inherited integrations subject to exclusions. The synthesizer must not edit files or modify external state.
 
 Before launching the synthesizer, read the framework and prompt template below and fill the template's EPISTEMICS_PATH with the framework's absolute path. Assemble these inputs:
 1. The investigator findings, including any null results and any categories skipped with justification

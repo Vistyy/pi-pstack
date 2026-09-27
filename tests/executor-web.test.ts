@@ -30,7 +30,9 @@ for (const scenario of scenarios) {
     );
     await writeFile(
       join(f.dir, "settings.json"),
-      JSON.stringify({ "pi-pstack": { excludedChildTools: scenario.excluded } }),
+      JSON.stringify({
+        "pi-pstack": { excludedChildTools: [...scenario.excluded, "fixture_web_write"] },
+      }),
     );
 
     const inspect: FauxResponseFactory = (context) => {
@@ -38,7 +40,19 @@ for (const scenario of scenarios) {
         getCurrentTools(context.messages)
           .map((tool) => tool.name)
           .sort(),
-        ["read", "bash", "pstack_task", "pstack_tasks", "pstack_todo", ...scenario.allowed].sort(),
+        [
+          "read",
+          "bash",
+          "fixture_echo",
+          "fixture_lookup",
+          "fixture_private",
+          "pstack_models",
+          "pstack_question",
+          "pstack_task",
+          "pstack_tasks",
+          "pstack_todo",
+          ...scenario.allowed,
+        ].sort(),
       );
 
       return fauxAssistantMessage(

@@ -124,6 +124,7 @@ export default (pi) => {
   pi.on('session_before_tree', () => existsSync(${JSON.stringify(join(dir, "veto-tree"))}) ? {cancel:true} : undefined);
   pi.on('session_start', async (_event, ctx) => {
     if (ctx.model?.provider === 'nested') pi.setActiveTools([...pi.getActiveTools(), 'fixture_lookup']);
+    if (ctx.model?.provider === 'nested' || ctx.model?.provider === 'leaf') pi.setActiveTools([...pi.getActiveTools(), 'write', 'edit']);
     if (ctx.model?.provider === 'nested' && existsSync(${JSON.stringify(join(dir, "fail-startup"))})) throw new Error('startup failed');
     if (ctx.model?.provider === 'nested' && ${JSON.stringify(options.holdStartup ?? false)})
       await new Promise((resolve) => process.emit(${JSON.stringify(eventName)}, 'start', resolve));

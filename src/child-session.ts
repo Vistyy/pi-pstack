@@ -32,10 +32,6 @@ const ownTools = new Set([
   "pstack_question",
 ]);
 
-const inspectionTools = ["read", "bash", "pstack_todo", "pstack_task", "pstack_tasks"];
-
-const webTools = new Set(["web_search", "web_fetch"]);
-
 export function selectModel(selector: string | undefined, ctx: ExtensionContext) {
   if (selector === "auto" || selector === "inherit-parent")
     throw new Error("Omit model to inherit, or supply an exact provider/model:thinking selector");
@@ -104,14 +100,11 @@ async function excludedChildTools(agentDir: string) {
   return list;
 }
 
-function toolPlan(pi: ExtensionAPI, readonly: boolean, excluded: ReadonlySet<string>) {
-  const active = pi.getActiveTools();
+function toolPlan(pi: ExtensionAPI, excluded: ReadonlySet<string>) {
+  const tools = [
+    ...new Set([...pi.getActiveTools(), "pstack_task", "pstack_tasks", "pstack_todo"]),
+  ].filter((name) => !excluded.has(name));
 
-  const candidates = readonly
-    ? [...inspectionTools, ...active.filter((name) => webTools.has(name))]
-    : [...active, "pstack_task", "pstack_tasks", "pstack_todo"];
-
-  const tools = [...new Set(candidates)].filter((name) => !excluded.has(name));
   const paths = new Set<string>();
 
   for (const tool of pi.getAllTools()) {
@@ -179,9 +172,16 @@ export async function createChildSession(
   lifetime.check();
   const agentDir = getAgentDir();
   const settings = SettingsManager.create(config.cwd, agentDir);
-  const excluded = config.plan?.excluded ?? (await excludedChildTools(agentDir));
+
+  const excluded = config.plan?.excluded ?? [
+    ...new Set([
+      ...(await excludedChildTools(agentDir)),
+      ...(config.readonly ? ["write", "edit"] : []),
+    ]),
+  ];
+
   lifetime.check();
-  const plan = config.plan ?? { ...toolPlan(pi, config.readonly, new Set(excluded)), excluded };
+  const plan = config.plan ?? { ...toolPlan(pi, new Set(excluded)), excluded };
   lifetime.plan(plan);
 
   const modelRuntime = await ModelRuntime.create({
@@ -219,7 +219,7 @@ export async function createChildSession(
     appendSystemPromptOverride: () =>
       config.readonly
         ? [
-            "This is a read-only investigation. Do not modify files or external state. Use the available tools only for inspection. Bash is not sandboxed; its availability does not authorize writes. Keep descendants under the same restriction.",
+            "This is a read-only investigation. Do not modify files or external state. Use the available tools only for inspection. Bash is not sandboxed. Integrations can also modify state. Tool availability does not authorize writes. Keep descendants under the same restriction.",
           ]
         : [],
     agentsFilesOverride: (base) => ({
