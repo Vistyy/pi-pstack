@@ -176,7 +176,10 @@ class ChildTask {
   ) {
     this.scope = new TaskScope(parent.depth + 1, config.readonly, async (content) => {
       if (!this.session) throw new Error("Child session is not initialized");
-      await this.session.sendCustomMessage(message(content), delivery);
+
+      if (this.session.isIdle)
+        await this.session.sendUserMessage(content, { deliverAs: "followUp" });
+      else await this.session.sendCustomMessage(message(content), delivery);
     });
   }
 
@@ -370,9 +373,12 @@ export function installExecutor(
   configure: ConfigureRuntime,
   owned?: TaskScope,
 ): void {
+  let context: ExtensionContext | undefined;
+
   const fresh = () =>
     new TaskScope(0, false, async (content) => {
-      pi.sendMessage(message(content), delivery);
+      if (context?.isIdle() === true) pi.sendUserMessage(content, { deliverAs: "followUp" });
+      else pi.sendMessage(message(content), delivery);
     });
 
   let scope = owned ?? fresh();
@@ -394,7 +400,9 @@ export function installExecutor(
     shutdown = true;
     await retire(event, ctx);
   });
-  pi.on("session_start", () => {
+  pi.on("session_start", (_event, ctx) => {
+    context = ctx;
+
     if (!owned && shutdown) {
       shutdown = false;
       scope = fresh();

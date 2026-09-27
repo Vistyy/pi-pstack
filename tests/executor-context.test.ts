@@ -336,3 +336,69 @@ await test("native parent compaction does not cancel a background child or lose 
   const completed = await f.call("pstack_tasks", { action: "inspect", id: child.id });
   assert.equal(receipt(completed.text).status, "completed");
 });
+
+await test("background completion is delivered during manual compaction", {
+  timeout: 10000,
+}, async (t) => {
+  const f = await childFixture(t);
+  const childStarted = f.gate();
+  const childRelease = f.gate();
+  const compactionStarted = f.gate();
+  const compactionRelease = f.gate();
+  f.nested.setResponses([
+    async () => {
+      childStarted.resolve();
+      await childRelease.promise;
+
+      return fauxAssistantMessage("result produced during compaction");
+    },
+  ]);
+
+  const launched = await f.call("pstack_task", {
+    prompt: "finish while the parent compacts",
+    model: "nested/child:rev1:low",
+    run_in_background: true,
+  });
+
+  assert.equal(launched.isError, false, launched.text);
+  await childStarted.promise;
+  const received: string[] = [];
+
+  f.parent.setResponses([
+    async () => {
+      compactionStarted.resolve();
+      await compactionRelease.promise;
+
+      return fauxAssistantMessage("fixture compaction summary");
+    },
+    (context) => {
+      received.push(JSON.stringify(context.messages));
+
+      return fauxAssistantMessage("received completion during compaction");
+    },
+  ]);
+  const failed = Promise.withResolvers<never>();
+
+  const unsubscribe = f.session.extensionRunner.onError((error) => {
+    failed.reject(new Error(error.error));
+  });
+
+  const compacting = f.session.compact();
+
+  try {
+    await compactionStarted.promise;
+    const delivered = f.report();
+    childRelease.resolve();
+    await Promise.race([delivered, failed.promise]);
+    assert.equal(f.session.isCompacting, true);
+    assert.equal(received.length, 1);
+    assert.match(received[0] ?? "", /result produced during compaction/);
+    assert.deepEqual(f.errors, []);
+  } finally {
+    unsubscribe();
+    compactionRelease.resolve();
+    await compacting;
+  }
+
+  assert.match(JSON.stringify(f.session.messages), /result produced during compaction/);
+});

@@ -100,8 +100,10 @@ await test("shutdown tracks a child still inside extension startup and disposes 
   assert.equal(f.childShutdowns(), 1);
   assert.equal(f.nested.state.callCount, 0);
   assert.doesNotMatch(
-    JSON.stringify(f.session.messages),
-    new RegExp(`pstack-task-result.*${child.id}`),
+    JSON.stringify(
+      f.session.messages.filter((item) => item.role === "custom" || item.role === "user"),
+    ),
+    new RegExp(child.id),
   );
 });
 

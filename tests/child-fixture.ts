@@ -50,6 +50,7 @@ export async function childFixture(t: TestContext, options: { holdStartup?: bool
   const entered = Promise.withResolvers<void>();
   const eventName = `pstack-test-${randomUUID()}`;
   let childShutdowns = 0;
+  const nestedSettled = Promise.withResolvers<void>();
 
   const listener = (phase: string, release?: () => void) => {
     if (phase === "start") {
@@ -57,6 +58,7 @@ export async function childFixture(t: TestContext, options: { holdStartup?: bool
 
       if (release) void startup.promise.then(release);
     } else if (phase === "shutdown") childShutdowns++;
+    else if (phase === "settled") nestedSettled.resolve();
   };
 
   process.on(eventName, listener);
@@ -125,6 +127,9 @@ export default (pi) => {
   });
   pi.on('session_shutdown', (_event, ctx) => {
     if (ctx.model?.provider === 'nested') process.emit(${JSON.stringify(eventName)}, 'shutdown');
+  });
+  pi.on('agent_settled', (_event, ctx) => {
+    if (ctx.model?.provider === 'nested') process.emit(${JSON.stringify(eventName)}, 'settled');
   });
   pi.registerTool({ name:'fixture_lookup', label:'Fixture lookup', description:'Observe integration context',
     parameters:{type:'object',properties:{}}, async execute(_id, _args, _signal, _update, ctx) {
@@ -270,5 +275,6 @@ export default (pi) => {
     releaseStartup: startup.resolve,
     childShutdowns: () => childShutdowns,
     lookup: () => readFile(join(dir, "lookup.jsonl"), "utf8"),
+    nestedSettled: nestedSettled.promise,
   };
 }
