@@ -15,7 +15,7 @@ Notion is where "why" often lives in long-form before it becomes code. A signifi
 
 ## How to search it
 
-Use the selected document integration. The Notion MCP tool names below are examples; map these operations to the actual Pi-native tools, MCP tools, or documented CLI and inspect their schemas before calling them.
+Inspect the selected document integration's interface and adapt the Notion examples below to it.
 
 1. **Keyword searches with `notion-search`.** Try:
    - The feature name

@@ -16,7 +16,7 @@ Datadog answers "what was the production reality around the time this code was w
 
 ## How to search it
 
-Use the selected observability integration. The Datadog MCP tool names below are examples; map these operations to the actual Pi-native tools, MCP tools, or documented CLI and inspect their schemas before calling them. Start broad, then narrow.
+Inspect the selected observability integration's interface and adapt the Datadog examples below to it. Start broad, then narrow.
 
 1. **Identify the owning service(s).**
 

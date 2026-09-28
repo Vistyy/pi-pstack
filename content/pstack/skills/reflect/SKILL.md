@@ -16,13 +16,13 @@ Invoke when the user says "reflect" or "/reflect". Skip when the conversation is
 
 ### 1. Locate the active transcript
 
-Read `PI_SESSION_FILE` through Pi's native Bash tool for the exact current transcript path. For an owned child's run, use its `pstack_task` receipt or `pstack_tasks` inspection. Do not search other sessions or projects. Pi transcripts contain typed JSONL entries; inspect the actual message entries rather than assuming a Cursor transcript layout. If no transcript path is available, write a tight digest of the session and label it as a digest, not transcript evidence.
+Read `PI_SESSION_FILE` with `bash` for the exact current transcript path. For an owned child's run, use its `pstack_task` receipt or `pstack_tasks` inspection. Do not search other sessions or projects. Transcripts contain typed JSONL entries; inspect the message entries. If no transcript path is available, write a tight digest of the session and label it as a digest, not transcript evidence.
 
 ### 2. Spawn three reviewers in parallel
 
-One message, three `pstack_task` calls, `subagent_type: "generalPurpose"`, with the role's effective `model` selector and `readonly: false`. Reviewers may need available native integration tools, documented CLIs, or MCP-backed tools for context lookups. Pi's children inherit active integrations subject to exclusions; read-only mode additionally excludes write/edit. Tool availability does not authorize writes during review.
+One message, three `pstack_task` calls, `subagent_type: "generalPurpose"`, with the role's effective `model` selector and `readonly: false`. Use configured integrations for context lookups. Children inherit them subject to exclusions; read-only mode additionally excludes write/edit. Do not write files or modify external state during review.
 
-Resolve each role below through Pi's injected role table or `pstack_models` action `get`. The table's upstream defaults are reference values, not executable Pi selectors. Pass the effective selector including thinking; aliases are already resolved. Missing or rejected selectors require setup or an explicit valid choice, not fallback, omitted models, or dropped reviewers.
+Resolve each role below through the injected role table or `pstack_models` action `get`. The table's upstream defaults are reference values, not executable selectors. Pass the effective selector including thinking; aliases are already resolved. Missing or rejected selectors require setup or an explicit valid choice, not fallback, omitted models, or dropped reviewers.
 
 | Lens | Role line | Default `model` | Prompt template |
 |---|---|---|---|

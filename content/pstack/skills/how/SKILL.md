@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 Explore the codebase to answer "how does X work?" questions. Produce architectural explanations at the level of a senior engineer onboarding onto a subsystem, enough to build a working mental model, not so much that it reads like annotated source code.
 
-Each spawn below names a role in Pi's `pstack_models` configuration. Use its effective `provider/model:thinking` selector from the injected role table or `pstack_models` action `get`, including resolved `auto` and `inherit-parent` choices. If the role is unresolved or its selector is rejected, report the gap and obtain a valid choice through setup or the user. Do not substitute a model or omit the role.
+For each named role, use the effective `provider/model:thinking` selector from the injected role table or `pstack_models` action `get`. This includes resolved `auto` and `inherit-parent` choices. If the role is unresolved or its selector is rejected, report the gap and resolve it through setup or the user. Do not substitute a model or omit the role.
 
 ## Step 1. Assess Complexity
 

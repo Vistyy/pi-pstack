@@ -1,5 +1,5 @@
 diff --git a/skills/swarm/SKILL.md b/skills/swarm/SKILL.md
-index a63e09eda94558aa8c7ae6d0653951838a3abd3f..5265f6f32e8d7345f7255ce1c082cee2e4bdfaad 100644
+index a63e09eda94558aa8c7ae6d0653951838a3abd3f..6ca50a40d8f90f0a9ba16c37c61bec9029298a1f 100644
 --- a/skills/swarm/SKILL.md
 +++ b/skills/swarm/SKILL.md
 @@ -6,7 +6,7 @@ disable-model-invocation: true
@@ -18,7 +18,7 @@ index a63e09eda94558aa8c7ae6d0653951838a3abd3f..5265f6f32e8d7345f7255ce1c082cee2
 -3. Set N from the user or derive it from the shape. N is total workers, not the cloud concurrency limit.
 -4. Pick the worker model from the `swarm workers` line in `~/.cursor/rules/pstack-models.mdc`. If the rule or that line is missing, use `grok-4.7-xhigh-fast`. For `auto` or `inherit-parent`, omit `model` so the workers run on the parent model. If the Task tool rejects a slug, use the default and say so. If it rejects the default, use the closest valid slug of the same family from its error message. For a model race, name each arm's model up front.
 +3. Set N from the user or derive it from the shape. N is total workers, not a limit on concurrent executions.
-+4. Use the effective `swarm workers` selector from Pi's injected role table or `pstack_models` action `get`, including its thinking suffix. Explicit aliases are already resolved. A missing or rejected selector requires setup or an explicit valid user choice, not a fallback or an omitted model. For a model race, name each arm's model up front.
++4. Use the effective `swarm workers` selector from the injected role table or `pstack_models` action `get`, including its thinking suffix. Explicit aliases are already resolved. A missing or rejected selector requires setup or an explicit valid user choice, not a fallback or an omitted model. For a model race, name each arm's model up front.
  5. Give each worker its own writable output when it writes. When workers verify or measure commits, each brief names the exact SHAs. A measurement brief also names the method (sample count, what one sample is, order). The worker records both in its result.
  
  ## Phase B: Fan out

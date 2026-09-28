@@ -1,5 +1,5 @@
 diff --git a/skills/why/references/sources/databricks.md b/skills/why/references/sources/databricks.md
-index 2770763ff5d0d1ad004abcc9a0138c9537ad1978..d8f5c7e54898c8def3e264f5ca9fcd55740c281b 100644
+index 2770763ff5d0d1ad004abcc9a0138c9537ad1978..6ee3d656f5ed5f4d331a5a524cc5ad133ebc2794 100644
 --- a/skills/why/references/sources/databricks.md
 +++ b/skills/why/references/sources/databricks.md
 @@ -9,11 +9,11 @@ Databricks is the product-analytics, data-pipeline, and warehouse-telemetry laye
@@ -12,7 +12,7 @@ index 2770763ff5d0d1ad004abcc9a0138c9537ad1978..d8f5c7e54898c8def3e264f5ca9fcd55
  ## How to search it
  
 -Use the Databricks SQL MCP. Primary tool: `execute_sql_read_only`. If it returns a `statement_id`, poll with `poll_sql_result` rather than re-running.
-+Use the selected warehouse integration's read-only query interface. For the Databricks SQL MCP example, the primary tool is `execute_sql_read_only`; if it returns a `statement_id`, poll with `poll_sql_result` rather than re-running. For other MCPs, Pi-native tools, or documented CLIs, inspect their schemas and use the corresponding query and result-retrieval operations. Do not infer a tool name or write permission from this example.
++Use the selected warehouse integration's read-only query interface. For the Databricks SQL MCP example, the primary tool is `execute_sql_read_only`; if it returns a `statement_id`, poll with `poll_sql_result` rather than re-running. For other integrations, inspect their interfaces and use the corresponding query and result-retrieval operations. Do not infer a tool name or write permission from this example.
  
  **Orient before querying.** Schemas are company-specific. Probe before trusting a table name:
  

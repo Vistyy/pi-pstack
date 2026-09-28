@@ -1,6 +1,6 @@
 # Source playbooks
 
-The why skill spawns one investigator per available evidence category, each reading a single source-specific playbook below. The playbooks retain concrete MCP and CLI examples. Adapt each example to the selected integration in the same category, whether exposed through native Pi tools, MCP, or a documented CLI. Inspect its actual schemas and access requirements; example tool names do not establish availability.
+The why skill spawns one investigator per available evidence category, each reading a single source-specific playbook below. Adapt its examples to the selected integration's documented interface and access requirements. Example tool names do not establish availability.
 
 | Category | Playbook | Example integration it documents |
 |---|---|---|

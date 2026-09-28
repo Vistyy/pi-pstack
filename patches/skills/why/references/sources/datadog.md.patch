@@ -1,5 +1,5 @@
 diff --git a/skills/why/references/sources/datadog.md b/skills/why/references/sources/datadog.md
-index d8363b1c1d1c7eadb15d47abd83bf70537c39620..22a617df24a9a3d0ab8bc3538c49f8c261edbd7a 100644
+index d8363b1c1d1c7eadb15d47abd83bf70537c39620..666ab9a1c605d427c0d88b5244c914acc1d173c5 100644
 --- a/skills/why/references/sources/datadog.md
 +++ b/skills/why/references/sources/datadog.md
 @@ -16,18 +16,18 @@ Datadog answers "what was the production reality around the time this code was w
@@ -7,7 +7,7 @@ index d8363b1c1d1c7eadb15d47abd83bf70537c39620..22a617df24a9a3d0ab8bc3538c49f8c2
  ## How to search it
  
 -Use the Datadog MCP. Start broad, then narrow.
-+Use the selected observability integration. The Datadog MCP tool names below are examples; map these operations to the actual Pi-native tools, MCP tools, or documented CLI and inspect their schemas before calling them. Start broad, then narrow.
++Inspect the selected observability integration's interface and adapt the Datadog examples below to it. Start broad, then narrow.
  
  1. **Identify the owning service(s).**
  

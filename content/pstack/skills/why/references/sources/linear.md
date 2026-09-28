@@ -14,7 +14,7 @@ Linear is where the product/business context often lives: the "we're doing this 
 
 ## How to search it
 
-Use the selected ticket-tracker integration. The Linear MCP tool names below are examples; map these operations to the actual Pi-native tools, MCP tools, or documented CLI and inspect their schemas before calling them.
+Inspect the selected ticket-tracker integration's interface and adapt the Linear examples below to it.
 
 1. **Start with linked tickets.** If the seed commits or PRs reference ticket IDs (e.g., `ENG-1234`, `[BUG-567]`), fetch those first with `get_issue`. Read the full issue including comments.
 2. **List related issues by keyword.** Use `list_issues` with text search for the feature name, key symbol, or business term. Try multiple phrasings.

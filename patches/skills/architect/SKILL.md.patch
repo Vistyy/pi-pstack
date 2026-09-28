@@ -1,5 +1,5 @@
 diff --git a/skills/architect/SKILL.md b/skills/architect/SKILL.md
-index afa6eead878d2a7b8d22b8eb99e6cf0c6ee0ad69..d71816881b1011a5636045d2c9a6688cfebef59e 100644
+index afa6eead878d2a7b8d22b8eb99e6cf0c6ee0ad69..3812dcd7f00da2c87ab08127caa9917fb6fc0cb7 100644
 --- a/skills/architect/SKILL.md
 +++ b/skills/architect/SKILL.md
 @@ -1,6 +1,6 @@
@@ -15,7 +15,7 @@ index afa6eead878d2a7b8d22b8eb99e6cf0c6ee0ad69..d71816881b1011a5636045d2c9a6688c
  Run the **arena** skill with the design-sketch task and the Phase A grounding artifacts. Pass `references/runner-prompt.md` as each runner's prompt. Each candidate produces a design package shaped per `references/rationale-template.md`.
  
 -Take the runners from the `architect runners` line in the `pstack-models.mdc` rule, in place of the `arena runners` line. If the rule or that line is missing, use `claude-opus-5-5-max`, `gpt-5.6-sol-max`, `grok-4.7-xhigh-fast`. Alias and rejected entries follow the runner rules in the **arena** skill's Phase A.
-+Take the effective runner selectors from Pi's `architect runners` role in `pstack_models`, in place of `arena runners`. Preserve the configured order and repeated entries. Unresolved roles and rejected selectors follow the rules in the **arena** skill's Phase A; do not substitute upstream model defaults.
++Take the effective runner selectors from the `architect runners` role in `pstack_models`, in place of `arena runners`. Preserve the configured order and repeated entries. Unresolved roles and rejected selectors follow the rules in the **arena** skill's Phase A; do not substitute upstream model defaults.
  
  Design it twice. Require at least two structurally distinct candidates before synthesis, even when the first looks sufficient. This is the **exhaust-the-design-space** principle skill made concrete. Whole-shape alternatives, not point fixes inside one shape.
  

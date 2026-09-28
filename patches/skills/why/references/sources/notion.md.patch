@@ -1,5 +1,5 @@
 diff --git a/skills/why/references/sources/notion.md b/skills/why/references/sources/notion.md
-index d16230a4105fd1dacf870da0950a38faeb9381e6..106138877e4b0af453897767fe894313a070cd31 100644
+index d16230a4105fd1dacf870da0950a38faeb9381e6..95afa003a76dc71baafa7b7b8d3eb09f4d6ed520 100644
 --- a/skills/why/references/sources/notion.md
 +++ b/skills/why/references/sources/notion.md
 @@ -15,7 +15,7 @@ Notion is where "why" often lives in long-form before it becomes code. A signifi
@@ -7,7 +7,7 @@ index d16230a4105fd1dacf870da0950a38faeb9381e6..106138877e4b0af453897767fe894313
  ## How to search it
  
 -Use the Notion MCP.
-+Use the selected document integration. The Notion MCP tool names below are examples; map these operations to the actual Pi-native tools, MCP tools, or documented CLI and inspect their schemas before calling them.
++Inspect the selected document integration's interface and adapt the Notion examples below to it.
  
  1. **Keyword searches with `notion-search`.** Try:
     - The feature name

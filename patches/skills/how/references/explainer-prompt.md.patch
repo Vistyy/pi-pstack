@@ -1,5 +1,5 @@
 diff --git a/skills/how/references/explainer-prompt.md b/skills/how/references/explainer-prompt.md
-index 3a36fb6736c5b74ac2774350841e332a019dec94..51181a18094d11794a047bb36baef6488e8c7515 100644
+index 3a36fb6736c5b74ac2774350841e332a019dec94..1e459b594bea9358d5fcda236595d55acaa695d7 100644
 --- a/skills/how/references/explainer-prompt.md
 +++ b/skills/how/references/explainer-prompt.md
 @@ -20,7 +20,7 @@ The explorers each investigated a different angle of the same subsystem. Their f
@@ -7,7 +7,7 @@ index 3a36fb6736c5b74ac2774350841e332a019dec94..51181a18094d11794a047bb36baef648
  Write an explanation a senior engineer unfamiliar with this area could read and walk away with a solid mental model, understanding the architecture well enough to start working in it confidently.
  
 -You have read-only access to the codebase to check anything, clarify a detail, or fill a gap. Use Read, Grep, and Glob as needed. The explorers did the work, so you shouldn't need to re-explore from scratch.
-+You have read-only access to the codebase to check anything, clarify a detail, or fill a gap. Use Pi's `read` and non-mutating `bash` commands as needed. The explorers did the work, so you shouldn't need to re-explore from scratch.
++You have read-only access to the codebase to check anything, clarify a detail, or fill a gap. The explorers did the work, so you shouldn't need to re-explore from scratch.
  
  ## Output Format
  

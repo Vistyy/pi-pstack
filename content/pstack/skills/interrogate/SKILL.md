@@ -33,7 +33,7 @@ Write one clear paragraph. If you're unsure about the intent, ask the user befor
 
 ## Step 3, Spawn Reviewers
 
-Launch all reviewers in a single message using `pstack_task`. Use the effective `interrogate reviewers` selectors from Pi's injected role table or `pstack_models` action `get`, one reviewer per entry. Label them Reviewer A/B/C and extend or shrink the labels to the configured entry count. Preserve the configured order and repeated entries.
+Launch all reviewers in a single message using `pstack_task`. Use the effective `interrogate reviewers` selectors from the injected role table or `pstack_models` action `get`, one reviewer per entry. Label them Reviewer A/B/C and extend or shrink the labels to the configured entry count. Preserve the configured order and repeated entries.
 
 For each reviewer:
 - `subagent_type`: `generalPurpose`

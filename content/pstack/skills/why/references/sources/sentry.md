@@ -15,7 +15,7 @@ The most valuable thing Sentry provides is **temporal correlation**: "issue X wa
 
 ## How to search it
 
-Use the selected error-tracking integration. The Sentry MCP tool names below are examples; map these operations to the actual Pi-native tools, MCP tools, or documented CLI and inspect their schemas before calling them.
+Inspect the selected error-tracking integration's interface and adapt the Sentry examples below to it.
 
 1. **Orient.** If you don't know the project slug and organization:
 

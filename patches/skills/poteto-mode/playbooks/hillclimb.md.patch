@@ -1,5 +1,5 @@
 diff --git a/skills/poteto-mode/playbooks/hillclimb.md b/skills/poteto-mode/playbooks/hillclimb.md
-index 582555e826675068ceaea08e6134a44ba0ea4511..909b2c442ea0cee9ac39e549bd1e8ed9494c1166 100644
+index 582555e826675068ceaea08e6134a44ba0ea4511..57ca7cb5aeee26943b83c3afb5e4b7cec5d7fdc5 100644
 --- a/skills/poteto-mode/playbooks/hillclimb.md
 +++ b/skills/poteto-mode/playbooks/hillclimb.md
 @@ -9,11 +9,11 @@ Core discipline: one change, one measurement, keep or revert. Never stack untest
@@ -7,7 +7,7 @@ index 582555e826675068ceaea08e6134a44ba0ea4511..909b2c442ea0cee9ac39e549bd1e8ed9
  4. Ground each hypothesis in the architecture model from step 1, so it names a specific mechanism ("defer X off the boot path because it blocks first paint"), not "try memoizing something".
  5. Loop, one hypothesis per iteration:
 -   - Hand the change to a subagent using your configured hillclimb model (default `grok-4.7-xhigh-fast`) with a tight scope. Supervise and review the diff rather than typing it (the **guard-the-context-window** principle skill). When several independent hypotheses are live, fan them to parallel subagents, each in its own worktree (the **separate-before-serializing-shared-state** principle skill).
-+   - Hand the change to a subagent using the effective `hillclimb` selector from Pi's `pstack_models` configuration with a tight scope. Supervise and review the diff rather than typing it (the **guard-the-context-window** principle skill). When several independent hypotheses are live, fan them to parallel subagents, each in its own worktree (the **separate-before-serializing-shared-state** principle skill).
++   - Hand the change to a subagent using the effective `hillclimb` selector from `pstack_models` with a tight scope. Supervise and review the diff rather than typing it (the **guard-the-context-window** principle skill). When several independent hypotheses are live, fan them to parallel subagents, each in its own worktree (the **separate-before-serializing-shared-state** principle skill).
     - Measure before and after with the frozen harness, and run the regression gate.
     - Accept only when the metric moves past noise and the gate stays green. Otherwise revert the change in full. A tweak that "might help" is not kept.
     - One commit per accepted fix, staging only the files you changed (`git add <files>`, never `-A`). Log the row either way, kept or reverted.

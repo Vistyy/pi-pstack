@@ -13,7 +13,7 @@ Databricks is the product-analytics, data-pipeline, and warehouse-telemetry laye
 
 ## How to search it
 
-Use the selected warehouse integration's read-only query interface. For the Databricks SQL MCP example, the primary tool is `execute_sql_read_only`; if it returns a `statement_id`, poll with `poll_sql_result` rather than re-running. For other MCPs, Pi-native tools, or documented CLIs, inspect their schemas and use the corresponding query and result-retrieval operations. Do not infer a tool name or write permission from this example.
+Use the selected warehouse integration's read-only query interface. For the Databricks SQL MCP example, the primary tool is `execute_sql_read_only`; if it returns a `statement_id`, poll with `poll_sql_result` rather than re-running. For other integrations, inspect their interfaces and use the corresponding query and result-retrieval operations. Do not infer a tool name or write permission from this example.
 
 **Orient before querying.** Schemas are company-specific. Probe before trusting a table name:
 

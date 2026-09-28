@@ -1,12 +1,12 @@
 diff --git a/skills/why/SKILL.md b/skills/why/SKILL.md
-index daac2c734a8f8fe43d30663054d694066f2b41ec..e76a2c2cc4a844145a78575949e88ac171008673 100644
+index daac2c734a8f8fe43d30663054d694066f2b41ec..7a991be253d770a308b24da10a4d6115ee75b413 100644
 --- a/skills/why/SKILL.md
 +++ b/skills/why/SKILL.md
 @@ -1,6 +1,6 @@
  ---
  name: why
 -description: "Use for 'why does X work this way', 'why we picked Y', design rationale, regressions, postmortems, or data-backed thresholds. Discovers available MCPs and queries each evidence category (source control, issue tracker, long-form docs, real-time chat, infrastructure observability, error tracking, product analytics warehouse) in parallel, then returns a cited read on decisions and tradeoffs. Use how for runtime behavior."
-+description: "Use for 'why does X work this way', 'why we picked Y', design rationale, regressions, postmortems, or data-backed thresholds. Discovers available evidence integrations, including MCPs and Pi-native tools, and queries each evidence category (source control, issue tracker, long-form docs, real-time chat, infrastructure observability, error tracking, product analytics warehouse) in parallel, then returns a cited read on decisions and tradeoffs. Use how for runtime behavior."
++description: "Use for 'why does X work this way', 'why we picked Y', design rationale, regressions, postmortems, or data-backed thresholds. Discovers available evidence sources and queries each category (source control, issue tracker, long-form docs, real-time chat, infrastructure observability, error tracking, product analytics warehouse) in parallel, then returns a cited read on decisions and tradeoffs. Use how for runtime behavior."
  disable-model-invocation: true
  ---
  
@@ -15,7 +15,7 @@ index daac2c734a8f8fe43d30663054d694066f2b41ec..e76a2c2cc4a844145a78575949e88ac1
  Companion to the `how` skill. `how` answers what the code does and how it works. `why` answers what forces led to its shape.
  
 -Each spawn below names a role line in the `pstack-models.mdc` rule and a default. Set `model` to that line's value, or to the default if the rule or the line is missing. Leave `model` unset when the value is `auto` or `inherit-parent`. If the Task tool rejects a slug, use the default and say so. If it rejects the default, use the closest valid slug of the same family from its error message.
-+Each spawn below names a role in Pi's `pstack_models` configuration. Use its effective `provider/model:thinking` selector from the injected role table or `pstack_models` action `get`, including resolved `auto` and `inherit-parent` choices. If the role is unresolved or its selector is rejected, report the gap and obtain a valid choice through setup or the user. Do not substitute a model or omit the role.
++For each named role, use the effective `provider/model:thinking` selector from the injected role table or `pstack_models` action `get`. This includes resolved `auto` and `inherit-parent` choices. If the role is unresolved or its selector is rejected, report the gap and resolve it through setup or the user. Do not substitute a model or omit the role.
  
  ## Operating Posture
  
@@ -33,7 +33,7 @@ index daac2c734a8f8fe43d30663054d694066f2b41ec..e76a2c2cc4a844145a78575949e88ac1
  ### Discovery
  
 -Before spawning investigators, list the available MCPs from the Cursor environment. Use the available-tools map when present. Otherwise inspect the `mcps/` directory Cursor exposes for enabled MCP servers.
-+Before spawning investigators, identify the evidence sources available through this Pi session's tools and documented integrations. These may be native Pi extension tools, configured MCP integrations, or documented CLIs. Inspect the exposed tool descriptions, schemas, and integration guidance. Use an integration's discovery facility when it supplies one; do not assume a Cursor `mcps/` directory or invent discovery calls. MCP is a protocol, not a synonym for every external-data tool.
++Before spawning investigators, identify available evidence sources from tool descriptions, schemas, and integration documentation. Use documented discovery facilities when provided; do not invent discovery calls or storage paths.
  
 -Map each available MCP to one evidence category:
 +Map each available evidence-source integration to one category:
@@ -57,7 +57,7 @@ index daac2c734a8f8fe43d30663054d694066f2b41ec..e76a2c2cc4a844145a78575949e88ac1
 -- `model`: the `why investigators` line, default `grok-4.7-xhigh-fast`
 -- `readonly`: `false` (agent mode). **Do not use readonly/Ask mode.** It strips MCP access, which disables MCP-backed investigators entirely. Investigators still shouldn't write anything.
 +- `model`: the effective `why investigators` selector
-+- `readonly`: `false`. Pi's PStack children inherit active integrations subject to exclusions; read-only mode additionally excludes write/edit. Tool availability does not authorize writes. Investigators must not edit files or modify external state.
++- `readonly`: `false`. Children inherit active integrations subject to exclusions; read-only mode additionally excludes write/edit. Investigators must not edit files or modify external state.
  
 -Each investigator gets:
 +Before launching each investigator, read and assemble its prompt from these inputs:
@@ -71,7 +71,7 @@ index daac2c734a8f8fe43d30663054d694066f2b41ec..e76a2c2cc4a844145a78575949e88ac1
  ### Investigator roster. One per available evidence category
  
 -Spawn one investigator per category that has a matching MCP. Each owns exactly one tool or MCP.
-+Spawn one investigator per category that has a matching evidence source. Each owns one source integration, whether exposed through native Pi tools, MCP, or a documented CLI.
++Spawn one investigator per category that has a matching evidence source. Each owns one source integration.
  
  Each entry names the category and the kind of "why" it uniquely surfaces. Use it to know what to expect back, how to name a gap when a category returns empty, and (only in the rare provably-irrelevant case) to justify a skip.
  

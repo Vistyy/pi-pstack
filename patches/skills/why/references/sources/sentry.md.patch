@@ -1,5 +1,5 @@
 diff --git a/skills/why/references/sources/sentry.md b/skills/why/references/sources/sentry.md
-index 2b7cf6f3098ee868547dc4e69efacfe9c255246b..1c954243c239f091492cde2509c7ceefd61e0f61 100644
+index 2b7cf6f3098ee868547dc4e69efacfe9c255246b..2d06f02e2d8012d2fe062a5b715c9bb3649929e7 100644
 --- a/skills/why/references/sources/sentry.md
 +++ b/skills/why/references/sources/sentry.md
 @@ -15,18 +15,18 @@ The most valuable thing Sentry provides is **temporal correlation**: "issue X wa
@@ -7,7 +7,7 @@ index 2b7cf6f3098ee868547dc4e69efacfe9c255246b..1c954243c239f091492cde2509c7ceef
  ## How to search it
  
 -Use the Sentry MCP.
-+Use the selected error-tracking integration. The Sentry MCP tool names below are examples; map these operations to the actual Pi-native tools, MCP tools, or documented CLI and inspect their schemas before calling them.
++Inspect the selected error-tracking integration's interface and adapt the Sentry examples below to it.
  
  1. **Orient.** If you don't know the project slug and organization:
  

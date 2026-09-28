@@ -13,7 +13,7 @@ Slack is frequently where the *real* decisions got made, especially for smaller 
 
 ## How to search it
 
-Use the selected chat integration, whether exposed through Pi-native tools, MCP, or a documented CLI. Inspect its actual tool schemas and authentication guidance first. A Slack MCP may expose `mcp_auth`; call it only if that integration actually provides it. If authentication fails, stop and report the gap.
+Inspect the selected chat integration's tool schemas and authentication guidance first. A Slack MCP may expose `mcp_auth`; call it only if that integration actually provides it. If authentication fails, stop and report the gap.
 
 1. **Author-bounded search.** Messages from the PR author around the PR merge date. Limits scope dramatically and often hits gold.
 2. **Keyword search for the feature name and key symbols.** Include misspellings and casual phrasings.

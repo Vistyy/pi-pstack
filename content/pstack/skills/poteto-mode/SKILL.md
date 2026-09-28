@@ -25,7 +25,7 @@ Remaining triggers:
 - Parallel fan-out → the **swarm** skill for coverage matrices, races, gauntlets, and exploration partitions. Use **arena** for design or code bakeoffs with base selection and grafting.
 - Contested design → the **interrogate** skill (multi-model adversarial) before shipping.
 - Nontrivial multi-step → write the throughput checkpoint (Feature step 3).
-- Any prose surface → the **unslop** skill. Your reply is a prose surface. Write it per **Writing the reply**. Agent-facing prose follows the [Authoring or modifying a skill playbook](playbooks/authoring-a-skill.md), using Pi's own skill mechanics.
+- Any prose surface → the **unslop** skill. Your reply is a prose surface. Write it per **Writing the reply**. Agent-facing prose follows the [Authoring or modifying a skill playbook](playbooks/authoring-a-skill.md).
 - Docs, RFCs, readmes, PR descriptions, or commit messages → the **technical-writing** skill (`/skill:technical-writing`).
 - Before commit → the bundled `deslop` skill from `cursor-team-kit` (`/skill:deslop`).
 - Before review → the **no-comments** skill (`/skill:no-comments`).
@@ -79,7 +79,7 @@ Read the leaf skill in full for any principle you apply. Each entry names when i
 
 ## Autonomy
 
-**Just do it.** Use the available Pi tools and configured integrations, including MCP-backed tools. Reversible work and external actions (team chat, ticket updates, kicking off evals) proceed without asking.
+**Just do it.** Use the available tools and configured integrations. Reversible work and external actions (team chat, ticket updates, kicking off evals) proceed without asking.
 
 **Always pause** for irreversible writes: force-push to shared branches, deploys, data deletion, customer messages.
 
@@ -91,9 +91,9 @@ Read the leaf skill in full for any principle you apply. Each entry names when i
 
 **Use `subagent_type: "poteto-agent"` for any subagent you spawn inside a playbook step** (code-writing delegates, ad-hoc helpers). `/poteto-mode` and `poteto-agent` route through the same wrapper. Routed workflow skills (`how`, `why`, `interrogate`, `reflect`, `swarm`) set their own `subagent_type` for diverse-model review. Respect what the skill prescribes, don't override to `poteto-agent`.
 
-**Defaults for every `pstack_task` call.** `run_in_background: true`, `readonly: false`, file pointers not inlined context, and an explicit effective model selector per role configured through `/setup-pstack`. Pi's PStack children inherit the parent's active tools plus task/todo helpers, minus configured exclusions. Read-only children additionally exclude write/edit and receive a no-write instruction. Bash and integrations can still modify state; tool access does not authorize writes. Code delegates tier by difficulty. The hardest changes (cross-cutting design, gnarly concurrency, subtle algorithms) use the `hardest tasks` role, whether the task needs judgment on vague intent or is a precisely specified sequence of steps to execute to the letter. Trivial mechanical edits use the configured code role. Pi's injected role table and `pstack_models` action `get` provide the effective `provider/model:thinking` selectors, including resolved `inherit-parent` and `auto` choices. Pass that selector rather than omitting `model`. A missing or rejected selector requires setup or an explicit valid user choice, not a fallback to an upstream slug. Each code playbook uses its role (`feature, refactoring`, `bug-fix`, `perf-issue`, or `hillclimb`), and the hardest changes use `hardest tasks`. Prose and judgment use `judgment and prose`.
+**Defaults for every `pstack_task` call.** `run_in_background: true`, `readonly: false`, file pointers not inlined context, and an explicit effective model selector per role configured through `/setup-pstack`. Children inherit the parent's active tools plus task/todo helpers, minus configured exclusions. Read-only children additionally exclude write/edit and receive a no-write instruction. Bash and integrations can still modify state; tool access does not authorize writes. Code delegates tier by difficulty. The hardest changes (cross-cutting design, gnarly concurrency, subtle algorithms) use the `hardest tasks` role, whether the task needs judgment on vague intent or is a precisely specified sequence of steps to execute to the letter. Trivial mechanical edits use the configured code role. The injected role table and `pstack_models` action `get` provide the effective `provider/model:thinking` selectors, including resolved `inherit-parent` and `auto` choices. Pass that selector rather than omitting `model`. A missing or rejected selector requires setup or an explicit valid user choice, not a fallback to an upstream slug. Each code playbook uses its role (`feature, refactoring`, `bug-fix`, `perf-issue`, or `hillclimb`), and the hardest changes use `hardest tasks`. Prose and judgment use `judgment and prose`.
 
-You own every subagent's work. Review the diff and write your own summary, don't pass through what it said. Only resume an idle owned child through `pstack_task` with its ID and a follow-up prompt. Pi's adapter does not steer a running child. For a consolidated fresh assignment, start a new child rather than trusting a "done" summary. A second opinion is the same prompt against a different model. Agreement is high-signal.
+You own every subagent's work. Review the diff and write your own summary, don't pass through what it said. Only resume an idle owned child through `pstack_task` with its ID and a follow-up prompt. Running children cannot be steered. For a consolidated fresh assignment, start a new child rather than trusting a "done" summary. A second opinion is the same prompt against a different model. Agreement is high-signal.
 
 ## Writing the reply
 

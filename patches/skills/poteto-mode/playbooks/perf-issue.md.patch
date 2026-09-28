@@ -1,5 +1,5 @@
 diff --git a/skills/poteto-mode/playbooks/perf-issue.md b/skills/poteto-mode/playbooks/perf-issue.md
-index 688d483d4d4a6c58efa515558c822e11f621540f..db3f4cb441c0f7dc660c146197fc660b506e3683 100644
+index 688d483d4d4a6c58efa515558c822e11f621540f..8bb6ba10dfb7f296f2477bd81f17fb0aafef1d1f 100644
 --- a/skills/poteto-mode/playbooks/perf-issue.md
 +++ b/skills/poteto-mode/playbooks/perf-issue.md
 @@ -13,7 +13,7 @@
@@ -7,7 +7,7 @@ index 688d483d4d4a6c58efa515558c822e11f621540f..db3f4cb441c0f7dc660c146197fc660b
     - **Lazy evaluation.** Cost lands on results that are never used or not needed yet (eager init on the boot path, rendering offscreen items). Defer the work until first use.
     - **Scheduling.** The work must happen, but not during the interactive moment. Move it to where nobody is waiting: idle callbacks, a background warmup after boot, precompute before the user arrives, cleanup after the frame commits. The win is perceived latency, so measure the interactive path, not total work done.
 -3. Plan the fix from the trace. If it crosses a function boundary, `architect` first. Delegate implementation to a subagent using your configured perf-issue model (default `grok-4.7-xhigh-fast`). Review the diff. Capture a post-fix trace.
-+3. Plan the fix from the trace. If it crosses a function boundary, `architect` first. Delegate implementation to a subagent using the effective `perf-issue` selector from Pi's `pstack_models` configuration. Review the diff. Capture a post-fix trace.
++3. Plan the fix from the trace. If it crosses a function boundary, `architect` first. Delegate implementation to a subagent using the effective `perf-issue` selector from `pstack_models`. Review the diff. Capture a post-fix trace.
     Apply the **sequence-verifiable-units** principle skill, verifying each attempt before trying the next.
  4. Parse and compare the artifacts (JSON to sqlite, diff). "Inconclusive" or wrong-surface is not a pass. Flag it.
  5. Cite the measurement in the PR.

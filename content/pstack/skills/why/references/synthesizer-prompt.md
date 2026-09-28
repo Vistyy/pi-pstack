@@ -41,7 +41,7 @@ You MUST follow the framework at {EPISTEMICS_PATH}. Read it in full before writi
 2. **Reconcile overlapping findings.** Multiple investigators may have cited the same PR, ticket, or doc. Merge into a single, authoritative reference.
 3. **Identify contradictions.** If two items of evidence disagree, don't pick one. Surface both.
 4. **Calibrate confidence.** For each claim, identify the evidence and the tier. State Direct claims plainly with a citation. Hedge Inferred claims and explain the inference. Mark Speculative claims explicitly. Put claims with no evidence in the gaps section.
-5. **Verify citations by spot-checking.** You can read the codebase and use the selected evidence integrations (native Pi tools, MCP tools, or documented read-only CLI operations) to verify citations. Do not write files, commit, or modify external state. If you're uncertain a cited item exists or says what's claimed, check it. Don't propagate errors.
+5. **Verify citations by spot-checking.** Read the codebase and query the selected evidence sources to verify citations. Do not write files, commit, or modify external state. If you're uncertain a cited item exists or says what's claimed, check it. Don't propagate errors.
 6. **Don't overreach.** The user will act on your output. Better to leave an open question open than to fill it with a confident-sounding guess.
 
 ## Output Format

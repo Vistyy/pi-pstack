@@ -1,5 +1,5 @@
 diff --git a/skills/how/SKILL.md b/skills/how/SKILL.md
-index cd22fff659f14822ad2f485f711a355b6da0668d..8ebbbd85500336e31e7c1fcdd2f2ecaba8996f1d 100644
+index cd22fff659f14822ad2f485f711a355b6da0668d..9311bb8d1eeeab3a86068aa7302845936befb7c2 100644
 --- a/skills/how/SKILL.md
 +++ b/skills/how/SKILL.md
 @@ -8,7 +8,7 @@ disable-model-invocation: true
@@ -7,7 +7,7 @@ index cd22fff659f14822ad2f485f711a355b6da0668d..8ebbbd85500336e31e7c1fcdd2f2ecab
  Explore the codebase to answer "how does X work?" questions. Produce architectural explanations at the level of a senior engineer onboarding onto a subsystem, enough to build a working mental model, not so much that it reads like annotated source code.
  
 -Each spawn below names a role line in the `pstack-models.mdc` rule and a default. Set `model` to that line's value, or to the default if the rule or the line is missing. Leave `model` unset when the value is `auto` or `inherit-parent`. If the Task tool rejects a slug, use the default and say so. If it rejects the default, use the closest valid slug of the same family from its error message.
-+Each spawn below names a role in Pi's `pstack_models` configuration. Use its effective `provider/model:thinking` selector from the injected role table or `pstack_models` action `get`, including resolved `auto` and `inherit-parent` choices. If the role is unresolved or its selector is rejected, report the gap and obtain a valid choice through setup or the user. Do not substitute a model or omit the role.
++For each named role, use the effective `provider/model:thinking` selector from the injected role table or `pstack_models` action `get`. This includes resolved `auto` and `inherit-parent` choices. If the role is unresolved or its selector is rejected, report the gap and resolve it through setup or the user. Do not substitute a model or omit the role.
  
  ## Step 1. Assess Complexity
  

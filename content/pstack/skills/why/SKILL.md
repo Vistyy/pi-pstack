@@ -1,6 +1,6 @@
 ---
 name: why
-description: "Use for 'why does X work this way', 'why we picked Y', design rationale, regressions, postmortems, or data-backed thresholds. Discovers available evidence integrations, including MCPs and Pi-native tools, and queries each evidence category (source control, issue tracker, long-form docs, real-time chat, infrastructure observability, error tracking, product analytics warehouse) in parallel, then returns a cited read on decisions and tradeoffs. Use how for runtime behavior."
+description: "Use for 'why does X work this way', 'why we picked Y', design rationale, regressions, postmortems, or data-backed thresholds. Discovers available evidence sources and queries each category (source control, issue tracker, long-form docs, real-time chat, infrastructure observability, error tracking, product analytics warehouse) in parallel, then returns a cited read on decisions and tradeoffs. Use how for runtime behavior."
 disable-model-invocation: true
 ---
 
@@ -10,7 +10,7 @@ Investigate the motivation and intent behind code.
 
 Companion to the `how` skill. `how` answers what the code does and how it works. `why` answers what forces led to its shape.
 
-Each spawn below names a role in Pi's `pstack_models` configuration. Use its effective `provider/model:thinking` selector from the injected role table or `pstack_models` action `get`, including resolved `auto` and `inherit-parent` choices. If the role is unresolved or its selector is rejected, report the gap and obtain a valid choice through setup or the user. Do not substitute a model or omit the role.
+For each named role, use the effective `provider/model:thinking` selector from the injected role table or `pstack_models` action `get`. This includes resolved `auto` and `inherit-parent` choices. If the role is unresolved or its selector is rejected, report the gap and resolve it through setup or the user. Do not substitute a model or omit the role.
 
 ## Operating Posture
 
@@ -61,7 +61,7 @@ Capture this as seed context (file paths, symbols, commits, PR numbers, linked t
 
 ### Discovery
 
-Before spawning investigators, identify the evidence sources available through this Pi session's tools and documented integrations. These may be native Pi extension tools, configured MCP integrations, or documented CLIs. Inspect the exposed tool descriptions, schemas, and integration guidance. Use an integration's discovery facility when it supplies one; do not assume a Cursor `mcps/` directory or invent discovery calls. MCP is a protocol, not a synonym for every external-data tool.
+Before spawning investigators, identify available evidence sources from tool descriptions, schemas, and integration documentation. Use documented discovery facilities when provided; do not invent discovery calls or storage paths.
 
 Map each available evidence-source integration to one category:
 
@@ -82,7 +82,7 @@ Launch all matching investigators with `pstack_task` in a single message so they
 Subagent config (each):
 - `subagent_type`: `generalPurpose`
 - `model`: the effective `why investigators` selector
-- `readonly`: `false`. Pi's PStack children inherit active integrations subject to exclusions; read-only mode additionally excludes write/edit. Tool availability does not authorize writes. Investigators must not edit files or modify external state.
+- `readonly`: `false`. Children inherit active integrations subject to exclusions; read-only mode additionally excludes write/edit. Investigators must not edit files or modify external state.
 
 Before launching each investigator, read and assemble its prompt from these inputs:
 1. The base prompt from `references/investigator-prompt.md`
@@ -93,7 +93,7 @@ Before launching each investigator, read and assemble its prompt from these inpu
 
 ### Investigator roster. One per available evidence category
 
-Spawn one investigator per category that has a matching evidence source. Each owns one source integration, whether exposed through native Pi tools, MCP, or a documented CLI.
+Spawn one investigator per category that has a matching evidence source. Each owns one source integration.
 
 Each entry names the category and the kind of "why" it uniquely surfaces. Use it to know what to expect back, how to name a gap when a category returns empty, and (only in the rare provably-irrelevant case) to justify a skip.
 

@@ -1,5 +1,5 @@
 diff --git a/skills/interrogate/SKILL.md b/skills/interrogate/SKILL.md
-index bd82e5b179f186e1cd7913dd112db9f8b07b4846..135e93b8eecdaa5026a332d593d5f85756cfa386 100644
+index bd82e5b179f186e1cd7913dd112db9f8b07b4846..45149cfa17f33b9667cff831a9942007e805a647 100644
 --- a/skills/interrogate/SKILL.md
 +++ b/skills/interrogate/SKILL.md
 @@ -33,20 +33,14 @@ Write one clear paragraph. If you're unsure about the intent, ask the user befor
@@ -13,7 +13,7 @@ index bd82e5b179f186e1cd7913dd112db9f8b07b4846..135e93b8eecdaa5026a332d593d5f857
 -| Reviewer A | `claude-opus-5-5-max` |
 -| Reviewer B | `gpt-5.6-sol-max` |
 -| Reviewer C | `grok-4.7-xhigh-fast` |
-+Launch all reviewers in a single message using `pstack_task`. Use the effective `interrogate reviewers` selectors from Pi's injected role table or `pstack_models` action `get`, one reviewer per entry. Label them Reviewer A/B/C and extend or shrink the labels to the configured entry count. Preserve the configured order and repeated entries.
++Launch all reviewers in a single message using `pstack_task`. Use the effective `interrogate reviewers` selectors from the injected role table or `pstack_models` action `get`, one reviewer per entry. Label them Reviewer A/B/C and extend or shrink the labels to the configured entry count. Preserve the configured order and repeated entries.
  
  For each reviewer:
  - `subagent_type`: `generalPurpose`
