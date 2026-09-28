@@ -15,3 +15,6 @@ skills/poteto-mode/playbooks/autopilot-stack.md
 skills/poteto-mode/playbooks/autonomous-run.md
 skills/poteto-mode/playbooks/shipping.md
 skills/poteto-mode/scripts/orch/
+
+# Replaced by the Pi worktree-audit.mjs implementation.
+skills/poteto-mode/scripts/worktree-audit.sh

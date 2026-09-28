@@ -1,0 +1,12 @@
+diff --git a/skills/technical-writing/SKILL.md b/skills/technical-writing/SKILL.md
+index 1cd44cf2595a5caeda1f702aacd4f8a25aa8166a..aef9018e7bfba9564d1a02da19f87600eed91d04 100644
+--- a/skills/technical-writing/SKILL.md
++++ b/skills/technical-writing/SKILL.md
+@@ -1,6 +1,6 @@
+ ---
+ name: technical-writing
+-description: "Layered technical-writing standard: Diátaxis structure, Google developer style sentences, STE instruction rules, Global English syntax. Use for /technical-writing or when writing or reviewing docs, RFCs, readmes, PR descriptions, or commit messages."
++description: "Layered technical-writing standard: Diátaxis structure, Google developer style sentences, STE instruction rules, Global English syntax. Use for /skill:technical-writing or when writing or reviewing docs, RFCs, readmes, PR descriptions, or commit messages."
+ disable-model-invocation: true
+ ---
+ 

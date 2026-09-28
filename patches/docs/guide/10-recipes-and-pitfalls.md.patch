@@ -1,0 +1,22 @@
+diff --git a/docs/guide/10-recipes-and-pitfalls.md b/docs/guide/10-recipes-and-pitfalls.md
+index da0af5e6f7984d24818ef1cd28f518d0014da788..7106de4f008e95718012eaef8112547c3ce3aa4d 100644
+--- a/docs/guide/10-recipes-and-pitfalls.md
++++ b/docs/guide/10-recipes-and-pitfalls.md
+@@ -81,14 +81,14 @@ That's the whole prompt. [`/bro`](../../skills/bro/SKILL.md) restates the last m
+ ## The pitfalls
+ 
+ - **Enumerating skills in the prompt.** "use /how then /architect then /arena" reorders steps the playbook already sequences. State the goal and constraints. Name a skill only to override a default.
+-- **A vague finish condition.** "make it better" gives `/loop` nothing to check. Give a command or artifact that can pass or fail.
++- **A vague finish condition.** "make it better" gives the agent nothing to check. Give a command or artifact that can pass or fail.
+ - **Parallel agents in one worktree.** They overwrite each other and the diff becomes archaeology. Say "own worktree per attempt" and the isolation is free.
+ - **Using `/arena` for coverage.** `/arena` repeats one design or code brief, then picks a base and grafts the best parts. `/swarm` partitions slices or declared race arms and aggregates one report.
+ - **Accepting every review comment.** Bots and humans both file real catches and noise in one list. `/interrogate` sorts findings into act-on and dismissed buckets with reasons, and you can override either way.
+-- **Treating `auto` as a model slug.** `auto` and `inherit-parent` mean "omit the model field so the subagent inherits the parent chat model." [Setup](./01-setup.md) covers the roles.
++- **Treating `auto` as a model slug.** In Pi, `auto` and `inherit-parent` resolve to the current parent's model and thinking level. [Pi setup](../../../../README.md#runtime-configuration) explains the configuration.
+ - **Reporting success off a green build.** A build proves it compiles. Ask for the real command, flow, stored value, or profile, and expect the evidence in the reply.
+ - **Writing a `SKILL.md` freehand.** Route it through the [Authoring or modifying a skill playbook](../../skills/poteto-mode/playbooks/authoring-a-skill.md) so validation and review happen.
+ 
+-That's the guide. If you skipped ahead, go back to [setup](./01-setup.md) and run one real task. The habits stick from use, not from reading.
++That's the guide. If you skipped ahead, go back to [Pi setup](../../../../README.md#runtime-configuration) and run one real task. The habits stick from use, not from reading.
+ 
+ Back to the [guide index](./README.md).

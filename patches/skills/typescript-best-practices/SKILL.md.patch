@@ -1,0 +1,12 @@
+diff --git a/skills/typescript-best-practices/SKILL.md b/skills/typescript-best-practices/SKILL.md
+index 2c0279d9a5f800192605e47b55cae4e75a17ec27..2485ebf7b1172721004826c3f854380fd716068e 100644
+--- a/skills/typescript-best-practices/SKILL.md
++++ b/skills/typescript-best-practices/SKILL.md
+@@ -1,7 +1,6 @@
+ ---
+ name: typescript-best-practices
+ description: TypeScript best practices. Use when reading or editing any .ts or .tsx file.
+-paths: ["**/*.ts", "**/*.tsx"]
+ disable-model-invocation: true
+ ---
+ 

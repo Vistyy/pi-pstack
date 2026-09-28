@@ -1,0 +1,13 @@
+diff --git a/skills/poteto-mode/scripts/package.json b/skills/poteto-mode/scripts/package.json
+index 8a3dfe27c2d0221a786e1ce61963d51c55260725..b79dbf4b5cc4b42de781d70899545de0e83da2c1 100644
+--- a/skills/poteto-mode/scripts/package.json
++++ b/skills/poteto-mode/scripts/package.json
+@@ -3,7 +3,7 @@
+   "private": true,
+   "type": "module",
+   "scripts": {
+-    "test": "bun test orch watch-pr",
++    "test": "bun test watch-pr",
+     "typecheck": "tsc --project watch-pr/tsconfig.json --noEmit --strict"
+   },
+   "dependencies": {

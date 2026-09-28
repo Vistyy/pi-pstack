@@ -1,0 +1,21 @@
+diff --git a/skills/poteto-mode/playbooks/authoring-a-skill.md b/skills/poteto-mode/playbooks/authoring-a-skill.md
+index 8c5a55a44f5e95bba92f652da0ac87e941c49538..a946661e26b0b01fb7a9434c9b4a76aef6b7ab6d 100644
+--- a/skills/poteto-mode/playbooks/authoring-a-skill.md
++++ b/skills/poteto-mode/playbooks/authoring-a-skill.md
+@@ -2,10 +2,12 @@
+ 
+ **You own the skill's voice.**
+ 
+-1. Use the **create-skill** skill (Cursor's built-in for authoring SKILL.md files).
+-2. Validate the skill: frontmatter has `name` and `description`, referenced files exist, cross-skill links resolve.
+-3. Test cases if structural. Skip if subjective.
+-4. Run **Opening a PR**.
++1. For Pi skill mechanics, read the running Pi version's `docs/skills.md` at the documentation location supplied by the host. It owns discovery, supported frontmatter, invocation, and validation. Use Anthropic's [Skill authoring best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices) for writing advice, not Claude-specific configuration or a mandatory evaluation framework. This is the Pi authoring procedure; it does not depend on Cursor's `create-skill`.
++2. Choose the existing home before adding a skill. Required guidance must reach the agent that needs it. Keep tool-specific inputs and effects with the tool contract. Put a conditional reference's loading trigger beside its link, where the reader can see it before opening the reference.
++3. Draft the smallest useful change. A skill description states what it does and when to use it, including a meaningful nearby non-match when needed. Choose discoverable or manual-only invocation deliberately; being discoverable does not make a skill apply on every turn. Use **principle-guard-the-context-window** to place frequently used content and supporting references.
++4. Validate through Pi's real skill loader: the intended skill is found, its metadata and visibility match the intended invocation, and there are no relevant diagnostics or name collisions. Check referenced files and cross-skill links. For packaged or generated skills, change the owning sources and verify the installed/generated output, not just the draft.
++5. Verify the affected workflow with representative tasks and actual entry points. Use available deterministic checks; report what they do not establish about autonomous skill selection. Iterate on observed failures. Subjective style needs user feedback, not a benchmark loop. Do not create a general evaluation harness or launch paid model tests by default.
++6. Run **Opening a PR** within the agreed delivery authority.
+ 
+ When in doubt, delete. Keep only prose that changes a decision. Tell it to do the thing and skip the reason. Explain only when the rule is confusing without one. Match tone to scope. Point at structural sources (types, READMEs, config) per the **encode-lessons-in-structure** principle skill. Delegate to other skills by path. Don't restate. A workflow you keep hitting but isn't captured → propose a new skill.
+ 

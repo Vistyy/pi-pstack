@@ -6,6 +6,7 @@ import {
   composeKitSnapshot,
   contentDiff,
   copyTree,
+  excludePaths,
   kitSkills,
   readLock,
   replay,
@@ -13,6 +14,7 @@ import {
   treeId,
   verifyKitSnapshot,
   verifySnapshot,
+  writeNetPatches,
 } from "./source-files.ts";
 import { checkUpstream, prepareUpdate } from "./upstream.ts";
 
@@ -36,6 +38,36 @@ async function generate() {
     await copyTree(path.join(staging, "content/pstack"), target);
   });
   console.log("Generated content/pstack from the pinned source, exclusions, and patches.");
+}
+
+async function refreshPatches(edited: string | undefined) {
+  if (edited === undefined) throw new Error("patches requires an explicit edited content tree.");
+  const desired = path.resolve(edited);
+  const lock = await readLock(root);
+  await verifySnapshot(root, lock);
+  await verifyKitSnapshot(root, lock);
+  await temporary("pstack-refresh-", async (staging) => {
+    const snapshot = path.join(root, "upstream/pstack");
+    const kit = path.join(root, "upstream/cursor-team-kit");
+    const baseline = path.join(staging, "baseline");
+    await copyTree(snapshot, baseline);
+    await excludePaths(root, baseline);
+    await composeKitSnapshot(kit, baseline);
+    await writeNetPatches(baseline, desired, path.join(staging, "patches"));
+    await copyTree(
+      path.join(root, "upstream-exclusions.txt"),
+      path.join(staging, "upstream-exclusions.txt"),
+    );
+    const rebuilt = path.join(staging, "rebuilt");
+    await replay(staging, snapshot, rebuilt);
+    await composeKitSnapshot(kit, rebuilt);
+
+    if ((await treeId(rebuilt)) !== (await treeId(desired)))
+      throw new Error("Refreshed patches do not reproduce the edited content tree.");
+    await rm(path.join(root, "patches"), { recursive: true, force: true });
+    await copyTree(path.join(staging, "patches"), path.join(root, "patches"));
+  });
+  console.log("Updated per-file patches. Run source:generate to rebuild content/pstack.");
 }
 
 async function verify() {
@@ -104,6 +136,8 @@ async function main(command: string, argument: string | undefined) {
       return generate();
     case "verify":
       return verify();
+    case "patches":
+      return refreshPatches(argument);
     case "diff":
       return diff();
     case "check-upstream":
@@ -112,7 +146,7 @@ async function main(command: string, argument: string | undefined) {
       return prepareUpdate(root, argument);
     default:
       throw new Error(
-        "Usage: source.ts generate|verify|diff|check-upstream [ref]|prepare-update <full-sha>",
+        "Usage: source.ts generate|verify|diff|patches <edited-tree>|check-upstream [ref]|prepare-update <full-sha>",
       );
   }
 }

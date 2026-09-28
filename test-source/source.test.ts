@@ -82,6 +82,11 @@ async function fixture(t: TestContext) {
   await put(remote, "pstack/run.sh", "#!/bin/sh\nexit 0\n");
   await put(remote, "pstack/retired/old.txt", "retired implementation v1\n");
   await put(remote, "pstack/omit.txt", "excluded single file\n");
+  await put(
+    remote,
+    "pstack/skills/example/SKILL.md",
+    "Heading\nkeep 1\nkeep 2\nkeep 3\nkeep 4\nkeep 5\nkeep 6\nOriginal tail\n",
+  );
   await chmod(path.join(remote, "pstack/run.sh"), 0o755);
   await symlink("base.txt", path.join(remote, "pstack/link"));
   await symlink("retired", path.join(remote, "pstack/retired-link"));
@@ -168,10 +173,230 @@ async function candidateDirectory(root: string) {
   return path.join(root, ".work", candidate);
 }
 
+await test("patch refresh maintains net per-file diffs and preserves binary content, whitespace, modes, and symlinks", async (t) => {
+  const f = await fixture(t);
+  success(f.run("generate"));
+  const before = await activeState(f.root);
+  const edited = path.join(f.root, "edited");
+  await cp(path.join(f.root, "content/pstack"), edited, {
+    recursive: true,
+    verbatimSymlinks: true,
+  });
+  await put(edited, "base.txt", "final  \n");
+  await put(edited, "skills/first/SKILL.md", "first adaptation\n");
+  await put(edited, "skills/é space/SKILL.md", "second adaptation\n");
+  await put(edited, "literal[1].txt", "literal filename\n");
+  await writeFile(path.join(edited, "binary.bin"), Buffer.from([0, 255, 10, 13, 0]));
+  await chmod(path.join(edited, "run.sh"), 0o644);
+  await rm(path.join(edited, "link"));
+  await symlink("run.sh", path.join(edited, "link"));
+  await put(f.root, "patches/001.patch", patch);
+  await put(
+    f.root,
+    "patches/002.patch",
+    "--- a/base.txt\n+++ b/base.txt\n@@ -1 +1 @@\n-adapted\n+intermediate\n",
+  );
+  await rm(f.remote, { recursive: true });
+  success(f.run("patches", edited));
+  assert.deepEqual(await activeState(f.root), before);
+  assert.deepEqual(
+    (await readdir(path.join(f.root, "patches"), { recursive: true }))
+      .filter((name) => name.endsWith(".patch"))
+      .sort(),
+    [
+      "base.txt.patch",
+      "binary.bin.patch",
+      "link.patch",
+      "literal[1].txt.patch",
+      "run.sh.patch",
+      "skills/first/SKILL.md.patch",
+      "skills/é space/SKILL.md.patch",
+    ],
+  );
+  const basePatch = await readFile(path.join(f.root, "patches/base.txt.patch"), "utf8");
+  assert.match(basePatch, /-pinned\n\+final {2}\n/);
+  assert.doesNotMatch(basePatch, /adapted|intermediate/);
+  const firstPatches = await treeId(path.join(f.root, "patches"));
+  success(f.run("patches", edited));
+  assert.equal(await treeId(path.join(f.root, "patches")), firstPatches);
+  success(f.run("generate"));
+  success(f.run("verify"));
+  assert.equal(await treeId(path.join(f.root, "content/pstack")), await treeId(edited));
+  assert.deepEqual(
+    await readFile(path.join(f.root, "content/pstack/binary.bin")),
+    Buffer.from([0, 255, 10, 13, 0]),
+  );
+  assert.equal((await stat(path.join(f.root, "content/pstack/run.sh"))).mode & 0o111, 0);
+  assert.equal(await readlink(path.join(f.root, "content/pstack/link")), "run.sh");
+  assert.equal(await readFile(path.join(f.root, "upstream/pstack/base.txt"), "utf8"), "pinned\n");
+  await put(edited, "base.txt", "later\n");
+  success(f.run("patches", edited));
+  const updated = await readFile(path.join(f.root, "patches/base.txt.patch"), "utf8");
+  assert.match(updated, /-pinned\n\+later/);
+  assert.doesNotMatch(updated, /final/);
+  await put(edited, "base.txt", "pinned\n");
+  await rm(path.join(edited, "literal[1].txt"));
+  success(f.run("patches", edited));
+  await assert.rejects(readFile(path.join(f.root, "patches/base.txt.patch")), { code: "ENOENT" });
+  await assert.rejects(readFile(path.join(f.root, "patches/literal[1].txt.patch")), {
+    code: "ENOENT",
+  });
+  success(f.run("generate"));
+  assert.equal(await readFile(path.join(f.root, "content/pstack/base.txt"), "utf8"), "pinned\n");
+  await assert.rejects(readFile(path.join(f.root, "content/pstack/literal[1].txt")), {
+    code: "ENOENT",
+  });
+});
+
+await test("refresh removes a maintained patch when its upstream file is explicitly excluded", async (t) => {
+  const f = await fixture(t);
+  await put(f.root, "patches/base.txt.patch", patch);
+  success(f.run("generate"));
+  const edited = path.join(f.root, "edited");
+  await cp(path.join(f.root, "content/pstack"), edited, {
+    recursive: true,
+    verbatimSymlinks: true,
+  });
+  await rm(path.join(edited, "base.txt"));
+  await put(f.root, "upstream-exclusions.txt", "base.txt");
+  success(f.run("patches", edited));
+  assert.deepEqual(await readdir(path.join(f.root, "patches")), []);
+  success(f.run("generate"));
+  success(f.run("verify"));
+  await assert.rejects(readFile(path.join(f.root, "content/pstack/base.txt")), { code: "ENOENT" });
+  assert.equal(await readFile(path.join(f.root, "upstream/pstack/base.txt"), "utf8"), "pinned\n");
+});
+
+await test("refreshed nested patches preserve unrelated changes when preparing a newer upstream", async (t) => {
+  const f = await fixture(t);
+  success(f.run("generate"));
+  const edited = path.join(f.root, "edited");
+  await cp(path.join(f.root, "content/pstack"), edited, {
+    recursive: true,
+    verbatimSymlinks: true,
+  });
+  await put(
+    edited,
+    "skills/example/SKILL.md",
+    "Pi heading\nkeep 1\nkeep 2\nkeep 3\nkeep 4\nkeep 5\nkeep 6\nOriginal tail\n",
+  );
+  success(f.run("patches", edited));
+  success(f.run("generate"));
+  const before = await activeState(f.root);
+  const patches = await treeId(path.join(f.root, "patches"));
+  await put(
+    f.remote,
+    "pstack/skills/example/SKILL.md",
+    "Heading\nkeep 1\nkeep 2\nkeep 3\nkeep 4\nkeep 5\nkeep 6\nUpdated upstream tail\n",
+  );
+  f.git("add", ".");
+  f.git("commit", "--quiet", "-m", "unrelated upstream edit");
+  success(f.run("prepare-update", f.git("rev-parse", "HEAD")));
+  const candidate = await candidateDirectory(f.root);
+  assert.equal(
+    await readFile(path.join(candidate, "content/pstack/skills/example/SKILL.md"), "utf8"),
+    "Pi heading\nkeep 1\nkeep 2\nkeep 3\nkeep 4\nkeep 5\nkeep 6\nUpdated upstream tail\n",
+  );
+  assert.equal(await treeId(path.join(f.root, "patches")), patches);
+  assert.deepEqual(await activeState(f.root), before);
+});
+
+await test("patch ownership rejects wrong paths, multiple targets, renames, and whole-file deletions without replacing content", async (t) => {
+  const f = await fixture(t);
+  success(f.run("generate"));
+  const before = await treeId(path.join(f.root, "content/pstack"));
+
+  const cases = [
+    ["wrong.txt.patch", patch],
+    ["base.txt.patch", `${patch}--- /dev/null\n+++ b/extra.txt\n@@ -0,0 +1 @@\n+extra\n`],
+    [
+      "renamed.txt.patch",
+      "diff --git a/base.txt b/renamed.txt\nsimilarity index 100%\nrename from base.txt\nrename to renamed.txt\n",
+    ],
+    ["base.txt.patch", "--- a/base.txt\n+++ /dev/null\n@@ -1 +0,0 @@\n-pinned\n"],
+  ];
+
+  for (const [name, body] of cases) {
+    assert.ok(name !== undefined && body !== undefined);
+    await rm(path.join(f.root, "patches"), { recursive: true });
+    await put(f.root, `patches/${name}`, body);
+    const result = f.run("generate");
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Patch must modify or add only/);
+    assert.equal(await treeId(path.join(f.root, "content/pstack")), before);
+  }
+});
+
+await test("patch discovery rejects symlinks and stray files but supports an empty patch collection", async (t) => {
+  const f = await fixture(t);
+  success(f.run("generate"));
+  const before = await activeState(f.root);
+  await put(f.root, "external/base.txt.patch", patch);
+  await symlink("../external/base.txt.patch", path.join(f.root, "patches/base.txt.patch"));
+  assert.match(f.run("generate").stderr, /Expected a regular .patch file/);
+  await rm(path.join(f.root, "patches/base.txt.patch"));
+  await symlink("../external", path.join(f.root, "patches/linked"));
+  assert.match(f.run("generate").stderr, /Expected a regular .patch file/);
+  await rm(path.join(f.root, "patches/linked"));
+  await put(f.root, "patches/stray.txt", "not a patch\n");
+  assert.match(f.run("generate").stderr, /Expected a regular .patch file/);
+  await rm(path.join(f.root, "patches"), { recursive: true });
+  await symlink("external", path.join(f.root, "patches"));
+  assert.match(f.run("generate").stderr, /patches must be a directory/);
+  await rm(path.join(f.root, "patches"));
+  success(f.run("generate"));
+  success(f.run("verify"));
+  success(f.run("patches", path.join(f.root, "content/pstack")));
+  assert.deepEqual(await readdir(path.join(f.root, "patches")), []);
+  assert.deepEqual(await activeState(f.root), before);
+});
+
+await test("invalid edited trees leave patches, generated content, and pinned sources unchanged", async (t) => {
+  const f = await fixture(t);
+  await put(f.root, "upstream-exclusions.txt", "retired/");
+  await put(f.root, "patches/base.txt.patch", patch);
+  success(f.run("generate"));
+  const before = await activeState(f.root);
+  const patches = await treeId(path.join(f.root, "patches"));
+  const edited = path.join(f.root, "edited");
+
+  for (const change of [
+    "deletion",
+    "companion",
+    "license",
+    "companion addition",
+    "excluded path",
+  ]) {
+    await rm(edited, { recursive: true, force: true });
+    await cp(path.join(f.root, "content/pstack"), edited, {
+      recursive: true,
+      verbatimSymlinks: true,
+    });
+
+    if (change === "deletion") await rm(path.join(edited, "base.txt"));
+
+    if (change === "companion") await put(edited, "skills/deslop/SKILL.md", "changed\n");
+
+    if (change === "license") await put(edited, "licenses/cursor-team-kit.LICENSE", "changed\n");
+
+    if (change === "companion addition") await put(edited, "skills/deslop/extra.txt", "extra\n");
+
+    if (change === "excluded path") await put(edited, "retired/restored.txt", "restored\n");
+    assert.notEqual(f.run("patches", edited).status, 0, change);
+    assert.equal(await treeId(path.join(f.root, "patches")), patches, change);
+    assert.deepEqual(await activeState(f.root), before, change);
+  }
+
+  assert.notEqual(f.run("patches").status, 0);
+  assert.notEqual(f.run("patches", path.join(f.root, "missing")).status, 0);
+  assert.equal(await treeId(path.join(f.root, "patches")), patches);
+  assert.deepEqual(await activeState(f.root), before);
+});
+
 await test("generate and verify work without upstream Git objects, preserve source identity, and detect drift", async (t) => {
   const f = await fixture(t);
   await rm(f.remote, { recursive: true, force: true });
-  await put(f.root, "patches/001.patch", patch);
+  await put(f.root, "patches/base.txt.patch", patch);
   success(f.run("generate"));
   success(f.run("verify"));
   assert.equal(await readFile(path.join(f.root, "content/pstack/base.txt"), "utf8"), "adapted\n");
@@ -216,7 +441,7 @@ await test("companion bytes, snapshot and generated drift, missing inputs, and P
   );
   await put(
     f.root,
-    "patches/999.patch",
+    "patches/skills/deslop/SKILL.md.patch",
     "--- /dev/null\n+++ b/skills/deslop/SKILL.md\n@@ -0,0 +1 @@\n+adapted collision\n",
   );
   assert.match(f.run("generate").stderr, /Companion destination collision/);
@@ -224,7 +449,7 @@ await test("companion bytes, snapshot and generated drift, missing inputs, and P
 
 await test("upstream check and preparation expose changes and new version without changing active files", async (t) => {
   const f = await fixture(t);
-  await put(f.root, "patches/001.patch", patch);
+  await put(f.root, "patches/base.txt.patch", patch);
   success(f.run("generate"));
   const before = await activeState(f.root);
   await put(f.remote, "pstack/.cursor-plugin/plugin.json", '{"version":"2.0.0"}\n');
@@ -308,7 +533,7 @@ await test("upstream comparison uses pinned selected files and preparation requi
 await test("literal exclusions preserve the snapshot and replay across edits to excluded upstream content", async (t) => {
   const f = await fixture(t);
   await put(f.root, "upstream-exclusions.txt", "# local scope\nretired/\nomit.txt\nlink\n\n");
-  await put(f.root, "patches/001.patch", patch);
+  await put(f.root, "patches/base.txt.patch", patch);
   success(f.run("generate"));
   success(f.run("verify"));
   const expected = [".cursor-plugin", "base.txt", "licenses", "retired-link", "run.sh", "skills"];
@@ -375,7 +600,7 @@ await test("invalid exclusion paths and patch recreation fail before replacing a
   await put(f.root, "upstream-exclusions.txt", "retired/");
   await put(
     f.root,
-    "patches/001.patch",
+    "patches/retired/restored.txt.patch",
     "--- /dev/null\n+++ b/retired/restored.txt\n@@ -0,0 +1 @@\n+restored\n",
   );
   const restored = f.run("generate");
@@ -407,7 +632,7 @@ await test("upstream renaming an excluded path fails preparation with evidence a
 
 await test("patch conflicts fail preparation with retained evidence and leave active files unchanged", async (t) => {
   const f = await fixture(t);
-  await put(f.root, "patches/001.patch", patch);
+  await put(f.root, "patches/base.txt.patch", patch);
   success(f.run("generate"));
   const before = await activeState(f.root);
   await put(f.remote, "pstack/base.txt", "incompatible upstream change\n");
@@ -419,7 +644,7 @@ await test("patch conflicts fail preparation with retained evidence and leave ac
   const candidate = await candidateDirectory(f.root);
   assert.match(
     await readFile(path.join(candidate, "failure.txt"), "utf8"),
-    /Cannot replay patches\/001.patch/,
+    /Cannot replay patches\/base.txt.patch/,
   );
   assert.match(
     await readFile(path.join(candidate, "upstream.diff"), "utf8"),

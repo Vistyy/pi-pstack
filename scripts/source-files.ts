@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { cp, lstat, mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -16,12 +16,14 @@ export type UpstreamLock = {
   };
 };
 
-export function git(cwd: string, args: string[]) {
-  return execFileSync("git", ["-C", cwd, ...args], {
+export function git(cwd: string, args: string[], options: { trim?: boolean } = {}) {
+  const output = execFileSync("git", ["-C", cwd, ...args], {
     encoding: "utf8",
     maxBuffer: 128 * 1024 * 1024,
     stdio: ["ignore", "pipe", "pipe"],
-  }).trimEnd();
+  });
+
+  return options.trim === false ? output : output.trimEnd();
 }
 
 export async function temporary<T>(prefix: string, use: (directory: string) => T | Promise<T>) {
@@ -228,12 +230,71 @@ export async function verifySnapshot(root: string, lock: UpstreamLock) {
 }
 
 export async function patchNames(root: string) {
-  const entries = await readdir(path.join(root, "patches"));
+  const directory = path.join(root, "patches");
 
-  return entries.filter((name) => name.endsWith(".patch")).sort();
+  const info = await lstat(directory).catch((error: unknown) => {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
+    throw error;
+  });
+
+  if (info === undefined) return [];
+
+  if (!info.isDirectory()) throw new Error("patches must be a directory, not a symlink.");
+  const entries = await readdir(directory, { recursive: true, withFileTypes: true });
+  const names: string[] = [];
+
+  for (const entry of entries) {
+    if (entry.isDirectory()) continue;
+    const name = path.relative(directory, path.join(entry.parentPath, entry.name));
+
+    if (!entry.isFile() || !name.endsWith(".patch"))
+      throw new Error(`Expected a regular .patch file: patches/${name}`);
+    names.push(name);
+  }
+
+  return names.sort();
 }
 
-async function excludePaths(root: string, target: string) {
+export async function writeNetPatches(source: string, edited: string, destination: string) {
+  await mkdir(destination, { recursive: true });
+  await treeRepository(async (repository) => {
+    const before = writeTree(repository, source);
+    const after = writeTree(repository, edited);
+
+    const files = git(repository, ["diff", "--no-renames", "--name-only", "-z", before, after])
+      .split("\0")
+      .filter((name) => name !== "");
+
+    for (const name of files) {
+      const patch = git(
+        repository,
+        [
+          "--literal-pathspecs",
+          "diff",
+          "--binary",
+          "--full-index",
+          "--no-renames",
+          "--no-ext-diff",
+          "--no-textconv",
+          "--no-color",
+          "--src-prefix=a/",
+          "--dst-prefix=b/",
+          before,
+          after,
+          "--",
+          name,
+        ],
+        { trim: false },
+      );
+
+      const target = path.join(destination, `${name}.patch`);
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, patch);
+    }
+  });
+}
+
+export async function excludePaths(root: string, target: string) {
   const manifest = await readFile(path.join(root, "upstream-exclusions.txt"), "utf8");
 
   const entries = manifest
@@ -290,17 +351,40 @@ export async function replay(root: string, snapshot: string, target: string) {
   const excluded = await excludePaths(root, target);
   await temporary("pstack-patch-", async (workspace) => {
     git(workspace, ["init", "--quiet", "--bare", "objects.git"]);
-    const args = ["--git-dir", path.join(workspace, "objects.git"), "--work-tree", target];
+    const repository = path.join(workspace, "objects.git");
+    const args = ["--git-dir", repository, "--work-tree", target];
+    let before = writeTree(repository, target);
 
     for (const name of await patchNames(root)) {
       const patch = path.join(root, "patches", name);
 
       try {
+        git(target, [...args, "apply", "--cached", patch]);
+        const after = git(repository, ["write-tree"]);
+
+        const changes = git(repository, [
+          "diff",
+          "--no-renames",
+          "--name-status",
+          "-z",
+          before,
+          after,
+        ]).split("\0");
+
+        if (
+          changes.length !== 3 ||
+          changes[1] !== name.slice(0, -".patch".length) ||
+          changes[0] === "D"
+        )
+          throw new Error(
+            `Patch must modify or add only ${name.slice(0, -".patch".length)}. Whole-file deletions belong in upstream-exclusions.txt.`,
+          );
         git(target, [...args, "apply", "--check", patch]);
         git(target, [...args, "apply", patch]);
+        before = after;
       } catch (error) {
         throw new Error(
-          `Cannot replay patches/${name}; inspect the upstream change rather than skipping the patch.`,
+          `Cannot replay patches/${name}; inspect the upstream change rather than skipping the patch.\n${error instanceof Error ? error.message : String(error)}`,
           { cause: error },
         );
       }

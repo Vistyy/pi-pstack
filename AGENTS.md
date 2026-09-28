@@ -9,17 +9,37 @@ Port the pinned PStack methodology to Pi; do not replace its procedures, roles, 
 | `upstream/pstack/` | Unmodified PStack snapshot identified by `upstream.lock.json`. Never edit it to make a local translation. |
 | `upstream/cursor-team-kit/` | Unmodified selected snapshot at the same repository commit: original license, plugin manifest, and the `deslop`, `control-cli`, and `control-ui` directories. |
 | `upstream-exclusions.txt` | Exact upstream files or directories omitted from the adopted content, before patch replay. |
-| `patches/*.patch` | Ordered, focused Pi translations of retained files. Author upstream-derived instruction changes here. |
+| `patches/<upstream-path>.patch` | One maintained net Git diff per modified or added file. Directories mirror upstream paths. |
 | `content/pstack/` | Generated PStack minus exclusions, plus patches, then the unchanged companion skills and their separate license. Never hand-edit it. |
 | `src/`, `extensions/` | Pi runtime, model/question/todo helpers, and the private child-session adapter. |
 | `scripts/` | Source verification, generation, comparison, and upstream-update preparation. |
 | `README.md` | User-facing setup, supported behavior, and limitations. Keep maintainer instructions in `AGENTS.md`. |
 
-To modify retained upstream-derived files, edit a scratch copy of the current generated tree and capture the difference with normal `git diff --binary` as a new ordered patch. Keep patches focused on a workflow or concern, then run `pnpm source:generate` and inspect the regenerated result. Preserve unrelated generated files and the locked upstream identity. Companion bodies are not patched: adapt their PStack callers instead. Generation rejects a PStack or patch-created path that collides with a companion destination.
+To modify retained upstream-derived files, copy the current generated tree into an owned scratch directory:
+
+```sh
+mkdir -p .work
+edited=$(mktemp -d .work/pstack-edit-XXXXXX)
+cp -a content/pstack/. "$edited/"
+```
+
+Edit files in that copy, not in `content/pstack/`. Then refresh the maintained patches and regenerate:
+
+```sh
+pnpm source:patches "$edited"
+pnpm source:generate
+pnpm check
+```
+
+`source:patches` compares the complete edited tree against the pinned upstream after exclusions and companion composition. It replaces the patch collection only after replay reproduces that tree, including executable bits and symlinks. It leaves active generated content unchanged until `source:generate`. An unchanged file has no patch. Further edits update the same patch instead of appending a numbered step. Review related adaptations together in a Git commit.
+
+Each patch must modify or add only the file named by its path. For example, `patches/skills/poteto-mode/SKILL.md.patch` targets `skills/poteto-mode/SKILL.md`. Multi-file and rename patches are rejected. Removing an upstream file uses the exclusion manifest. Removing a Pi-added file drops its addition patch. A missing or empty patch directory means no adaptations. Patch directories cannot contain symlinks or non-patch files.
+
+Preserve unrelated files in the edited copy and the locked upstream identity. Companion bodies are not patched. Adapt their PStack callers instead. Generation rejects a PStack or patch-created path that collides with a companion destination.
 
 For whole-file or directory removals, edit `upstream-exclusions.txt` instead. Use one normalized slash-separated path relative to `upstream/pstack/` per line, without `.` or `..` segments. Blank lines and full-line `#` comments are allowed; a trailing directory slash is optional. Paths are literal, not glob patterns or negation rules. Directories include all descendants, including future upstream additions. Entries must exist and must not overlap. Missing targets fail generation or update preparation for review rather than silently passing. Symlinked ancestor directories are rejected; excluding a symlink itself removes only that link.
 
-Remove obsolete patch hunks when excluding a previously patched path. Exclusions run before patches, and replay rejects patches that restore an excluded path. Use patches for partial-file removals, such as incoming routes to excluded workflows. Keep the methodology of retained playbooks, including MCP examples; adapt host-specific access without inventing capabilities. Do not restore cloud, scheduled, automatic-landing, or macOS simulator/host-cache cleanup as unsupported instructions in the adopted tree. Git worktree cleanup retains its original policy with Pi/Linux access mechanics; its audit does not grant cleanup authority. Preserve local design/review panels and all verification/evidence requirements.
+When excluding a previously patched path, remove that path from the edited copy and refresh the patches. Exclusions run before patches, and replay rejects patches that restore an excluded path. Use patches for partial-file removals, such as incoming routes to excluded workflows. Keep the methodology of retained playbooks, including MCP examples; adapt host-specific access without inventing capabilities. Do not restore cloud, scheduled, automatic-landing, or macOS simulator/host-cache cleanup as unsupported instructions in the adopted tree. Git worktree cleanup retains its original policy with Pi/Linux access mechanics; its audit does not grant cleanup authority. Preserve local design/review panels and all verification/evidence requirements.
 
 ## Runtime boundary
 
@@ -71,4 +91,4 @@ pnpm upstream:prepare <full-commit-sha>
 
 These commands fetch the requested source and retain evidence under `.work/`. Both sources advance together at the requested repository commit. The report separates PStack changes from selected toolkit changes; unrelated toolkit files are not adopted or included in the selected diff. Preparation records both snapshots and their identities, `upstream.diff`, `cursor-team-kit.diff`, and the combined generated content in a candidate directory using the current exclusions and patches. The toolkit's `sourceTree` records the full original subtree; `selectedTree` identifies the smaller retained snapshot used by offline verification. Invalid exclusions or patch conflicts fail with retained evidence. Neither command adopts the candidate or changes the active lock, snapshot, or generated content.
 
-Review the upstream methodology changes, exclusion scope, and each translation hunk before adopting a prepared candidate. Replace both active snapshots and the lock only with an explicitly selected candidate, then regenerate and verify. A clean patch replay proves textual applicability, not semantic fidelity. Never silently advance the pin.
+Review the upstream methodology changes, exclusion scope, and each translation hunk before adopting a prepared candidate. Replace both active snapshots and the lock only with an explicitly selected candidate. Then run `pnpm source:patches <reviewed-candidate-content>` against its complete reviewed content tree, followed by `pnpm source:generate` and verification. This refreshes the maintained diffs against the newly adopted pin. A clean patch replay proves textual applicability, not semantic fidelity. Never silently advance the pin.

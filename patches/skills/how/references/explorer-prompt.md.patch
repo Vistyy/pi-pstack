@@ -1,0 +1,13 @@
+diff --git a/skills/how/references/explorer-prompt.md b/skills/how/references/explorer-prompt.md
+index 9b4b0594bfd779015616e9d280369aba939583b4..86cd96bae8a41ef7124afc42082ca23e576e89b9 100644
+--- a/skills/how/references/explorer-prompt.md
++++ b/skills/how/references/explorer-prompt.md
+@@ -18,7 +18,7 @@ Other explorers are investigating different slices of the same subsystem in para
+ 
+ ## Exploration Instructions
+ 
+-Start by finding the relevant code. Use Glob to find directories and files, Grep to find key symbols, Read to understand the actual implementation. Don't guess from names. Read the code.
++Start by finding the relevant code. Use Pi's `find` to find directories and files, `grep` to find key symbols, and `read` to understand the actual implementation. Don't guess from names. Read the code.
+ 
+ Follow this pattern:
+ 1. **Find the entry point.** What triggers this behavior? A user action, an API call, a scheduled job? Find where it starts.
