@@ -1,5 +1,5 @@
 diff --git a/skills/poteto-mode/SKILL.md b/skills/poteto-mode/SKILL.md
-index f8ddcae379007d61aefcae39b18bd836a488ee21..521ad2e37abb484a410614ede9df9705d3bbf02f 100644
+index f8ddcae379007d61aefcae39b18bd836a488ee21..dcf7fef5f1fa53c72f46de0ef55a148859dbb2c9 100644
 --- a/skills/poteto-mode/SKILL.md
 +++ b/skills/poteto-mode/SKILL.md
 @@ -1,15 +1,16 @@
@@ -135,19 +135,25 @@ index f8ddcae379007d61aefcae39b18bd836a488ee21..521ad2e37abb484a410614ede9df9705
  
  ## Writing the reply
  
-@@ -116,7 +117,7 @@ Comments follow the same rule as the reply. Write them clean as you go. Keep a c
+@@ -116,28 +117,23 @@ Comments follow the same rule as the reply. Write them clean as you go. Keep a c
  
  Open a todolist whose first items are the matched playbook's steps, copied in verbatim, before any task-specific todos. A step you choose not to do stays in the list with a one-line `skip: <reason>`. Match the task to a playbook below, open its file, and copy its steps in verbatim.
  
 -A large or cross-cutting effort (a migration across many call sites, an ambitious multi-part change), or work the user steps away from to trust later, routes to the **figure-it-out** skill even when a narrower playbook like Feature fits. Use **figure-it-out** whenever no bundled playbook fits. It designs a bespoke, rigorous playbook for the task. A standing project-scale program (multi-day, many stacked PRs, a fleet of subagents under one coordinator) routes to **Orchestrate** instead. figure-it-out designs one bespoke run, orchestrate runs the program.
-+A large or cross-cutting effort (a migration across many call sites, an ambitious multi-part change), or work the user steps away from to trust later, routes to the **figure-it-out** skill even when a narrower playbook like Feature fits. Use **figure-it-out** whenever no bundled playbook fits. It designs a bespoke, rigorous playbook for the task.
- 
- - **Investigation.** Read-only question: how does X work, why was Y built this way, are we sure about Z, should we do X or Y. `playbooks/investigation.md`.
- - **Bug fix.** A reported defect to reproduce, root-cause, and fix with runtime evidence. `playbooks/bug-fix.md`.
-@@ -131,13 +132,8 @@ A large or cross-cutting effort (a migration across many call sites, an ambitiou
- - **Authoring or modifying a skill.** Writing or editing a SKILL.md. `playbooks/authoring-a-skill.md`.
- - **Eval.** Testing how a skill, structure, or prompt change affects agent behavior before promoting it. `playbooks/eval.md`.
- - **Babysit.** Driving a PR or a stack to merge-ready: conflicts, review threads, CI. `playbooks/babysit.md`.
+-
+-- **Investigation.** Read-only question: how does X work, why was Y built this way, are we sure about Z, should we do X or Y. `playbooks/investigation.md`.
+-- **Bug fix.** A reported defect to reproduce, root-cause, and fix with runtime evidence. `playbooks/bug-fix.md`.
+-- **Perf issue.** A measured slowness to trace and improve against a baseline. `playbooks/perf-issue.md`.
+-- **Hillclimb.** Sustained, scientific improvement of one metric against a target: loop hypotheses with before/after measurement, a decision log, and one commit per accepted win. Distinct from Perf issue, which is a one-off fix. `playbooks/hillclimb.md`.
+-- **Runtime forensics.** Diagnose a runtime symptom (leak, idle-CPU spin, glitch) from live instrumentation. The deliverable is a diagnosis, not a fix. `playbooks/runtime-forensics.md`.
+-- **Trace forensics.** Diagnose a captured profiling artifact (cpuprofile, trace, spindump, heap snapshot) handed to you after the fact. The deliverable is a diagnosis, not a fix. `playbooks/trace-forensics.md`.
+-- **Feature.** New or changed behavior, built from a named data shape. `playbooks/feature.md`.
+-- **Refactoring.** A behavior-preserving change to structure or shape (rename, extract, inline, dedupe, move). `playbooks/refactoring.md`.
+-- **Prototype.** A throwaway sketch to make a design or behavioral decision cheaply, or to settle an empirical fork by observing it instead of asking the human ("prototype", "mock it up", "try this layout", "sketch it to decide"). `playbooks/prototype.md`.
+-- **Visual parity.** Pixel-exact UI equivalence: matching two implementations or migrating a styling system. `playbooks/visual-parity.md`.
+-- **Authoring or modifying a skill.** Writing or editing a SKILL.md. `playbooks/authoring-a-skill.md`.
+-- **Eval.** Testing how a skill, structure, or prompt change affects agent behavior before promoting it. `playbooks/eval.md`.
+-- **Babysit.** Driving a PR or a stack to merge-ready: conflicts, review threads, CI. `playbooks/babysit.md`.
 -- **Shipping.** The half after Babysit. Independently verifying a green stack, then landing the contiguous verified run bottom-up through `gh` by default or Origin when its CLI is available. `playbooks/shipping.md`.
 -- **Autonomous run.** A long task to drive to completion without stopping ("run until done", "/loop until X"). `playbooks/autonomous-run.md`.
 -- **Orchestrate.** A standing project handed to one coordinator chat: multi-day, many stacked PRs, dozens to hundreds of subagents, minimal human turns ("run this whole project", "own this migration until it lands"). Distinct from Autonomous run, which drives one task to a predicate. Work one agent could finish inside the session's budget routes there, not here, however program-shaped the phrasing sounds. `playbooks/orchestrate.md`.
@@ -155,10 +161,26 @@ index f8ddcae379007d61aefcae39b18bd836a488ee21..521ad2e37abb484a410614ede9df9705
 -- **Autopilot-stack.** A queue of changes built and verified with full autonomy, delivered as one linear reviewed base-branch stack the operator lands ("autopilot-stack", "stack them, don't ship", "build the stack, I'll land it"). `playbooks/autopilot-stack.md`.
 -- **Session pickup.** Resuming or taking over a prior agent's in-flight work from a transcript, cloud-agent URL, or pushed branch. `playbooks/session-pickup.md`.
 -- **Pause safely.** Suspending in-flight work cleanly so it can be resumed, on an explicit pause, going offline, a Cursor restart, or imminent context compaction. The complement to Session pickup. Full steps: `playbooks/pause-safely.md`.
-+- **Worktree cleanup.** Reclaiming local disk by pruning merged or abandoned git worktrees ("what's using my disk", "clean up worktrees", "prune safe-to-prune worktrees", "free up space"). `playbooks/worktree-cleanup.md`. Not simulator, host application state, or general cache cleanup.
-+- **Session pickup.** Resuming or taking over a prior agent's in-flight work from a task transcript, saved checkpoint, or pushed branch. `playbooks/session-pickup.md`.
-+- **Pause safely.** Suspending in-flight work cleanly on an explicit pause, going offline, or a Pi restart. Native Pi compaction retains the live session and does not itself cancel children. A restart interrupts child execution. Reopening the owning parent restores saved task IDs without restarting work. Inspect the recovered state and reconcile interrupted tool effects before explicitly resuming an ID. The complement to Session pickup. Full steps: `playbooks/pause-safely.md`.
- - **Multi-phase or multi-PR plan.** Work that spans phases or stacked PRs. `playbooks/multi-phase-plan.md`.
+-- **Multi-phase or multi-PR plan.** Work that spans phases or stacked PRs. `playbooks/multi-phase-plan.md`.
 -- **Worktree and simulator cleanup.** Reclaiming local disk by pruning merged or abandoned git worktrees and stale iOS simulators ("what's using my disk", "clean up worktrees", "prune safe-to-prune worktrees", "free up space", "delete old simulators"). `playbooks/worktree-cleanup.md`.
 -- **Opening a PR.** Invoked at the end of every other playbook. `playbooks/opening-a-pr.md`.
-+- **Opening a PR.** After a change-producing playbook when publication is authorized; not for read-only investigation or planning. `playbooks/opening-a-pr.md`.
++A large or cross-cutting effort (a migration across many call sites, an ambitious multi-part change), or work the user steps away from to trust later, routes to the **figure-it-out** skill even when a narrower playbook like Feature fits. Use **figure-it-out** whenever no bundled playbook fits. It designs a bespoke, rigorous playbook for the task.
++
++- Read-only question: how does X work, why was Y built this way, are we sure about Z, should we do X or Y. `playbooks/investigation.md`.
++- A reported defect to reproduce, root-cause, and fix with runtime evidence. `playbooks/bug-fix.md`.
++- A measured slowness to trace and improve against a baseline. `playbooks/perf-issue.md`.
++- Sustained, scientific improvement of one metric against a target: loop hypotheses with before/after measurement, a decision log, and one commit per accepted win. Distinct from Perf issue, which is a one-off fix. `playbooks/hillclimb.md`.
++- Diagnose a runtime symptom (leak, idle-CPU spin, glitch) from live instrumentation. The deliverable is a diagnosis, not a fix. `playbooks/runtime-forensics.md`.
++- Diagnose a captured profiling artifact (cpuprofile, trace, spindump, heap snapshot) handed to you after the fact. The deliverable is a diagnosis, not a fix. `playbooks/trace-forensics.md`.
++- New or changed behavior, built from a named data shape. `playbooks/feature.md`.
++- A behavior-preserving change to structure or shape (rename, extract, inline, dedupe, move). `playbooks/refactoring.md`.
++- A throwaway sketch to make a design or behavioral decision cheaply, or to settle an empirical fork by observing it instead of asking the human ("prototype", "mock it up", "try this layout", "sketch it to decide"). `playbooks/prototype.md`.
++- Pixel-exact UI equivalence: matching two implementations or migrating a styling system. `playbooks/visual-parity.md`.
++- Writing or editing a SKILL.md. `playbooks/authoring-a-skill.md`.
++- Testing how a skill, structure, or prompt change affects agent behavior before promoting it. `playbooks/eval.md`.
++- Driving a PR or a stack to merge-ready: conflicts, review threads, CI. `playbooks/babysit.md`.
++- Reclaiming local disk by pruning merged or abandoned git worktrees ("what's using my disk", "clean up worktrees", "prune safe-to-prune worktrees", "free up space"). `playbooks/worktree-cleanup.md`. Not simulator, host application state, or general cache cleanup.
++- Resuming or taking over a prior agent's in-flight work from a task transcript, saved checkpoint, or pushed branch. `playbooks/session-pickup.md`.
++- Suspending in-flight work cleanly on an explicit pause, going offline, or a Pi restart. Native Pi compaction retains the live session and does not itself cancel children. A restart interrupts child execution. Reopening the owning parent restores saved task IDs without restarting work. Inspect the recovered state and reconcile interrupted tool effects before explicitly resuming an ID. The complement to Session pickup. Full steps: `playbooks/pause-safely.md`.
++- Work that spans phases or stacked PRs. `playbooks/multi-phase-plan.md`.
++- After a change-producing playbook when publication is authorized; not for read-only investigation or planning. `playbooks/opening-a-pr.md`.
