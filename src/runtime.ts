@@ -27,6 +27,15 @@ const ModeEntry = Type.Object({ enabled: Type.Boolean() });
 
 const TodoEntry = Type.Object({ items: Type.Array(Type.String()) });
 
+type RoleTarget = Exclude<
+  NonNullable<Awaited<ReturnType<typeof modelState>>["roles"]>[string],
+  unknown[]
+>;
+
+function promptTarget({ requested, ...target }: RoleTarget) {
+  return requested === target.selector ? target : { requested, ...target };
+}
+
 function branchData(ctx: ExtensionContext, customType: string) {
   const entry = ctx.sessionManager
     .getBranch()
@@ -104,7 +113,15 @@ export function createRuntime(pi: ExtensionAPI, options?: { profile: Profile }):
       const state = await modelState(content.roles, ctx);
       projection = JSON.stringify({
         parentSelector: state.parentSelector,
-        roles: state.roles,
+        roles:
+          state.roles === null
+            ? null
+            : Object.fromEntries(
+                Object.entries(state.roles).map(([role, targets]) => [
+                  role,
+                  Array.isArray(targets) ? targets.map(promptTarget) : promptTarget(targets),
+                ]),
+              ),
         error: state.error,
       });
     } catch (error) {

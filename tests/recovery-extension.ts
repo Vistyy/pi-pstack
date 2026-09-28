@@ -184,7 +184,15 @@ export default function recoveryFixture(pi: ExtensionAPI) {
   });
 
   const expectedInstructions = new Map([
-    ["readonly", [/Do not modify files or external state/, /Bash is not sandboxed/]],
+    [
+      "readonly",
+      [
+        /Do not modify files or external state/,
+        /Use the available tools only for inspection/,
+        /Tool availability does not authorize writes/,
+        /Keep descendants under the same restriction/,
+      ],
+    ],
     [
       "poteto",
       [

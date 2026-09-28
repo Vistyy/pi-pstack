@@ -140,8 +140,11 @@ await test("readonly children and descendants inspect with read and bash under a
         "read",
       ],
     );
-    assert.match(getCurrentSystemPrompt(context.messages), /Do not modify files or external state/);
-    assert.match(getCurrentSystemPrompt(context.messages), /Bash is not sandboxed/);
+    const system = getCurrentSystemPrompt(context.messages);
+    assert.match(system, /Do not modify files or external state/);
+    assert.match(system, /Use the available tools only for inspection/);
+    assert.match(system, /Tool availability does not authorize writes/);
+    assert.match(system, /Keep descendants under the same restriction/);
 
     return fauxAssistantMessage(
       [

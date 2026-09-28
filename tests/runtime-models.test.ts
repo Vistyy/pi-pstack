@@ -268,6 +268,80 @@ await test("native tool loop persists exact model roles, applies budgets, resolv
   );
 });
 
+await test("role prompt omits identical requests and preserves aliases, errors, panel order, and duplicates", async (t) => {
+  const f = await fixture(t);
+
+  const projection = async () => {
+    const system = await f.prompt("Inspect role guidance");
+    const line = system.split("\n").find((entry) => entry.startsWith('{"parentSelector":'));
+    assert.ok(line !== undefined);
+    const value: unknown = JSON.parse(line);
+
+    return value;
+  };
+
+  assert.deepEqual(await projection(), {
+    parentSelector: "fixture/judge:rev1:high",
+    roles: null,
+    error: "Missing configuration; source defaults are not Pi routes. Run /setup-pstack.",
+  });
+
+  const saved = await f.call("pstack_models", {
+    action: "set",
+    budget: "small",
+    roles: roleChoices(),
+  });
+
+  assert.equal(saved.isError, false, saved.text);
+  f.session.setThinkingLevel("low");
+  const exact = { selector: "fixture/judge:rev1:medium" };
+  assert.deepEqual(await projection(), {
+    parentSelector: "fixture/judge:rev1:low",
+    roles: {
+      "feature, refactoring": exact,
+      "bug-fix": exact,
+      "perf-issue": exact,
+      hillclimb: exact,
+      "judgment and prose": exact,
+      "hardest tasks": exact,
+      "how explorer": exact,
+      "how explainer": exact,
+      "why investigators": exact,
+      "why synthesizer": exact,
+      "reflect tooling": exact,
+      "reflect judgment, divergent, synthesizer": exact,
+      "arena runners": [exact, exact],
+      "arena cross-judge pool": [exact],
+      "swarm workers": exact,
+      "architect runners": [
+        { requested: "inherit-parent", selector: "fixture/judge:rev1:low" },
+        exact,
+        { requested: "auto", selector: "fixture/judge:rev1:low" },
+      ],
+      "interrogate reviewers": [exact, exact, exact],
+    },
+  });
+
+  await writeFile(
+    join(f.directory, "pstack-models.json"),
+    JSON.stringify({
+      version: 1,
+      budget: "unlimited",
+      roles: { ...roleChoices(), "how explorer": "fixture/missing:high" },
+    }),
+  );
+  assert.partialDeepStrictEqual(await projection(), {
+    parentSelector: "fixture/judge:rev1:low",
+    roles: {
+      "feature, refactoring": { selector: "fixture/judge:rev1:high" },
+      "how explorer": {
+        requested: "fixture/missing:high",
+        error: "Error: Unavailable model fixture/missing",
+      },
+    },
+  });
+});
+
 await test("todo replacement acknowledges the count while get preserves the complete list", async (t) => {
   const f = await fixture(t);
 

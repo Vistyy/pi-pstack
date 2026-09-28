@@ -219,7 +219,7 @@ export async function createChildSession(
     appendSystemPromptOverride: () =>
       config.readonly
         ? [
-            "This is a read-only investigation. Do not modify files or external state. Use the available tools only for inspection. Bash is not sandboxed. Integrations can also modify state. Tool availability does not authorize writes. Keep descendants under the same restriction.",
+            "This is a read-only investigation. Do not modify files or external state. Use the available tools only for inspection. Tool availability does not authorize writes. Keep descendants under the same restriction.",
           ]
         : [],
     agentsFilesOverride: (base) => ({

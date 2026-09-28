@@ -52,7 +52,7 @@ const TaskInput = Type.Object(
     readonly: Type.Optional(
       Type.Boolean({
         description:
-          "Request investigation without modifying files or external state. Inherits the parent's active tools plus PStack task/todo helpers, minus excludedChildTools and write/edit. Bash and integrations can still modify state, so this is an instruction-based restriction, not a sandbox. Defaults to false unless inherited from a readonly parent; descendants cannot opt out.",
+          "Request investigation without modifying files or external state. Inherits the parent's active tools plus PStack task/todo helpers, minus excludedChildTools and write/edit. Defaults to false unless inherited from a readonly parent; descendants cannot opt out.",
       }),
     ),
     run_in_background: Type.Optional(
