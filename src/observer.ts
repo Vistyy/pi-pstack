@@ -10,6 +10,7 @@ import {
   type TUI,
   truncateToWidth,
   visibleWidth,
+  wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
 import { activityCounts, type ObservedTask, SavedTranscripts } from "./observer-state.js";
 import { ObserverTranscript } from "./observer-transcript.js";
@@ -19,6 +20,8 @@ type Row = { task: ObservedTask; depth: number; nested: boolean };
 type Snapshot = { kind: "tasks"; tasks: ObservedTask[] } | { kind: "error"; message: string };
 
 const title = (task: ObservedTask) => task.title.replace(/\s+/g, " ").trim() || task.id;
+
+const numbers = new Intl.NumberFormat("en-US");
 
 const statusColors = {
   running: "accent",
@@ -119,13 +122,33 @@ class ObserverPanel implements Component {
 
     if (lines.length === 0) lines.push(this.theme.fg("muted", task.activity || task.status));
     const total = lines.length;
-    this.pageHeight = Math.max(1, height - 3);
+    const separator = task.model.lastIndexOf(":");
+    const usage = view.transcript.usage;
+
+    const summary = [
+      `Model ${task.model.slice(0, separator)} · Thinking ${task.model.slice(separator + 1)}`,
+      ...(usage
+        ? [
+            `Tokens in ${numbers.format(usage.tokens.input)} · out ${numbers.format(usage.tokens.output)} · cache read ${numbers.format(usage.tokens.cacheRead)} · write ${numbers.format(usage.tokens.cacheWrite)}`,
+            `Own session ${numbers.format(usage.tokens.total)} tokens · Pi estimate $${usage.cost.toFixed(4)}`,
+          ]
+        : ["Session usage unavailable"]),
+    ].flatMap((line) => wrapTextWithAnsi(this.theme.fg("dim", line), width));
+
+    const header = [
+      truncateToWidth(this.theme.bold(title(task)), width),
+      ...summary,
+      truncateToWidth(this.theme.fg("dim", `Task ${task.id}`), width),
+    ];
+
+    if (header.length + 2 > height)
+      return [this.theme.fg("muted", "Enlarge terminal for task details.")];
+    this.pageHeight = height - header.length - 1;
     const max = Math.max(0, lines.length - this.pageHeight);
     this.top = this.scroll === null ? max : Math.min(this.scroll, max);
 
     return [
-      truncateToWidth(`${this.theme.bold(title(task))} · ${task.model}`, width),
-      truncateToWidth(this.theme.fg("dim", `Task ${task.id}`), width),
+      ...header,
       truncateToWidth(
         this.theme.fg(
           "dim",

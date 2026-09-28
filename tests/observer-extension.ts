@@ -75,7 +75,10 @@ export default function observerFixture(pi: ExtensionAPI) {
 
   const provider = fauxProvider({
     provider: "observer-fixture",
-    models: ["root", "coordinator", "leaf", "failure"].map((id) => ({ id, reasoning: false })),
+    models: ["root", "coordinator", "leaf:revision", "failure"].map((id) => ({
+      id,
+      reasoning: id === "leaf:revision",
+    })),
     tokensPerSecond: 120,
   });
 
@@ -123,8 +126,9 @@ export default function observerFixture(pi: ExtensionAPI) {
       case "coordinator":
         if (!delegated)
           return call("pstack_task", {
-            prompt: "Nested transcript inspection",
-            model: "observer-fixture/leaf:off",
+            prompt:
+              "Nested transcript inspection with a deliberately long assignment title that must not hide the selected model or thinking level",
+            model: "observer-fixture/leaf:revision:high",
             run_in_background: true,
           });
 
@@ -134,7 +138,7 @@ export default function observerFixture(pi: ExtensionAPI) {
           stopReason: "error",
           errorMessage: "Deliberate observer fixture failure",
         });
-      case "leaf":
+      case "leaf:revision":
         return leafResponse(context, directory);
       default:
         throw new Error(`Unexpected fixture model ${model.id}`);
@@ -151,6 +155,23 @@ export default function observerFixture(pi: ExtensionAPI) {
     async execute() {
       return { content: [{ type: "text", text: "fixture" }], details: {} };
     },
+  });
+  pi.on("message_end", (event) => {
+    if (event.message.role !== "assistant" || event.message.content.length === 0) return;
+
+    return {
+      message: {
+        ...event.message,
+        usage: {
+          input: 1200,
+          output: 300,
+          cacheRead: 400,
+          cacheWrite: 100,
+          totalTokens: 2000,
+          cost: { input: 0.012, output: 0.006, cacheRead: 0.001, cacheWrite: 0.001, total: 0.02 },
+        },
+      },
+    };
   });
   pi.on("session_start", (_event, ctx) => {
     if (ctx.model?.id === "root") ctx.ui.notify("Observer fixture ready", "info");

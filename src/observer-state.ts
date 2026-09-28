@@ -3,7 +3,9 @@ import {
   type AgentSession,
   type AgentSessionEvent,
   parseSessionEntries,
+  type SessionEntry,
   SessionManager,
+  type SessionStats,
   sessionEntryToContextMessages,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
@@ -24,6 +26,7 @@ const ToolUpdate = Type.Object({
 type Message = AgentSession["messages"][number];
 
 export type Transcript = {
+  usage: Pick<SessionStats, "tokens" | "cost"> | undefined;
   messages: readonly Message[];
   streaming: Message | undefined;
   partials: ReadonlyMap<string, Static<typeof ToolUpdate>>;
@@ -45,12 +48,42 @@ export type ObservedTask = {
     | { kind: "live"; read: () => Transcript; children: ObservedTask[] };
 };
 
+function sessionUsage(entries: readonly SessionEntry[]): NonNullable<Transcript["usage"]> {
+  const totals = {
+    tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    cost: 0,
+  };
+
+  for (const entry of entries) {
+    const usage =
+      "usage" in entry
+        ? entry.usage
+        : entry.type === "message" && "usage" in entry.message
+          ? entry.message.usage
+          : undefined;
+
+    if (!usage) continue;
+    totals.tokens.input += usage.input;
+    totals.tokens.output += usage.output;
+    totals.tokens.cacheRead += usage.cacheRead;
+    totals.tokens.cacheWrite += usage.cacheWrite;
+    totals.cost += usage.cost.total;
+  }
+
+  totals.tokens.total =
+    totals.tokens.input + totals.tokens.output + totals.tokens.cacheRead + totals.tokens.cacheWrite;
+
+  return totals;
+}
+
 export class LiveTranscript {
   private readonly partials = new Map<string, Static<typeof ToolUpdate>>();
   private readonly tools = new Map<string, string>();
   private toolVersion = 0;
   private leaf: string | null | undefined;
   private messages: Message[] = [];
+  private usageEntry: string | undefined;
+  private usage = sessionUsage([]);
   readonly dispose: () => void;
 
   constructor(
@@ -91,6 +124,14 @@ export class LiveTranscript {
   }
 
   read(): Transcript {
+    const entries = this.session.sessionManager.getEntries();
+    const latest = entries.at(-1)?.id;
+
+    if (latest !== this.usageEntry) {
+      this.usageEntry = latest;
+      this.usage = sessionUsage(entries);
+    }
+
     const leaf = this.session.sessionManager.getLeafId();
 
     if (leaf !== this.leaf) {
@@ -101,6 +142,7 @@ export class LiveTranscript {
     }
 
     return {
+      usage: this.usage,
       messages: this.messages,
       streaming: this.session.agent.state.streamingMessage,
       partials: this.partials,
@@ -137,6 +179,7 @@ export class SavedTranscripts {
 
   read(task: ObservedTask): SavedView {
     const empty: Transcript = {
+      usage: undefined,
       messages: [],
       streaming: undefined,
       partials: new Map(),
@@ -163,6 +206,7 @@ export class SavedTranscripts {
           view: {
             transcript: {
               ...empty,
+              usage: sessionUsage(manager.getEntries()),
               messages: manager.getBranch().flatMap(sessionEntryToContextMessages),
             },
             children: [...taskRecords(manager)].map(savedTask),
