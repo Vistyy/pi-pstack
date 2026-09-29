@@ -1,9 +1,21 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { join } from "node:path";
 import test from "node:test";
-import { contentText, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
+import {
+  contentText,
+  fauxAssistantMessage,
+  fauxToolCall,
+  getCurrentSystemPrompt,
+} from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { Check } from "typebox/value";
-import { childFixture, receipt } from "./child-fixture.js";
+import { childFixture, packageRoot, receipt } from "./child-fixture.js";
+
+const Completed = Type.Object({
+  id: Type.String(),
+  outcome: Type.Object({ status: Type.Literal("completed") }),
+});
 
 await test("background completion wakes the parent without a visible result payload", {
   timeout: 10000,
@@ -79,6 +91,126 @@ await test("background completion wakes the parent without a visible result payl
   const answer = f.session.messages.findLast((message) => message.role === "assistant");
   assert.ok(answer?.role === "assistant");
   assert.equal(contentText(answer.content), "Parent resumed after the child finished");
+});
+
+await test("simultaneous idle completions do not race prompt preparation", {
+  timeout: 10000,
+}, async (t) => {
+  const eventName = `pstack-wake-${randomUUID()}`;
+  const previous = process.env["PSTACK_WAKE_GATE_EVENT"];
+  process.env["PSTACK_WAKE_GATE_EVENT"] = eventName;
+  const started = Promise.withResolvers<void>();
+  const releaseInput = Promise.withResolvers<void>();
+
+  const listener = (release: () => void) => {
+    started.resolve();
+    void releaseInput.promise.then(release);
+  };
+
+  process.on(eventName, listener);
+  t.after(() => {
+    releaseInput.resolve();
+    process.off(eventName, listener);
+
+    if (previous === undefined) delete process.env["PSTACK_WAKE_GATE_EVENT"];
+    else process.env["PSTACK_WAKE_GATE_EVENT"] = previous;
+  });
+
+  const f = await childFixture(t, {
+    extensionPaths: [join(packageRoot, "tests/quiet-wake-gate-extension.ts")],
+  });
+
+  const first = f.gate();
+  const second = f.gate();
+
+  f.nested.setResponses([
+    async () => {
+      await first.promise;
+
+      return fauxAssistantMessage("First private answer");
+    },
+    async () => {
+      await second.promise;
+
+      return fauxAssistantMessage("Second private answer");
+    },
+  ]);
+
+  const firstStarted = await f.call("pstack_task", {
+    prompt: "First task",
+    model: "nested/child:rev1:low",
+    run_in_background: true,
+  });
+
+  const secondStarted = await f.call("pstack_task", {
+    prompt: "Second task",
+    model: "nested/child:rev1:low",
+    run_in_background: true,
+  });
+
+  const a = receipt(firstStarted.text);
+  const b = receipt(secondStarted.text);
+
+  const secondSaved = f.gate();
+
+  const unsubscribe = f.session.subscribe((event) => {
+    if (event.type !== "entry_appended" || event.entry.type !== "custom") return;
+
+    if (event.entry.customType !== "pstack-task") return;
+
+    const data: unknown = event.entry.data;
+
+    if (Check(Completed, data) && data.id === b.id) secondSaved.resolve();
+  });
+
+  t.after(unsubscribe);
+  const seen = new Set<string>();
+  const before = f.parent.state.callCount;
+
+  f.parent.setResponses(
+    Array.from({ length: 3 }, () => (context) => {
+      assert.match(getCurrentSystemPrompt(context.messages), /## PStack role map/);
+
+      const signals = context.messages
+        .filter((message) => message.role === "user")
+        .map((message) => contentText(message.content));
+
+      for (const id of [a.id, b.id]) if (signals.some((text) => text.includes(id))) seen.add(id);
+
+      return fauxAssistantMessage("Parent handled the completion signals");
+    }),
+  );
+
+  first.resolve();
+  await started.promise;
+  second.resolve();
+  await secondSaved.promise;
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 100);
+  });
+
+  const settled = f.report();
+
+  releaseInput.resolve();
+  await settled;
+  await f.session.waitForIdle();
+  await new Promise<void>((resolve) => {
+    setImmediate(resolve);
+  });
+  await new Promise<void>((resolve) => {
+    setImmediate(resolve);
+  });
+
+  const wakes = f.session.sessionManager
+    .getEntries()
+    .filter(
+      (entry) => entry.type === "custom_message" && entry.customType === "pstack-task-result",
+    );
+
+  assert.equal(wakes.length, 2);
+  assert.deepEqual([...seen].sort(), [a.id, b.id].sort());
+  assert.ok(f.parent.state.callCount - before <= 2);
+  assert.deepEqual(f.errors, []);
 });
 
 await test("failed background attempt wakes with status only and retains its error for inspection", {
@@ -246,11 +378,6 @@ await test("inspection of a completed child prevents its queued completion turn"
 
   const child = receipt(started.text);
   const finished = f.gate();
-
-  const Completed = Type.Object({
-    id: Type.String(),
-    outcome: Type.Object({ status: Type.Literal("completed") }),
-  });
 
   const unsubscribe = f.session.subscribe((event) => {
     if (event.type !== "entry_appended" || event.entry.type !== "custom") return;
