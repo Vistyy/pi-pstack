@@ -5,7 +5,8 @@ import test from "node:test";
 import { fauxAssistantMessage, fauxToolCall, getCurrentSystemPrompt } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { Check } from "typebox/value";
-import { childFixture, receipt } from "./child-fixture.js";
+import { parseRoles } from "../src/models.js";
+import { childFixture, packageRoot, receipt } from "./child-fixture.js";
 
 const instructionMarker = "## PStack role map";
 
@@ -233,4 +234,68 @@ await test("nested idle completion keeps system instructions through a builtin r
   assert.match(recorded, /nested delivery finished/);
   assert.match(recorded, new RegExp(readMarker));
   assert.equal(f.errors.length, 0);
+});
+
+await test("completion wake uses the latest PStack role configuration", {
+  timeout: 10000,
+}, async (t) => {
+  const f = await childFixture(t);
+  const release = f.gate();
+
+  f.nested.setResponses([
+    async () => {
+      await release.promise;
+
+      return fauxAssistantMessage("Private child result");
+    },
+  ]);
+
+  const launched = await f.call("pstack_task", {
+    prompt: "Finish after role setup",
+    model: "nested/child:rev1:low",
+    run_in_background: true,
+  });
+
+  assert.equal(launched.isError, false, launched.text);
+
+  const setup = await readFile(
+    join(packageRoot, "content/pstack/skills/setup-pstack/SKILL.md"),
+    "utf8",
+  );
+
+  const roles = Object.fromEntries(
+    parseRoles(setup).map((role) => [
+      role.name,
+      role.panel ? ["fixture/root:high", "nested/child:rev1:low"] : "fixture/root:high",
+    ]),
+  );
+
+  const configured = await f.call("pstack_models", {
+    action: "set",
+    budget: "unlimited",
+    roles,
+  });
+
+  assert.equal(configured.isError, false, configured.text);
+
+  const prompted = f.gate();
+  let prompt: string | undefined;
+
+  f.parent.setResponses([
+    (context) => {
+      prompt = getCurrentSystemPrompt(context.messages);
+      prompted.resolve();
+
+      return fauxAssistantMessage("Updated role map received");
+    },
+  ]);
+
+  release.resolve();
+  await prompted.promise;
+  await f.report();
+  await f.session.waitForIdle();
+  assert.ok(prompt !== undefined);
+  assert.match(prompt, /"roles":\{"feature, refactoring":\{"selector":"fixture\/root:high"/);
+  assert.doesNotMatch(prompt, /"roles":null/);
+  assert.deepEqual(f.errors, []);
 });
