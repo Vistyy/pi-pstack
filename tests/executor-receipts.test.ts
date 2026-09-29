@@ -3,6 +3,7 @@ import test from "node:test";
 import { contentText, fauxAssistantMessage } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { Check } from "typebox/value";
+import { completionReportPrefix } from "../src/completion-report.js";
 import { childFixture } from "./child-fixture.js";
 
 const Receipt = Type.Object({
@@ -73,11 +74,34 @@ for (const background of [false, true]) {
       assert.equal(contentText(last.content), "completion received");
     }
 
-    const completed: unknown = JSON.parse(delivered);
+    const completed: unknown = JSON.parse(
+      background ? delivered.slice(completionReportPrefix.length) : delivered,
+    );
 
     if (background) {
-      assert.deepEqual(completed, { id: launch.id, attempt: 1, status: "completed" });
-      assert.ok(delivered.length < 256);
+      assert.ok(delivered.startsWith(completionReportPrefix));
+      assert.ok(Buffer.byteLength(delivered) <= 16 * 1024);
+      assert.ok(
+        Check(
+          Type.Object({
+            id: Type.String(),
+            attempt: Type.Literal(1),
+            status: Type.Literal("completed"),
+            report: Type.Object({
+              kind: Type.Literal("preview"),
+              text: Type.String(),
+              omittedBytes: Type.Integer({ minimum: 1 }),
+            }),
+          }),
+          completed,
+        ),
+      );
+      assert.equal(completed.id, launch.id);
+      assert.ok(output.startsWith(completed.report.text));
+      assert.equal(
+        completed.report.omittedBytes,
+        Buffer.byteLength(output) - Buffer.byteLength(completed.report.text),
+      );
     } else {
       assert.ok(Check(Receipt, completed));
       assert.equal(completed.id, launch.id);

@@ -2,9 +2,14 @@ import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
-import { fauxAssistantMessage, fauxToolCall, getCurrentSystemPrompt } from "@earendil-works/pi-ai";
-import { Type } from "typebox";
-import { Check } from "typebox/value";
+import {
+  contentText,
+  fauxAssistantMessage,
+  fauxToolCall,
+  getCurrentSystemPrompt,
+  getCurrentTools,
+} from "@earendil-works/pi-ai";
+import { completionReportPrefix } from "../src/completion-report.js";
 import { parseRoles } from "../src/models.js";
 import { childFixture, packageRoot, receipt } from "./child-fixture.js";
 
@@ -18,6 +23,7 @@ function assertStableInstructions(prompts: string[]) {
       prompt.includes(instructionMarker),
       `provider request ${index + 1} lost the injected PStack instructions`,
     );
+    assert.match(prompt, /THIRDPARTY_REPORT_PREFIX_MARKER/);
     assert.equal(prompt, prompts[0], `provider request ${index + 1} changed the instructions`);
   }
 }
@@ -25,7 +31,10 @@ function assertStableInstructions(prompts: string[]) {
 await test("root idle completion keeps system instructions through a builtin read continuation", {
   timeout: 10000,
 }, async (t) => {
-  const f = await childFixture(t);
+  const f = await childFixture(t, {
+    extensionPaths: [join(packageRoot, "tests/report-prefix-extension.ts")],
+  });
+
   await writeFile(join(f.project, "delivery-read.txt"), readMarker);
   const childStarted = f.gate();
   const childGate = f.gate();
@@ -88,6 +97,9 @@ await test("root idle completion keeps system instructions through a builtin rea
     },
     (context) => {
       prompts.push(getCurrentSystemPrompt(context.messages));
+      assert.ok(
+        getCurrentTools(context.messages).some((tool) => tool.name === "thirdparty_report_tool"),
+      );
 
       return fauxAssistantMessage("root delivery turn finished");
     },
@@ -115,17 +127,16 @@ await test("root idle completion keeps system instructions through a builtin rea
   );
 
   const wake = f.session.messages.findLast(
-    (item) => item.role === "custom" && item.customType === "pstack-task-result",
+    (item) => item.role === "user" && contentText(item.content).startsWith(completionReportPrefix),
   );
 
-  assert.ok(wake?.role === "custom");
-  assert.ok(Check(Type.String(), wake.content));
-  assert.deepEqual(JSON.parse(wake.content), {
+  assert.ok(wake?.role === "user");
+  assert.deepEqual(JSON.parse(contentText(wake.content).slice(completionReportPrefix.length)), {
     id: child.id,
     attempt: 1,
     status: "completed",
+    report: { kind: "full", text: "root child finished" },
   });
-  assert.doesNotMatch(JSON.stringify(f.session.messages), /root child finished/);
   const last = f.session.messages.findLast((item) => item.role === "assistant");
 
   assert.ok(last?.role === "assistant");
@@ -137,7 +148,10 @@ await test("root idle completion keeps system instructions through a builtin rea
 await test("nested idle completion keeps system instructions through a builtin read continuation", {
   timeout: 10000,
 }, async (t) => {
-  const f = await childFixture(t);
+  const f = await childFixture(t, {
+    extensionPaths: [join(packageRoot, "tests/report-prefix-extension.ts")],
+  });
+
   await writeFile(join(f.project, "delivery-read.txt"), readMarker);
   const leafStarted = f.gate();
   const leafGate = f.gate();
@@ -198,6 +212,9 @@ await test("nested idle completion keeps system instructions through a builtin r
     },
     (context) => {
       prompts.push(getCurrentSystemPrompt(context.messages));
+      assert.ok(
+        getCurrentTools(context.messages).some((tool) => tool.name === "thirdparty_report_tool"),
+      );
 
       return fauxAssistantMessage("nested delivery finished");
     },

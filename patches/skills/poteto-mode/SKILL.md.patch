@@ -1,5 +1,5 @@
 diff --git a/skills/poteto-mode/SKILL.md b/skills/poteto-mode/SKILL.md
-index f8ddcae379007d61aefcae39b18bd836a488ee21..dcf7fef5f1fa53c72f46de0ef55a148859dbb2c9 100644
+index f8ddcae379007d61aefcae39b18bd836a488ee21..dee1726c059f2c3cdd8b7afaf7baa53c562b33e4 100644
 --- a/skills/poteto-mode/SKILL.md
 +++ b/skills/poteto-mode/SKILL.md
 @@ -1,15 +1,16 @@
@@ -123,19 +123,21 @@ index f8ddcae379007d61aefcae39b18bd836a488ee21..dcf7fef5f1fa53c72f46de0ef55a1488
  
  **Always pause** for irreversible writes: force-push to shared branches, deploys, data deletion, customer messages.
  
-@@ -90,9 +91,9 @@ Read the leaf skill in full for any principle you apply. Each entry names when i
+@@ -90,9 +91,11 @@ Read the leaf skill in full for any principle you apply. Each entry names when i
  
  **Use `subagent_type: "poteto-agent"` for any subagent you spawn inside a playbook step** (code-writing delegates, ad-hoc helpers). `/poteto-mode` and `poteto-agent` route through the same wrapper. Routed workflow skills (`how`, `why`, `interrogate`, `reflect`, `swarm`) set their own `subagent_type` for diverse-model review. Respect what the skill prescribes, don't override to `poteto-agent`.
  
 -**Defaults for every `Task` call.** `run_in_background: true`, agent mode (readonly strips MCP), file pointers not inlined context, explicit model per role (configurable via `/setup-pstack`. Defaults `grok-4.7-xhigh-fast` for code, `claude-opus-5-5-max` for prose and judgment). Code delegates tier by difficulty. The hardest changes (cross-cutting design, gnarly concurrency, subtle algorithms) go to your strongest judgment model (`claude-opus-5-5-max`), whether the task needs judgment on vague intent or is a precisely specified sequence of steps to execute to the letter. Trivial mechanical edits go to your fast code model. Per-role lines in the `/setup-pstack` rule override these defaults and the model choices in the routed skills (`how`, `why`, `arena`, `swarm`, `architect`, `interrogate`, `reflect`). A role with no line keeps its default, and a role line of `inherit-parent` or `auto` runs that role on the parent chat model (omit Task `model`). Each code playbook's configured model comes from its line (`feature, refactoring`, `bug-fix`, `perf-issue`, or `hillclimb`), and the hardest changes read `hardest tasks`. Prose and judgment read `judgment and prose`.
 +**Defaults for every `pstack_task` call.** `run_in_background: true`, `readonly: false`, file pointers not inlined context, and an explicit effective model selector per role configured through `/setup-pstack`. Children inherit the parent's active tools plus task/todo helpers, minus configured exclusions. Read-only children additionally exclude write/edit and receive a no-write instruction. Tool access does not authorize writes. Code delegates tier by difficulty. The hardest changes (cross-cutting design, gnarly concurrency, subtle algorithms) use the `hardest tasks` role, whether the task needs judgment on vague intent or is a precisely specified sequence of steps to execute to the letter. Trivial mechanical edits use the configured code role. The injected role table and `pstack_models` action `get` provide the effective `provider/model:thinking` selectors, including resolved `inherit-parent` and `auto` choices. Pass that selector rather than omitting `model`. A missing or rejected selector requires setup or an explicit valid user choice, not a fallback to an upstream slug. Each code playbook uses its role (`feature, refactoring`, `bug-fix`, `perf-issue`, or `hillclimb`), and the hardest changes use `hardest tasks`. Prose and judgment use `judgment and prose`.
++
++Background final reports arrive automatically with the child ID, attempt, status, and bounded output. Continue independent work or yield without a final answer when blocked. Do not poll or routinely inspect completed tasks. Use `pstack_tasks inspect` for progress, debugging, recovery, or the full text behind an oversized preview. Delivery reports execution, not acceptance of the work.
  
 -You own every subagent's work. Review the diff and write your own summary, don't pass through what it said. Interrupt-chained resumes silently drop directives, so fire a fresh subagent with consolidated scope rather than trusting a "done" summary. A second opinion is the same prompt against a different model. Agreement is high-signal.
 +You own every subagent's work. Review the diff and write your own summary, don't pass through what it said. Only resume an idle owned child through `pstack_task` with its ID and a follow-up prompt. Running children cannot be steered. For a consolidated fresh assignment, start a new child rather than trusting a "done" summary. A second opinion is the same prompt against a different model. Agreement is high-signal.
  
  ## Writing the reply
  
-@@ -116,28 +117,23 @@ Comments follow the same rule as the reply. Write them clean as you go. Keep a c
+@@ -116,28 +119,23 @@ Comments follow the same rule as the reply. Write them clean as you go. Keep a c
  
  Open a todolist whose first items are the matched playbook's steps, copied in verbatim, before any task-specific todos. A step you choose not to do stays in the list with a one-line `skip: <reason>`. Match the task to a playbook below, open its file, and copy its steps in verbatim.
  

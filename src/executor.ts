@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
+import { contentText } from "@earendil-works/pi-ai";
 import {
   type AgentSession,
   type ExtensionAPI,
@@ -9,6 +10,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
 import { type ConfigureRuntime, createChildSession, selectModel } from "./child-session.js";
+import { type CompletionReport, completionReport } from "./completion-report.js";
 import { installObserver } from "./observer.js";
 import { LiveTranscript, type ObservedTask } from "./observer-state.js";
 import {
@@ -58,7 +60,7 @@ const TaskInput = Type.Object(
     run_in_background: Type.Optional(
       Type.Boolean({
         description:
-          "Return an ID immediately and send a hidden completion wake with ID, attempt, and status after the child and its nested work finish. Inspect with pstack_tasks for the full result. Defaults to true for poteto-agent, false otherwise. Foreground calls wait for results and may run in parallel.",
+          "Return an ID immediately and deliver the bounded final report automatically after the child and its nested work finish. Inspect only for progress, debugging, recovery, or oversized detail. Defaults to true for poteto-agent, false otherwise. Foreground calls wait for results and may run in parallel.",
       }),
     ),
     cwd: Type.Optional(
@@ -81,9 +83,17 @@ type Request = Static<typeof TaskInput>;
 
 type Status = Outcome["status"] | "cancelling";
 
-type Notify = (content: string) => Promise<void>;
+type ReportCarrier = {
+  busy: (content: string) => void | Promise<void>;
+  idle: (content: string) => void | Promise<void>;
+};
 
-type CompletionWake = { id: string; attempt: number; status: "completed" | "failed" };
+type PendingReport = {
+  identity: Pick<CompletionReport, "id" | "attempt" | "status">;
+  content: string;
+  current: () => boolean;
+  resolve: () => void;
+};
 
 type Summary = ReturnType<ChildTask["summary"]>;
 
@@ -98,12 +108,17 @@ const message = (content: string) => ({
   display: false,
 });
 
-const delivery = { triggerTurn: true, deliverAs: "followUp" as const };
+const busyDelivery = { triggerTurn: true, deliverAs: "steer" as const };
+
+const idleDelivery = { deliverAs: "steer" as const };
 
 class TaskScope {
   readonly children = new Map<string, ChildTask>();
   readonly deliveries = new Set<Promise<void>>();
-  private readonly pending: Array<() => void> = [];
+  private readonly pending: PendingReport[] = [];
+  private readonly steering: PendingReport[] = [];
+  private admitted: PendingReport | undefined;
+  private compacting = false;
   active = true;
   deliveryError: Error | undefined;
   private journal: { pi: ExtensionAPI; ctx: ExtensionContext } | undefined;
@@ -115,7 +130,7 @@ class TaskScope {
   constructor(
     readonly depth: number,
     readonly readonly: boolean,
-    readonly notify: Notify,
+    readonly carrier: ReportCarrier,
     readonly isStreaming: () => boolean,
     readonly changed: () => void = () => {},
   ) {}
@@ -179,12 +194,7 @@ class TaskScope {
     if (
       this.journal.ctx.sessionManager
         .buildContextEntries()
-        .some(
-          (entry) =>
-            entry.type === "custom_message" &&
-            entry.customType === recoveryType &&
-            entry.content === content,
-        )
+        .some((entry) => entry.type === "custom_message" && entry.customType === recoveryType)
     )
       return;
 
@@ -203,32 +213,121 @@ class TaskScope {
     return child;
   }
 
-  post(wake: CompletionWake, current: () => boolean) {
-    const pending = Promise.withResolvers<void>();
-    const content = JSON.stringify(wake);
+  post(identity: PendingReport["identity"], text: string, current: () => boolean) {
+    const delivery = Promise.withResolvers<void>();
+    this.deliveries.add(delivery.promise);
+    void delivery.promise.then(() => this.deliveries.delete(delivery.promise));
 
-    const deliver = () => {
-      void Promise.resolve()
-        .then(async () => {
-          if (this.active && current()) await this.notify(content);
-        })
-        .catch((error: unknown) => {
-          this.deliveryError = new Error(String(error), { cause: error });
-        })
-        .finally(pending.resolve);
-    };
+    this.pending.push({
+      identity,
+      content: completionReport(identity, text),
+      current,
+      resolve: delivery.resolve,
+    });
+    this.flush();
+  }
 
-    this.deliveries.add(pending.promise);
-    void pending.promise.then(() => {
-      this.deliveries.delete(pending.promise);
+  private received(report: PendingReport) {
+    return (
+      this.journal !== undefined &&
+      resultReceived(
+        this.journal.ctx.sessionManager.getBranch(),
+        report.identity.id,
+        report.identity.attempt,
+      )
+    );
+  }
+
+  acceptedSteering(content: string) {
+    const index = this.steering.findIndex((report) => report.content === content);
+
+    if (index < 0) return;
+
+    const [report] = this.steering.splice(index, 1);
+
+    report?.resolve();
+  }
+
+  settled() {
+    const missing = this.steering.splice(0).filter((report) => {
+      if (this.received(report)) {
+        report.resolve();
+
+        return false;
+      }
+
+      return true;
     });
 
-    if (this.isStreaming()) this.pending.push(deliver);
-    else deliver();
+    this.pending.unshift(...missing);
+    this.flush();
+  }
+
+  acceptedUserMessage(content: string) {
+    if (this.admitted === undefined) return;
+
+    const report = this.admitted;
+
+    if (content === report.content || this.received(report)) {
+      this.admitted = undefined;
+      report.resolve();
+    } else {
+      this.admitted = undefined;
+      this.pending.unshift(report);
+    }
+
+    this.flush();
+  }
+
+  compact(start: boolean) {
+    this.compacting = start;
+
+    if (!start) this.flush();
+  }
+
+  private reject(report: PendingReport, error: Error) {
+    const index = this.steering.indexOf(report);
+
+    if (index >= 0) this.steering.splice(index, 1);
+
+    if (this.admitted === report) this.admitted = undefined;
+
+    this.deliveryError = error;
+    report.resolve();
   }
 
   flush() {
-    for (const deliver of this.pending.splice(0)) deliver();
+    if (this.compacting || !this.active) return;
+
+    while (this.pending.length > 0) {
+      if (this.admitted !== undefined && !this.isStreaming()) return;
+
+      const report = this.pending.shift();
+
+      if (!report) return;
+
+      if (!report.current() || this.received(report)) {
+        report.resolve();
+
+        continue;
+      }
+
+      try {
+        if (this.isStreaming()) {
+          this.steering.push(report);
+          void Promise.resolve(this.carrier.busy(report.content)).catch((error: unknown) => {
+            this.reject(report, new Error(String(error), { cause: error }));
+          });
+        } else {
+          this.admitted = report;
+          void Promise.resolve(this.carrier.idle(report.content)).catch((error: unknown) => {
+            this.reject(report, new Error(String(error), { cause: error }));
+          });
+        }
+      } catch (error) {
+        this.reject(report, new Error(String(error), { cause: error }));
+      }
+    }
   }
 
   async settle(session: AgentSession) {
@@ -249,7 +348,10 @@ class TaskScope {
 
   async cancelChildren(reason: "cancelled" | "interrupted" = "cancelled") {
     this.active = false;
-    this.flush();
+
+    for (const report of [...this.pending.splice(0), ...this.steering.splice(0)]) report.resolve();
+    this.admitted?.resolve();
+    this.admitted = undefined;
     await Promise.all([...this.children.values()].map((child) => child.cancel(reason)));
     await Promise.all([...this.deliveries]);
   }
@@ -313,12 +415,19 @@ class ChildTask {
     this.scope = new TaskScope(
       parent.depth + 1,
       config.readonly,
-      async (content) => {
-        if (!this.session) throw new Error("Child session is not initialized");
+      {
+        busy: (content) => {
+          if (!this.session) throw new Error("Child session is not initialized");
 
-        await this.session.sendCustomMessage(message(content), delivery);
+          return this.session.sendCustomMessage(message(content), busyDelivery);
+        },
+        idle: (content) => {
+          if (!this.session) throw new Error("Child session is not initialized");
+
+          return this.session.sendUserMessage(content, idleDelivery);
+        },
       },
-      () => this.session?.isStreaming === true && !this.session.isCompacting,
+      () => this.session?.isStreaming === true,
       () => parent.changed(),
     );
     this.scope.interrupted = record !== undefined && this.status === "interrupted";
@@ -449,6 +558,7 @@ class ChildTask {
 
         this.parent.post(
           { id: this.id, attempt, status: this.status },
+          this.status === "completed" ? (this.output ?? "") : (this.error ?? "Child failed"),
           () => this.turn === turn && !this.cancelled && this.inspectedAttempt !== attempt,
         );
       }
@@ -629,10 +739,11 @@ export function installExecutor(
     new TaskScope(
       0,
       false,
-      async (content) => {
-        pi.sendMessage(message(content), delivery);
+      {
+        busy: (content) => pi.sendMessage(message(content), busyDelivery),
+        idle: (content) => pi.sendUserMessage(content, idleDelivery),
       },
-      () => context?.signal !== undefined,
+      () => context?.isIdle() === false,
       () => observer?.refresh(),
     );
 
@@ -668,10 +779,21 @@ export function installExecutor(
     scope.bind(pi, ctx);
   });
   pi.on("session_tree", (_event, ctx) => scope.bind(pi, ctx));
-  pi.on("agent_end", (_event, ctx) => {
-    if (ctx.signal?.aborted !== true) scope.flush();
+  pi.on("agent_end", () => scope.flush());
+  pi.on("agent_settled", () => scope.settled());
+  pi.on("message_start", (event) => {
+    if (event.message.role === "user")
+      scope.acceptedUserMessage(contentText(event.message.content));
+    else if (event.message.role === "custom" && event.message.customType === "pstack-task-result")
+      scope.acceptedSteering(contentText(event.message.content));
   });
-  pi.on("agent_settled", () => scope.flush());
+  pi.on("session_before_compact", () => scope.compact(true));
+  pi.on("session_compact", () => {
+    setImmediate(() => scope.compact(false));
+  });
+  pi.on("session_compact_failed", () => {
+    setImmediate(() => scope.compact(false));
+  });
   pi.on("input", (event) => {
     userInput = event.source !== "extension";
   });
@@ -696,7 +818,7 @@ export function installExecutor(
     name: "pstack_tasks",
     label: "PStack tasks",
     description:
-      "List this parent's children, inspect an exact child and its transcript/result, or cancel that child and its descendants. Cancellation does not undo edits. Lists are compact; inspect returns the saved result and transcript path. Reopened sessions restore owned tasks without starting them. Completion reports execution, not acceptance of its work.",
+      "List children, inspect an exact child and its saved result or transcript, or cancel descendants. Background final reports arrive automatically; inspect only for progress, debugging, recovery, or oversized detail. Cancellation does not undo edits. Reopened sessions restore owned tasks without restarting them. Completion reports execution, not acceptance.",
     parameters: Type.Object({
       action: Type.Union([Type.Literal("list"), Type.Literal("inspect"), Type.Literal("cancel")]),
       id: Type.Optional(Type.String()),
@@ -719,7 +841,7 @@ export function installExecutor(
     label: "PStack task",
     executionMode: "parallel",
     description:
-      "Run or resume a PStack child with its own conversation. Children belong to their parent's saved branch. Navigation, reload, or exit interrupts active execution. Reopening restores records only; explicitly resume an interrupted ID after reconciling prior tool effects. Root and direct children can delegate; grandchildren cannot. A background completion wakes the parent with its ID and status; use pstack_tasks inspect for the full result. While required background results are outstanding, end the turn without a final answer and continue when results arrive; do not poll in a waiting loop.",
+      "Run or resume a PStack child with its own conversation. Children belong to their parent's saved branch. Navigation, reload, or exit interrupts active execution. Reopening restores records only; explicitly resume an interrupted ID after reconciling prior tool effects. Root and direct children can delegate; grandchildren cannot. Background final reports arrive automatically, bounded to 16 KiB; inspect only for progress, debugging, recovery, or oversized detail. While required results are outstanding, continue independent work or yield without a final answer; do not poll.",
     parameters: TaskInput,
     async execute(_id, request, signal, _update, ctx) {
       signal?.throwIfAborted();

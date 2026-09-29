@@ -141,7 +141,7 @@ await test("failed startup cleans up and a subsequent child remains usable", {
   assert.match(result.text, /next child succeeded/);
 });
 
-await test("nested background completion waits for follow-up consumption and a second leaf", {
+await test("nested background completion delivers both leaf reports before settling", {
   timeout: 10000,
 }, async (t) => {
   const f = await childFixture(t);
@@ -182,7 +182,7 @@ await test("nested background completion waits for follow-up consumption and a s
             contentText(message.content).includes('"status":"completed"'),
         ),
       );
-      assert.doesNotMatch(JSON.stringify(context.messages), /first leaf evidence/);
+      assert.match(JSON.stringify(context.messages), /first leaf evidence/);
 
       return fauxAssistantMessage(
         fauxToolCall("pstack_task", {
@@ -202,7 +202,7 @@ await test("nested background completion waits for follow-up consumption and a s
       );
 
       assert.equal(wakes.length, 2);
-      assert.doesNotMatch(JSON.stringify(context.messages), /second leaf evidence/);
+      assert.match(JSON.stringify(context.messages), /second leaf evidence/);
 
       return fauxAssistantMessage("synthesized both leaves");
     },

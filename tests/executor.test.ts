@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  contentText,
   fauxAssistantMessage,
   fauxProvider,
   fauxToolCall,
@@ -21,6 +22,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { Check } from "typebox/value";
+import { completionReportPrefix } from "../src/completion-report.js";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 
@@ -281,17 +283,20 @@ export default (pi) => {
   unsubscribe();
 
   const wake = session.messages.findLast(
-    (message) => message.role === "custom" && message.customType === "pstack-task-result",
+    (message) =>
+      message.role === "user" && contentText(message.content).startsWith(completionReportPrefix),
   );
 
-  assert.ok(wake?.role === "custom");
-  assert.ok(Check(Type.String(), wake.content));
-  assert.deepEqual(JSON.parse(wake.content), {
+  assert.ok(wake?.role === "user");
+
+  const text = contentText(wake.content);
+
+  assert.deepEqual(JSON.parse(text.slice(completionReportPrefix.length)), {
     id: child.id,
     attempt: 1,
     status: "completed",
+    report: { kind: "full", text: "background evidence" },
   });
-  assert.doesNotMatch(JSON.stringify(session.messages), /background evidence/);
 
   provider.setResponses([
     fauxAssistantMessage(fauxToolCall("pstack_tasks", { action: "inspect", id: child.id }), {

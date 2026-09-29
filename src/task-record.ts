@@ -6,6 +6,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
 import { Check } from "typebox/value";
+import { completionReportPrefix } from "./completion-report.js";
 
 export const taskRecordType = "pstack-task";
 
@@ -74,6 +75,29 @@ export function taskRecords(manager: ExtensionContext["sessionManager"]) {
   return records.values();
 }
 
+const Report = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    attempt: Type.Integer({ minimum: 1 }),
+    status: Type.Union([Type.Literal("completed"), Type.Literal("failed")]),
+    report: Type.Union([
+      Type.Object(
+        { kind: Type.Literal("full"), text: Type.String() },
+        { additionalProperties: false },
+      ),
+      Type.Object(
+        {
+          kind: Type.Literal("preview"),
+          text: Type.String(),
+          omittedBytes: Type.Integer({ minimum: 1 }),
+        },
+        { additionalProperties: false },
+      ),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
 const Receipt = Type.Object({
   id: Type.String(),
   attempt: Type.Integer(),
@@ -113,6 +137,14 @@ export function resultReceived(entries: SessionEntry[], id: string, attempt: num
       return true;
 
     try {
+      if (text.startsWith(completionReportPrefix)) {
+        const data: unknown = JSON.parse(text.slice(completionReportPrefix.length));
+
+        return Check(Report, data) && data.id === id && data.attempt === attempt;
+      }
+
+      if (entry.type !== "custom_message" || entry.customType !== "pstack-task-result")
+        return false;
       const data: unknown = JSON.parse(text);
 
       return Check(Receipt, data) && data.id === id && data.attempt === attempt;

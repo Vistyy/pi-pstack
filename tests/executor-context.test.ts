@@ -571,7 +571,7 @@ await test("native parent compaction does not cancel a background child or lose 
             contentText(message.content).includes('"status":"completed"'),
         ),
       );
-      assert.doesNotMatch(JSON.stringify(context.messages), /after compaction evidence/);
+      assert.match(JSON.stringify(context.messages), /after compaction evidence/);
 
       return fauxAssistantMessage("received completion after compaction");
     },
@@ -590,7 +590,7 @@ await test("native parent compaction does not cancel a background child or lose 
   assert.equal(detail.output, "after compaction evidence");
 });
 
-await test("background completion is delivered during manual compaction", {
+await test("background completion waits for manual compaction and then delivers", {
   timeout: 10000,
 }, async (t) => {
   const f = await childFixture(t);
@@ -643,11 +643,15 @@ await test("background completion is delivered during manual compaction", {
     await compactionStarted.promise;
     const delivered = f.report();
     childRelease.resolve();
-    await Promise.race([delivered, failed.promise]);
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
     assert.equal(f.session.isCompacting, true);
+    assert.equal(received.length, 0);
+    compactionRelease.resolve();
+    await Promise.race([delivered, failed.promise]);
     assert.equal(received.length, 1);
-    assert.match(received[0] ?? "", /\\"status\\":\\"completed\\"/);
-    assert.doesNotMatch(received[0] ?? "", /result produced during compaction/);
+    assert.match(received[0] ?? "", /result produced during compaction/);
     assert.deepEqual(f.errors, []);
   } finally {
     unsubscribe();
@@ -655,7 +659,7 @@ await test("background completion is delivered during manual compaction", {
     await compacting;
   }
 
-  assert.doesNotMatch(JSON.stringify(f.session.messages), /result produced during compaction/);
+  assert.match(JSON.stringify(f.session.messages), /result produced during compaction/);
   const inspected = await f.call("pstack_tasks", { action: "inspect", id: child.id });
   assert.equal(inspected.isError, false, inspected.text);
   const detail: unknown = JSON.parse(inspected.text);

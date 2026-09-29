@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getCurrentSystemMessage } from "@earendil-works/pi-ai";
 import {
   type ExtensionAPI,
   type ExtensionContext,
@@ -140,22 +139,8 @@ export function createRuntime(pi: ExtensionAPI, options?: { profile: Profile }):
     };
   });
   pi.on("context", async (event, ctx) => {
-    const lastSystem = event.messages.findLastIndex((message) => message.role === "system");
-    const system = event.messages[lastSystem];
-    let messages = event.messages;
-
-    if (system?.role === "system") {
-      const section = `<pstack>\n${await pstackSection(ctx)}\n</pstack>`;
-
-      if (getCurrentSystemMessage(event.messages)?.sections?.["pstack"] !== section)
-        messages = event.messages.with(lastSystem, {
-          ...system,
-          sections: { ...system.sections, pstack: section },
-        });
-    }
-
     if (options?.profile !== "poteto-agent" && !(options === undefined && modeEnabled(ctx)))
-      return messages === event.messages ? undefined : { messages };
+      return undefined;
     const { mode } = await source();
 
     return {
@@ -168,7 +153,7 @@ export function createRuntime(pi: ExtensionAPI, options?: { profile: Profile }):
             "poteto-mode": `<skill name="poteto-mode" location="${modePath}">\nReferences are relative to ${join(skillsDir, "poteto-mode")}.\n\n${mode}\n</skill>`,
           },
         },
-        ...messages,
+        ...event.messages,
       ],
     };
   });

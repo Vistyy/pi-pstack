@@ -8,14 +8,50 @@ import {
 } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { Check } from "typebox/value";
+import { completionReportPrefix } from "../src/completion-report.js";
 import { childFixture, receipt } from "./child-fixture.js";
+
+function reports(f: Awaited<ReturnType<typeof childFixture>>) {
+  return f.session.sessionManager
+    .getEntries()
+    .filter(
+      (entry) =>
+        entry.type === "message" &&
+        entry.message.role === "user" &&
+        contentText(entry.message.content).startsWith(completionReportPrefix),
+    );
+}
+
+const Report = Type.Object({
+  id: Type.String(),
+  attempt: Type.Integer(),
+  status: Type.Union([Type.Literal("completed"), Type.Literal("failed")]),
+  report: Type.Union([
+    Type.Object({ kind: Type.Literal("full"), text: Type.String() }),
+    Type.Object({
+      kind: Type.Literal("preview"),
+      text: Type.String(),
+      omittedBytes: Type.Integer(),
+    }),
+  ]),
+});
+
+function parseReport(text: string) {
+  assert.ok(text.startsWith(completionReportPrefix));
+
+  const data: unknown = JSON.parse(text.slice(completionReportPrefix.length));
+
+  assert.ok(Check(Report, data));
+
+  return data;
+}
 
 const Completed = Type.Object({
   id: Type.String(),
   outcome: Type.Object({ status: Type.Literal("completed") }),
 });
 
-await test("background completion wakes the parent without a visible result payload", {
+await test("background completion delivers its full report without inspection", {
   timeout: 10000,
 }, async (t) => {
   const f = await childFixture(t);
@@ -46,10 +82,11 @@ await test("background completion wakes the parent without a visible result payl
       );
 
       assert.ok(signal?.role === "user");
-      assert.deepEqual(JSON.parse(contentText(signal.content)), {
+      assert.deepEqual(parseReport(contentText(signal.content)), {
         id: child.id,
         attempt: 1,
         status: "completed",
+        report: { kind: "full", text: "Private child answer" },
       });
 
       return fauxAssistantMessage("Parent resumed after the child finished");
@@ -60,32 +97,15 @@ await test("background completion wakes the parent without a visible result payl
   await settled;
   await f.session.waitForIdle();
 
-  const completions = f.session.sessionManager
-    .getEntries()
-    .filter(
-      (entry) => entry.type === "custom_message" && entry.customType === "pstack-task-result",
-    );
-
-  assert.equal(completions.length, 1);
-  const completion = completions[0];
-
-  assert.ok(completion?.type === "custom_message");
-  assert.equal(completion.display, false);
-  assert.ok(Check(Type.String(), completion.content));
-  const wake: unknown = JSON.parse(completion.content);
-
-  assert.deepEqual(wake, {
+  assert.equal(reports(f).length, 1);
+  const completion = reports(f)[0];
+  assert.ok(completion?.type === "message" && completion.message.role === "user");
+  assert.deepEqual(parseReport(contentText(completion.message.content)), {
     id: child.id,
     attempt: 1,
     status: "completed",
+    report: { kind: "full", text: "Private child answer" },
   });
-  assert.equal(
-    f.session.messages.some(
-      (message) =>
-        message.role === "user" && contentText(message.content).includes("Private child answer"),
-    ),
-    false,
-  );
   const answer = f.session.messages.findLast((message) => message.role === "assistant");
   assert.ok(answer?.role === "assistant");
   assert.equal(contentText(answer.content), "Parent resumed after the child finished");
@@ -128,19 +148,21 @@ await test("simultaneous idle completions do not race prompt preparation", {
   const b = receipt(secondStarted.text);
 
   const completions = f.gate();
+
   let count = 0;
 
   const unsubscribe = f.session.subscribe((event) => {
     if (
       event.type === "message_end" &&
-      event.message.role === "custom" &&
-      event.message.customType === "pstack-task-result" &&
+      event.message.role === "user" &&
+      contentText(event.message.content).startsWith(completionReportPrefix) &&
       ++count === 2
     )
       completions.resolve();
   });
 
   t.after(unsubscribe);
+
   const seen = new Set<string>();
   const before = f.parent.state.callCount;
   const userCount = f.session.messages.filter((message) => message.role === "user").length;
@@ -169,14 +191,11 @@ await test("simultaneous idle completions do not race prompt preparation", {
     setImmediate(resolve);
   });
 
-  const wakes = f.session.sessionManager
-    .getEntries()
-    .filter(
-      (entry) => entry.type === "custom_message" && entry.customType === "pstack-task-result",
-    );
-
-  assert.equal(wakes.length, 2);
-  assert.equal(f.session.messages.filter((message) => message.role === "user").length, userCount);
+  assert.equal(reports(f).length, 2);
+  assert.equal(
+    f.session.messages.filter((message) => message.role === "user").length,
+    userCount + 2,
+  );
   assert.deepEqual([...seen].sort(), [a.id, b.id].sort());
   assert.ok(f.parent.state.callCount - before <= 2);
   assert.deepEqual(f.errors, []);
@@ -247,19 +266,11 @@ await test("completion still wakes the parent after its current turn aborts", {
     setTimeout(resolve, 100);
   });
 
-  const wakes = f.session.sessionManager
-    .getEntries()
-    .filter(
-      (entry) => entry.type === "custom_message" && entry.customType === "pstack-task-result",
-    );
-
-  assert.equal(wakes.length, 1);
-  assert.ok(wakes[0]?.type === "custom_message");
-  assert.equal(wakes[0].display, false);
+  assert.equal(reports(f).length, 1);
   assert.deepEqual(f.errors, []);
 });
 
-await test("failed background attempt wakes with status only and retains its error for inspection", {
+await test("failed background attempt delivers its error and retains inspection", {
   timeout: 10000,
 }, async (t) => {
   const f = await childFixture(t);
@@ -291,12 +302,12 @@ await test("failed background attempt wakes with status only and retains its err
       );
 
       assert.ok(message?.role === "user");
-      assert.deepEqual(JSON.parse(contentText(message.content)), {
+      assert.deepEqual(parseReport(contentText(message.content)), {
         id: child.id,
         attempt: 1,
         status: "failed",
+        report: { kind: "full", text: "Error: Private provider failure" },
       });
-      assert.doesNotMatch(JSON.stringify(context.messages), /Private provider failure/);
 
       return fauxAssistantMessage("Failed child wake received");
     },
@@ -307,20 +318,14 @@ await test("failed background attempt wakes with status only and retains its err
   await settled;
   await f.session.waitForIdle();
 
-  const completions = f.session.sessionManager
-    .getEntries()
-    .filter(
-      (entry) => entry.type === "custom_message" && entry.customType === "pstack-task-result",
-    );
-
-  assert.equal(completions.length, 1);
-  assert.ok(completions[0]?.type === "custom_message");
-  assert.equal(completions[0].display, false);
-  assert.ok(Check(Type.String(), completions[0].content));
-  assert.deepEqual(JSON.parse(completions[0].content), {
+  assert.equal(reports(f).length, 1);
+  const completion = reports(f)[0];
+  assert.ok(completion?.type === "message" && completion.message.role === "user");
+  assert.deepEqual(parseReport(contentText(completion.message.content)), {
     id: child.id,
     attempt: 1,
     status: "failed",
+    report: { kind: "full", text: "Error: Private provider failure" },
   });
   const answer = f.session.messages.findLast((message) => message.role === "assistant");
 
@@ -380,25 +385,20 @@ await test("inspection of a previous attempt does not suppress a resumed attempt
   await settled;
   await f.session.waitForIdle();
 
-  const completions = f.session.sessionManager
-    .getEntries()
-    .filter(
-      (entry) => entry.type === "custom_message" && entry.customType === "pstack-task-result",
-    );
-
-  assert.equal(completions.length, 1);
-  assert.ok(completions[0]?.type === "custom_message");
-  assert.ok(Check(Type.String(), completions[0].content));
-  assert.deepEqual(JSON.parse(completions[0].content), {
+  assert.equal(reports(f).length, 1);
+  const completion = reports(f)[0];
+  assert.ok(completion?.type === "message" && completion.message.role === "user");
+  assert.deepEqual(parseReport(contentText(completion.message.content)), {
     id: child.id,
     attempt: 2,
     status: "completed",
+    report: { kind: "full", text: "Second attempt result" },
   });
   const answer = f.session.messages.findLast((message) => message.role === "assistant");
 
   assert.ok(answer?.role === "assistant");
   assert.equal(contentText(answer.content), "Resumed attempt wake received");
-  assert.doesNotMatch(JSON.stringify(f.session.messages), /Second attempt result/);
+  assert.match(JSON.stringify(f.session.messages), /Second attempt result/);
 });
 
 await test("inspection of a completed child prevents its queued completion turn", {
@@ -470,12 +470,5 @@ await test("inspection of a completed child prevents its queued completion turn"
   const answer = f.session.messages.findLast((message) => message.role === "assistant");
   assert.ok(answer?.role === "assistant");
   assert.equal(contentText(answer.content), "Parent used the inspected answer");
-  assert.equal(
-    f.session.sessionManager
-      .getEntries()
-      .filter(
-        (entry) => entry.type === "custom_message" && entry.customType === "pstack-task-result",
-      ).length,
-    0,
-  );
+  assert.equal(reports(f).length, 0);
 });
