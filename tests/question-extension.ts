@@ -67,6 +67,9 @@ export default function questionFixture(pi: ExtensionAPI) {
     }),
   );
   pi.registerProvider(provider.provider);
+  pi.events.on("herdr:blocked", (event) => {
+    appendFileSync(join(directory, "blocked.jsonl"), `${JSON.stringify(event)}\n`);
+  });
   let timer: ReturnType<typeof setInterval> | undefined;
   pi.on("tool_call", (event, ctx) => {
     if (event.toolName !== "pstack_question") return;

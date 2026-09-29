@@ -71,17 +71,23 @@ try:
     command('questions-mixed')
     wait_text('Question 1/2')
     capture('01-single')
+    assert '(question-fixture) root' in screen(), 'Question must replace the input above the footer'
+    blocked = directory / 'blocked.jsonl'
+    assert blocked.exists() and [json.loads(line) for line in blocked.read_text().splitlines()] == [
+        {'active': True, 'label': 'Waiting for questionnaire answers'}
+    ], 'Question must report Herdr blocked while awaiting input'
     keys('Down', 'Enter')
     wait_text('Multiple choices')
     keys('Enter')
     wait_text('Select at least one option')
     tmux('resize-window', '-t', 'questions', '-x', '68', '-y', '18')
-    keys('PageDown', 'PageDown', 'PageDown')
+    keys('PageDown', 'PageDown', 'PageDown', 'PageDown')
     wait_text('END OF BODY')
     keys('Down', 'Down', 'Space', 'Up', 'Up', 'Space')
     wait_text('[x] Correctness')
     wait_text('[x] Performance')
     capture('02-multiple-small-terminal')
+    assert 'Question 2/2' in screen() and '(question-fixture) root' in screen(), 'Small terminal must show the title and footer'
     keys('Enter')
     wait_text('Review')
     capture('03-review')
@@ -96,6 +102,9 @@ try:
         {'id': 'areas', 'kind': 'options', 'values': ['UX', 'Performance']},
     ]}
     wait_text('Question fixture complete. questions-mixed')
+    assert [json.loads(line) for line in blocked.read_text().splitlines()] == [
+        {'active': True, 'label': 'Waiting for questionnaire answers'}, {'active': False}
+    ], 'Submitting must clear Herdr blocked'
     tmux('resize-window', '-t', 'questions', '-x', '128', '-y', '44')
     command('questions-other')
     wait_text('Question 1/1')
@@ -171,6 +180,7 @@ try:
     wait_text('[x] Other (edit an answer)')
     (directory / 'abort').write_text('abort this owned fixture')
     assert outcomes(6)[5] == {'status': 'cancelled', 'answers': []}
+    assert [event['active'] for event in map(json.loads, blocked.read_text().splitlines())] == [True, False] * 6, 'Every answer, cancel, and abort must clear Herdr blocked'
     capture('07-aborted')
     command('/question-fixture-exit')
     deadline = time.monotonic() + 15
