@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
-import { fauxAssistantMessage, fauxToolCall, getCurrentSystemPrompt } from "@earendil-works/pi-ai";
+import {
+  contentText,
+  fauxAssistantMessage,
+  fauxToolCall,
+  getCurrentSystemPrompt,
+} from "@earendil-works/pi-ai";
 import { childFixture, receipt } from "./child-fixture.js";
 
 const task = { model: "nested/child:rev1:low", prompt: "child assignment" };
@@ -170,7 +175,14 @@ await test("nested background completion waits for follow-up consumption and a s
     ),
     fauxAssistantMessage("waiting for first leaf"),
     (context) => {
-      assert.match(JSON.stringify(context.messages), /first leaf evidence/);
+      assert.ok(
+        context.messages.some(
+          (message) =>
+            message.role === "user" &&
+            contentText(message.content).includes('"status":"completed"'),
+        ),
+      );
+      assert.doesNotMatch(JSON.stringify(context.messages), /first leaf evidence/);
 
       return fauxAssistantMessage(
         fauxToolCall("pstack_task", {
@@ -184,7 +196,13 @@ await test("nested background completion waits for follow-up consumption and a s
     },
     fauxAssistantMessage("waiting for second leaf"),
     (context) => {
-      assert.match(JSON.stringify(context.messages), /second leaf evidence/);
+      const wakes = context.messages.filter(
+        (message) =>
+          message.role === "user" && contentText(message.content).includes('"status":"completed"'),
+      );
+
+      assert.equal(wakes.length, 2);
+      assert.doesNotMatch(JSON.stringify(context.messages), /second leaf evidence/);
 
       return fauxAssistantMessage("synthesized both leaves");
     },

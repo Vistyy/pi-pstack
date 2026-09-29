@@ -265,11 +265,48 @@ export default (pi) => {
 
   assert.ok(launched?.role === "toolResult");
   assert.match(JSON.stringify(launched.content), /running/);
+
+  const launchedText = launched.content
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("");
+
+  const child: unknown = JSON.parse(launchedText);
+
+  assert.ok(Check(Type.Object({ id: Type.String() }), child));
+
   releaseChild?.();
   await receipt;
   await session.waitForIdle();
   unsubscribe();
-  assert.match(JSON.stringify(session.messages), /background evidence/);
+
+  const wake = session.messages.findLast(
+    (message) => message.role === "custom" && message.customType === "pstack-task-result",
+  );
+
+  assert.ok(wake?.role === "custom");
+  assert.ok(Check(Type.String(), wake.content));
+  assert.deepEqual(JSON.parse(wake.content), {
+    id: child.id,
+    attempt: 1,
+    status: "completed",
+  });
+  assert.doesNotMatch(JSON.stringify(session.messages), /background evidence/);
+
+  provider.setResponses([
+    fauxAssistantMessage(fauxToolCall("pstack_tasks", { action: "inspect", id: child.id }), {
+      stopReason: "toolUse",
+    }),
+    fauxAssistantMessage("result inspected"),
+  ]);
+  await session.prompt("Inspect completed child");
+
+  const inspected = session.messages.findLast(
+    (message) => message.role === "toolResult" && message.toolName === "pstack_tasks",
+  );
+
+  assert.ok(inspected?.role === "toolResult" && !inspected.isError);
+  assert.match(JSON.stringify(inspected.content), /background evidence/);
 
   provider.setResponses([
     fauxAssistantMessage(

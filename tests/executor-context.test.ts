@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import {
+  contentText,
   type FauxResponseFactory,
   fauxAssistantMessage,
   fauxToolCall,
@@ -10,6 +11,8 @@ import {
   getCurrentTools,
 } from "@earendil-works/pi-ai";
 import { stripFrontmatter } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
+import { Check } from "typebox/value";
 import { childFixture, packageRoot, receipt } from "./child-fixture.js";
 
 await test("global child-tool exclusions remove inherited integrations for new children", {
@@ -561,7 +564,14 @@ await test("native parent compaction does not cancel a background child or lose 
   assert.equal(receipt(inspected.text).status, "running");
   f.parent.setResponses([
     (context) => {
-      assert.match(JSON.stringify(context.messages), /after compaction evidence/);
+      assert.ok(
+        context.messages.some(
+          (message) =>
+            message.role === "user" &&
+            contentText(message.content).includes('"status":"completed"'),
+        ),
+      );
+      assert.doesNotMatch(JSON.stringify(context.messages), /after compaction evidence/);
 
       return fauxAssistantMessage("received completion after compaction");
     },
@@ -574,6 +584,10 @@ await test("native parent compaction does not cancel a background child or lose 
   assert.match(JSON.stringify(last), /received completion after compaction/);
   const completed = await f.call("pstack_tasks", { action: "inspect", id: child.id });
   assert.equal(receipt(completed.text).status, "completed");
+  const detail: unknown = JSON.parse(completed.text);
+
+  assert.ok(Check(Type.Object({ output: Type.String() }), detail));
+  assert.equal(detail.output, "after compaction evidence");
 });
 
 await test("background completion is delivered during manual compaction", {
@@ -600,6 +614,7 @@ await test("background completion is delivered during manual compaction", {
   });
 
   assert.equal(launched.isError, false, launched.text);
+  const child = receipt(launched.text);
   await childStarted.promise;
   const received: string[] = [];
 
@@ -631,7 +646,8 @@ await test("background completion is delivered during manual compaction", {
     await Promise.race([delivered, failed.promise]);
     assert.equal(f.session.isCompacting, true);
     assert.equal(received.length, 1);
-    assert.match(received[0] ?? "", /result produced during compaction/);
+    assert.match(received[0] ?? "", /\\"status\\":\\"completed\\"/);
+    assert.doesNotMatch(received[0] ?? "", /result produced during compaction/);
     assert.deepEqual(f.errors, []);
   } finally {
     unsubscribe();
@@ -639,5 +655,11 @@ await test("background completion is delivered during manual compaction", {
     await compacting;
   }
 
-  assert.match(JSON.stringify(f.session.messages), /result produced during compaction/);
+  assert.doesNotMatch(JSON.stringify(f.session.messages), /result produced during compaction/);
+  const inspected = await f.call("pstack_tasks", { action: "inspect", id: child.id });
+  assert.equal(inspected.isError, false, inspected.text);
+  const detail: unknown = JSON.parse(inspected.text);
+
+  assert.ok(Check(Type.Object({ output: Type.String() }), detail));
+  assert.equal(detail.output, "result produced during compaction");
 });

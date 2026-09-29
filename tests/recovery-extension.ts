@@ -243,7 +243,8 @@ export default function recoveryFixture(pi: ExtensionAPI) {
     if (
       phase === "initial" &&
       ctx.model?.id === "root" &&
-      event.message.role === "user" &&
+      event.message.role === "custom" &&
+      event.message.customType === "pstack-task-result" &&
       text(event.message).includes('"status":"completed"')
     ) {
       if (scenario === "pending") await wait(undefined, "delivery-pending");

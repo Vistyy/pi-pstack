@@ -3,6 +3,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { fauxAssistantMessage, fauxToolCall, getCurrentSystemPrompt } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
+import { Check } from "typebox/value";
 import { childFixture, receipt } from "./child-fixture.js";
 
 const instructionMarker = "## PStack role map";
@@ -110,7 +112,19 @@ await test("root idle completion keeps system instructions through a builtin rea
       .join(""),
     new RegExp(readMarker),
   );
-  assert.match(JSON.stringify(f.session.messages), /root child finished/);
+
+  const wake = f.session.messages.findLast(
+    (item) => item.role === "custom" && item.customType === "pstack-task-result",
+  );
+
+  assert.ok(wake?.role === "custom");
+  assert.ok(Check(Type.String(), wake.content));
+  assert.deepEqual(JSON.parse(wake.content), {
+    id: child.id,
+    attempt: 1,
+    status: "completed",
+  });
+  assert.doesNotMatch(JSON.stringify(f.session.messages), /root child finished/);
   const last = f.session.messages.findLast((item) => item.role === "assistant");
 
   assert.ok(last?.role === "assistant");

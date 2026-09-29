@@ -58,7 +58,7 @@ const TaskInput = Type.Object(
     run_in_background: Type.Optional(
       Type.Boolean({
         description:
-          "Return an ID immediately and deliver completion automatically after the child and its nested work finish. Defaults to true for poteto-agent, false otherwise. Foreground calls wait for results and may run in parallel.",
+          "Return an ID immediately and send a hidden completion wake with ID, attempt, and status after the child and its nested work finish. Inspect with pstack_tasks for the full result. Defaults to true for poteto-agent, false otherwise. Foreground calls wait for results and may run in parallel.",
       }),
     ),
     cwd: Type.Optional(
@@ -83,6 +83,8 @@ type Status = Outcome["status"] | "cancelling";
 
 type Notify = (content: string) => Promise<void>;
 
+type CompletionWake = { id: string; attempt: number; status: "completed" | "failed" };
+
 type Summary = ReturnType<ChildTask["summary"]>;
 
 const textResult = (value: Summary | Summary[]) => ({
@@ -90,13 +92,18 @@ const textResult = (value: Summary | Summary[]) => ({
   details: {},
 });
 
-const message = (content: string) => ({ customType: "pstack-task-result", content, display: true });
+const message = (content: string) => ({
+  customType: "pstack-task-result",
+  content,
+  display: false,
+});
 
 const delivery = { triggerTurn: true, deliverAs: "followUp" as const };
 
 class TaskScope {
   readonly children = new Map<string, ChildTask>();
   readonly deliveries = new Set<Promise<void>>();
+  private readonly pending: Array<() => void> = [];
   active = true;
   deliveryError: Error | undefined;
   private journal: { pi: ExtensionAPI; ctx: ExtensionContext } | undefined;
@@ -109,6 +116,7 @@ class TaskScope {
     readonly depth: number,
     readonly readonly: boolean,
     readonly notify: Notify,
+    readonly isStreaming: () => boolean,
     readonly changed: () => void = () => {},
   ) {}
 
@@ -195,19 +203,32 @@ class TaskScope {
     return child;
   }
 
-  post(content: string, current: () => boolean) {
-    const pending = Promise.resolve()
-      .then(async () => {
-        if (this.active && current()) await this.notify(content);
-      })
-      .catch((error: unknown) => {
-        this.deliveryError = new Error(String(error), { cause: error });
-      });
+  post(wake: CompletionWake, current: () => boolean) {
+    const pending = Promise.withResolvers<void>();
+    const content = JSON.stringify(wake);
 
-    this.deliveries.add(pending);
-    void pending.then(() => {
-      this.deliveries.delete(pending);
+    const deliver = () => {
+      void Promise.resolve()
+        .then(async () => {
+          if (this.active && current()) await this.notify(content);
+        })
+        .catch((error: unknown) => {
+          this.deliveryError = new Error(String(error), { cause: error });
+        })
+        .finally(pending.resolve);
+    };
+
+    this.deliveries.add(pending.promise);
+    void pending.promise.then(() => {
+      this.deliveries.delete(pending.promise);
     });
+
+    if (this.isStreaming()) this.pending.push(deliver);
+    else deliver();
+  }
+
+  flush() {
+    for (const deliver of this.pending.splice(0)) deliver();
   }
 
   async settle(session: AgentSession) {
@@ -228,6 +249,7 @@ class TaskScope {
 
   async cancelChildren(reason: "cancelled" | "interrupted" = "cancelled") {
     this.active = false;
+    this.flush();
     await Promise.all([...this.children.values()].map((child) => child.cancel(reason)));
     await Promise.all([...this.deliveries]);
   }
@@ -257,6 +279,7 @@ class ChildTask {
   error: string | undefined;
   prompt = "";
   private cancelled = false;
+  private inspectedAttempt = 0;
   private cancellation: Promise<void> | undefined;
   private turn = Symbol();
   private disposed = false;
@@ -293,10 +316,12 @@ class ChildTask {
       async (content) => {
         if (!this.session) throw new Error("Child session is not initialized");
 
-        if (this.session.isIdle)
-          await this.session.sendUserMessage(content, { deliverAs: "followUp" });
-        else await this.session.sendCustomMessage(message(content), delivery);
+        if (this.session.isIdle) {
+          await this.session.sendCustomMessage(message(content), { deliverAs: "nextTurn" });
+          await this.session.sendUserMessage("", { deliverAs: "followUp" });
+        } else await this.session.sendCustomMessage(message(content), delivery);
       },
+      () => this.session?.isStreaming === true && !this.session.isCompacting,
       () => parent.changed(),
     );
     this.scope.interrupted = record !== undefined && this.status === "interrupted";
@@ -379,6 +404,15 @@ class ChildTask {
     };
   }
 
+  inspect() {
+    const summary = this.summary("inspect");
+
+    if (this.status === "completed" || this.status === "failed")
+      this.inspectedAttempt = this.attempt;
+
+    return summary;
+  }
+
   private check() {
     this.parent.check();
 
@@ -409,10 +443,16 @@ class ChildTask {
     this.work = this.execute(prompt, initialize).then(() => {
       this.save();
 
-      if (background && !this.cancelled) {
+      if (
+        background &&
+        !this.cancelled &&
+        (this.status === "completed" || this.status === "failed")
+      ) {
+        const attempt = this.attempt;
+
         this.parent.post(
-          JSON.stringify(this.summary("receipt")),
-          () => this.turn === turn && !this.cancelled,
+          { id: this.id, attempt, status: this.status },
+          () => this.turn === turn && !this.cancelled && this.inspectedAttempt !== attempt,
         );
       }
     });
@@ -593,9 +633,12 @@ export function installExecutor(
       0,
       false,
       async (content) => {
-        if (context?.isIdle() === true) pi.sendUserMessage(content, { deliverAs: "followUp" });
-        else pi.sendMessage(message(content), delivery);
+        if (context?.isIdle() === true) {
+          pi.sendMessage(message(content), { deliverAs: "nextTurn" });
+          pi.sendUserMessage("", { deliverAs: "followUp" });
+        } else pi.sendMessage(message(content), delivery);
       },
+      () => context?.signal !== undefined,
       () => observer?.refresh(),
     );
 
@@ -631,6 +674,8 @@ export function installExecutor(
     scope.bind(pi, ctx);
   });
   pi.on("session_tree", (_event, ctx) => scope.bind(pi, ctx));
+  pi.on("agent_end", () => scope.flush());
+  pi.on("agent_settled", () => scope.flush());
   pi.on("input", (event) => {
     userInput = event.source !== "extension";
   });
@@ -670,7 +715,7 @@ export function installExecutor(
 
       if (params.action === "cancel") await child.cancel();
 
-      return textResult(child.summary(params.action === "inspect" ? "inspect" : "receipt"));
+      return textResult(params.action === "inspect" ? child.inspect() : child.summary("receipt"));
     },
   });
   pi.registerTool({
@@ -678,7 +723,7 @@ export function installExecutor(
     label: "PStack task",
     executionMode: "parallel",
     description:
-      "Run or resume a PStack child with its own conversation. Children belong to their parent's saved branch. Navigation, reload, or exit interrupts active execution. Reopening restores records only; explicitly resume an interrupted ID after reconciling prior tool effects. Root and direct children can delegate; grandchildren cannot. While required background results are outstanding, end the turn without a final answer and continue when results arrive; do not poll in a waiting loop.",
+      "Run or resume a PStack child with its own conversation. Children belong to their parent's saved branch. Navigation, reload, or exit interrupts active execution. Reopening restores records only; explicitly resume an interrupted ID after reconciling prior tool effects. Root and direct children can delegate; grandchildren cannot. A background completion wakes the parent with its ID and status; use pstack_tasks inspect for the full result. While required background results are outstanding, end the turn without a final answer and continue when results arrive; do not poll in a waiting loop.",
     parameters: TaskInput,
     async execute(_id, request, signal, _update, ctx) {
       signal?.throwIfAborted();

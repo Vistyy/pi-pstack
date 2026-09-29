@@ -53,7 +53,11 @@ for (const background of [false, true]) {
       assert.ok(started.text.length < 1024);
       f.parent.setResponses([
         (context) => {
-          const message = context.messages.findLast((item) => item.role === "user");
+          const message = context.messages.findLast(
+            (item) =>
+              item.role === "user" && contentText(item.content).includes('"status":"completed"'),
+          );
+
           assert.ok(message?.role === "user");
           delivered = contentText(message.content);
 
@@ -70,14 +74,21 @@ for (const background of [false, true]) {
     }
 
     const completed: unknown = JSON.parse(delivered);
-    assert.ok(Check(Receipt, completed));
-    assert.equal(completed.id, launch.id);
-    assert.equal(completed.status, "completed");
-    assert.equal(completed.output, output);
 
-    for (const key of ["prompt", "sourceCallId", "profile", "thinking", "cwd"])
-      assert.equal(Object.hasOwn(completed, key), false);
-    assert.ok(delivered.length - output.length < 1024);
+    if (background) {
+      assert.deepEqual(completed, { id: launch.id, attempt: 1, status: "completed" });
+      assert.ok(delivered.length < 256);
+    } else {
+      assert.ok(Check(Receipt, completed));
+      assert.equal(completed.id, launch.id);
+      assert.equal(completed.status, "completed");
+      assert.equal(completed.output, output);
+
+      for (const key of ["prompt", "sourceCallId", "profile", "thinking", "cwd"])
+        assert.equal(Object.hasOwn(completed, key), false);
+      assert.ok(delivered.length - output.length < 1024);
+    }
+
     const inspection = await f.call("pstack_tasks", { action: "inspect", id: launch.id });
     assert.equal(inspection.isError, false, inspection.text);
     const detail: unknown = JSON.parse(inspection.text);

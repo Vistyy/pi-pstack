@@ -29,7 +29,22 @@ await test("background completion wakes the parent without a visible result payl
 
   assert.equal(child.status, "running");
 
-  f.parent.setResponses([fauxAssistantMessage("Parent resumed after the child finished")]);
+  f.parent.setResponses([
+    (context) => {
+      const signal = context.messages.findLast(
+        (item) => item.role === "user" && contentText(item.content).includes(child.id),
+      );
+
+      assert.ok(signal?.role === "user");
+      assert.deepEqual(JSON.parse(contentText(signal.content)), {
+        id: child.id,
+        attempt: 1,
+        status: "completed",
+      });
+
+      return fauxAssistantMessage("Parent resumed after the child finished");
+    },
+  ]);
   const settled = f.report();
   release.resolve();
   await settled;
@@ -64,6 +79,148 @@ await test("background completion wakes the parent without a visible result payl
   const answer = f.session.messages.findLast((message) => message.role === "assistant");
   assert.ok(answer?.role === "assistant");
   assert.equal(contentText(answer.content), "Parent resumed after the child finished");
+});
+
+await test("failed background attempt wakes with status only and retains its error for inspection", {
+  timeout: 10000,
+}, async (t) => {
+  const f = await childFixture(t);
+  const release = f.gate();
+  f.nested.setResponses([
+    async () => {
+      await release.promise;
+
+      return fauxAssistantMessage("", {
+        stopReason: "error",
+        errorMessage: "Private provider failure",
+      });
+    },
+  ]);
+
+  const started = await f.call("pstack_task", {
+    prompt: "Fail in the background",
+    model: "nested/child:rev1:low",
+    run_in_background: true,
+  });
+
+  assert.equal(started.isError, false, started.text);
+  const child = receipt(started.text);
+
+  f.parent.setResponses([
+    (context) => {
+      const message = context.messages.findLast(
+        (item) => item.role === "user" && contentText(item.content).includes('"status":"failed"'),
+      );
+
+      assert.ok(message?.role === "user");
+      assert.deepEqual(JSON.parse(contentText(message.content)), {
+        id: child.id,
+        attempt: 1,
+        status: "failed",
+      });
+      assert.doesNotMatch(JSON.stringify(context.messages), /Private provider failure/);
+
+      return fauxAssistantMessage("Failed child wake received");
+    },
+  ]);
+
+  const settled = f.report();
+  release.resolve();
+  await settled;
+  await f.session.waitForIdle();
+
+  const completions = f.session.sessionManager
+    .getEntries()
+    .filter(
+      (entry) => entry.type === "custom_message" && entry.customType === "pstack-task-result",
+    );
+
+  assert.equal(completions.length, 1);
+  assert.ok(completions[0]?.type === "custom_message");
+  assert.equal(completions[0].display, false);
+  assert.ok(Check(Type.String(), completions[0].content));
+  assert.deepEqual(JSON.parse(completions[0].content), {
+    id: child.id,
+    attempt: 1,
+    status: "failed",
+  });
+  const answer = f.session.messages.findLast((message) => message.role === "assistant");
+
+  assert.ok(answer?.role === "assistant");
+  assert.equal(contentText(answer.content), "Failed child wake received");
+
+  const inspected = await f.call("pstack_tasks", { action: "inspect", id: child.id });
+
+  assert.equal(inspected.isError, false, inspected.text);
+  const detail: unknown = JSON.parse(inspected.text);
+
+  assert.ok(Check(Type.Object({ error: Type.String() }), detail));
+  assert.equal(detail.error, "Error: Private provider failure");
+  assert.deepEqual(f.errors, []);
+});
+
+await test("inspection of a previous attempt does not suppress a resumed attempt's wake", {
+  timeout: 10000,
+}, async (t) => {
+  const f = await childFixture(t);
+  const release = f.gate();
+
+  f.nested.setResponses([
+    fauxAssistantMessage("First attempt result"),
+    async () => {
+      await release.promise;
+
+      return fauxAssistantMessage("Second attempt result");
+    },
+  ]);
+
+  const first = await f.call("pstack_task", {
+    prompt: "First attempt",
+    model: "nested/child:rev1:low",
+    run_in_background: false,
+  });
+
+  assert.equal(first.isError, false, first.text);
+  const child = receipt(first.text);
+  const inspected = await f.call("pstack_tasks", { action: "inspect", id: child.id });
+
+  assert.equal(inspected.isError, false, inspected.text);
+  assert.match(inspected.text, /First attempt result/);
+
+  const resumed = await f.call("pstack_task", {
+    prompt: "Second attempt",
+    resume: child.id,
+    run_in_background: true,
+  });
+
+  assert.equal(resumed.isError, false, resumed.text);
+  f.parent.setResponses([fauxAssistantMessage("Resumed attempt wake received")]);
+
+  const settled = f.report();
+
+  release.resolve();
+  await settled;
+  await f.session.waitForIdle();
+
+  const completions = f.session.sessionManager
+    .getEntries()
+    .filter(
+      (entry) => entry.type === "custom_message" && entry.customType === "pstack-task-result",
+    );
+
+  assert.equal(completions.length, 1);
+  assert.ok(completions[0]?.type === "custom_message");
+  assert.ok(Check(Type.String(), completions[0].content));
+  assert.deepEqual(JSON.parse(completions[0].content), {
+    id: child.id,
+    attempt: 2,
+    status: "completed",
+  });
+  const answer = f.session.messages.findLast((message) => message.role === "assistant");
+
+  assert.ok(answer?.role === "assistant");
+  assert.equal(contentText(answer.content), "Resumed attempt wake received");
+  assert.doesNotMatch(JSON.stringify(f.session.messages), /Second attempt result/);
 });
 
 await test("inspection of a completed child prevents its queued completion turn", {
