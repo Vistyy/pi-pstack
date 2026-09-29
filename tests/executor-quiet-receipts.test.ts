@@ -213,6 +213,83 @@ await test("simultaneous idle completions do not race prompt preparation", {
   assert.deepEqual(f.errors, []);
 });
 
+await test("completion still wakes the parent after its current turn aborts", {
+  timeout: 10000,
+}, async (t) => {
+  const f = await childFixture(t);
+  const release = f.gate();
+
+  f.nested.setResponses([
+    async () => {
+      await release.promise;
+
+      return fauxAssistantMessage("Private answer after abort");
+    },
+  ]);
+
+  const launched = await f.call("pstack_task", {
+    prompt: "Complete while the parent aborts",
+    model: "nested/child:rev1:low",
+    run_in_background: true,
+  });
+
+  assert.equal(launched.isError, false, launched.text);
+
+  const child = receipt(launched.text);
+  const finished = f.gate();
+
+  const unsubscribe = f.session.subscribe((event) => {
+    if (event.type !== "entry_appended" || event.entry.type !== "custom") return;
+
+    if (event.entry.customType !== "pstack-task") return;
+
+    const data: unknown = event.entry.data;
+
+    if (Check(Completed, data) && data.id === child.id) finished.resolve();
+  });
+
+  t.after(unsubscribe);
+  f.parent.setResponses([
+    async (_context, options) => {
+      release.resolve();
+      await finished.promise;
+      void f.session.abort();
+      await new Promise<void>((resolve) => {
+        if (options?.signal?.aborted === true) resolve();
+        else options?.signal?.addEventListener("abort", () => resolve(), { once: true });
+      });
+
+      return fauxAssistantMessage("", { stopReason: "aborted" });
+    },
+    (context) => {
+      const signal = context.messages.findLast(
+        (message) => message.role === "user" && contentText(message.content).includes(child.id),
+      );
+
+      assert.ok(signal?.role === "user");
+
+      return fauxAssistantMessage("Parent resumed after abort");
+    },
+  ]);
+
+  await f.session.prompt("Start the parent turn");
+  await f.session.waitForIdle();
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 100);
+  });
+
+  const wakes = f.session.sessionManager
+    .getEntries()
+    .filter(
+      (entry) => entry.type === "custom_message" && entry.customType === "pstack-task-result",
+    );
+
+  assert.equal(wakes.length, 1);
+  assert.ok(wakes[0]?.type === "custom_message");
+  assert.equal(wakes[0].display, false);
+  assert.deepEqual(f.errors, []);
+});
+
 await test("failed background attempt wakes with status only and retains its error for inspection", {
   timeout: 10000,
 }, async (t) => {
