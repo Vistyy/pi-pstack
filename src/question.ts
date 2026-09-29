@@ -64,14 +64,25 @@ export function installQuestionTool(pi: ExtensionAPI): void {
       )
         throw new Error("Multi-select option labels must be unique.");
 
-      const outcome: QuestionOutcome =
-        ctx.mode === "tui"
-          ? await showQuestionnaire(ctx.ui, params.questions, signal)
-          : {
-              status: "unavailable" as const,
-              answers: [],
-              reason: "Terminal UI is unavailable; ask in the conversation and wait.",
-            };
+      let outcome: QuestionOutcome;
+
+      if (ctx.mode === "tui") {
+        pi.events.emit("herdr:blocked", {
+          active: true,
+          label: "Waiting for questionnaire answers",
+        });
+
+        try {
+          outcome = await showQuestionnaire(ctx.ui, params.questions, signal);
+        } finally {
+          pi.events.emit("herdr:blocked", { active: false });
+        }
+      } else
+        outcome = {
+          status: "unavailable",
+          answers: [],
+          reason: "Terminal UI is unavailable; ask in the conversation and wait.",
+        };
 
       return {
         content: [{ type: "text" as const, text: JSON.stringify(outcome) }],

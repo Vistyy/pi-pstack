@@ -387,7 +387,7 @@ await test("native Markdown tables and diagrams render; body and review scroll a
   assert.ok(many.component.render(40).length <= 12);
   assert.doesNotMatch(many.screen(40), /q29:/);
 
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 30; i++) {
     many.input(key.pageDown);
     many.screen(40);
   }

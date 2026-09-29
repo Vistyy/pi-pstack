@@ -81,7 +81,7 @@ try:
     keys('Enter')
     wait_text('Select at least one option')
     tmux('resize-window', '-t', 'questions', '-x', '68', '-y', '18')
-    keys('PageDown', 'PageDown', 'PageDown')
+    keys('PageDown', 'PageDown', 'PageDown', 'PageDown')
     wait_text('END OF BODY')
     keys('Down', 'Down', 'Space', 'Up', 'Up', 'Space')
     wait_text('[x] Correctness')

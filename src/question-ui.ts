@@ -1,8 +1,4 @@
-import {
-  type ExtensionUIContext,
-  getMarkdownTheme,
-  type Theme,
-} from "@earendil-works/pi-coding-agent";
+import { getMarkdownTheme, type Theme } from "@earendil-works/pi-coding-agent";
 import {
   type Component,
   Editor,
@@ -41,7 +37,6 @@ type QuestionnaireUI = {
       keys: KeybindingsManager,
       done: (value: QuestionnaireResult) => void,
     ) => Component,
-    options: Parameters<ExtensionUIContext["custom"]>[1],
   ): Promise<QuestionnaireResult>;
 };
 
@@ -60,17 +55,14 @@ export async function showQuestionnaire(
   signal?.addEventListener("abort", onAbort, { once: true });
 
   try {
-    const result = await ui.custom(
-      (tui, theme, keys, done) => {
-        const component = createQuestionnaire(tui, theme, keys, questions, done);
-        close = component.cancel;
+    const result = await ui.custom((tui, theme, keys, done) => {
+      const component = createQuestionnaire(tui, theme, keys, questions, done);
+      close = component.cancel;
 
-        if (isAborted()) queueMicrotask(close);
+      if (isAborted()) queueMicrotask(close);
 
-        return component;
-      },
-      { overlay: true, overlayOptions: { width: "100%", maxHeight: "100%" } },
-    );
+      return component;
+    });
 
     return isAborted() ? cancelled() : result;
   } finally {
@@ -462,7 +454,7 @@ function createQuestionnaire(
 
       const { title, help } = presentation();
       const helpLines = wrapTextWithAnsi(theme.fg("dim", help), w);
-      const budget = Math.max(1, tui.terminal.rows - 1 - helpLines.length - (warning ? 1 : 0));
+      const budget = Math.max(1, tui.terminal.rows - 4 - helpLines.length - (warning ? 1 : 0));
       const lines = [theme.fg("accent", truncateToWidth(title, w))];
 
       if (isReview) lines.push(...viewport(review(w), budget));
