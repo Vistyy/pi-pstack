@@ -42,7 +42,7 @@ Question bodies support Pi's Markdown rendering, including tables and fenced tex
 
 Foreground calls return their results and can run in parallel. Background calls return an ID and send a hidden completion wake with only the child ID, attempt, and status. Inspect with `pstack_tasks` to read the full result. A child awaiting its own children remains active until their results and its subsequent response settle. Resuming an eligible ID preserves the child's conversation and configuration. `pstack_tasks` returns a compact list, inspects a child's saved result and transcript path, or cancels owned children. Full child transcripts do not enter the parent context unless requested.
 
-Completion wakes are custom-message turns. They do not run other extensions' `before_agent_start` hooks. PStack restores its own role-map section during the turn, but other extensions' per-turn prompt changes wait for a user prompt.
+Completion wakes are custom-message turns, so other extensions' `before_agent_start` hooks do not run. Pi can remove their prompt sections during a tool continuation. PStack restores its own role map. Without separate context handlers, other extensions' sections return on the next user prompt.
 
 The root can delegate to children, and children to grandchildren; grandchildren cannot delegate further. Children inherit the parent's active tools, subject to exclusions, and reload their supplying file-backed extensions. Read-only assignments additionally exclude `write` and `edit` and preserve the no-write instruction through descendants. They are not operating-system sandboxes. The supported main host is normal Pi with file-backed extensions, not arbitrary SDK-embedded applications.
 
