@@ -104,6 +104,7 @@ class TaskScope {
   readonly children = new Map<string, ChildTask>();
   readonly deliveries = new Set<Promise<void>>();
   private readonly pending: Array<() => void> = [];
+  private starting = false;
   active = true;
   deliveryError: Error | undefined;
   private journal: { pi: ExtensionAPI; ctx: ExtensionContext } | undefined;
@@ -117,6 +118,7 @@ class TaskScope {
     readonly readonly: boolean,
     readonly notify: Notify,
     readonly isStreaming: () => boolean,
+    readonly isIdle: () => boolean,
     readonly changed: () => void = () => {},
   ) {}
 
@@ -208,11 +210,22 @@ class TaskScope {
     const content = JSON.stringify(wake);
 
     const deliver = () => {
-      void Promise.resolve()
-        .then(async () => {
-          if (this.active && current()) await this.notify(content);
-        })
+      if (!this.active || !current()) {
+        pending.resolve();
+
+        return;
+      }
+
+      const idle = this.isIdle();
+
+      if (idle) this.starting = true;
+      void this.notify(content)
         .catch((error: unknown) => {
+          if (idle && this.starting) {
+            this.starting = false;
+            this.flush();
+          }
+
           this.deliveryError = new Error(String(error), { cause: error });
         })
         .finally(pending.resolve);
@@ -223,8 +236,13 @@ class TaskScope {
       this.deliveries.delete(pending.promise);
     });
 
-    if (this.isStreaming()) this.pending.push(deliver);
+    if (this.isStreaming() || this.starting) this.pending.push(deliver);
     else deliver();
+  }
+
+  started() {
+    this.starting = false;
+    this.flush();
   }
 
   flush() {
@@ -249,6 +267,7 @@ class TaskScope {
 
   async cancelChildren(reason: "cancelled" | "interrupted" = "cancelled") {
     this.active = false;
+    this.starting = false;
     this.flush();
     await Promise.all([...this.children.values()].map((child) => child.cancel(reason)));
     await Promise.all([...this.deliveries]);
@@ -322,6 +341,7 @@ class ChildTask {
         } else await this.session.sendCustomMessage(message(content), delivery);
       },
       () => this.session?.isStreaming === true && !this.session.isCompacting,
+      () => this.session?.isIdle === true,
       () => parent.changed(),
     );
     this.scope.interrupted = record !== undefined && this.status === "interrupted";
@@ -639,6 +659,7 @@ export function installExecutor(
         } else pi.sendMessage(message(content), delivery);
       },
       () => context?.signal !== undefined,
+      () => context?.isIdle() === true,
       () => observer?.refresh(),
     );
 
@@ -674,8 +695,11 @@ export function installExecutor(
     scope.bind(pi, ctx);
   });
   pi.on("session_tree", (_event, ctx) => scope.bind(pi, ctx));
-  pi.on("agent_end", () => scope.flush());
-  pi.on("agent_settled", () => scope.flush());
+  pi.on("agent_start", () => scope.started());
+  pi.on("agent_end", (_event, ctx) => {
+    if (ctx.signal?.aborted !== true) scope.flush();
+  });
+  pi.on("agent_settled", () => scope.started());
   pi.on("input", (event) => {
     userInput = event.source !== "extension";
   });
