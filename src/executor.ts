@@ -194,7 +194,12 @@ class TaskScope {
     if (
       this.journal.ctx.sessionManager
         .buildContextEntries()
-        .some((entry) => entry.type === "custom_message" && entry.customType === recoveryType)
+        .some(
+          (entry) =>
+            entry.type === "custom_message" &&
+            entry.customType === recoveryType &&
+            entry.content === content,
+        )
     )
       return;
 
@@ -248,7 +253,13 @@ class TaskScope {
     report?.resolve();
   }
 
-  settled() {
+  settled(aborted: boolean) {
+    if (aborted) {
+      this.flush();
+
+      return;
+    }
+
     const missing = this.steering.splice(0).filter((report) => {
       if (this.received(report)) {
         report.resolve();
@@ -750,6 +761,7 @@ export function installExecutor(
   let scope = owned ?? fresh();
   let shutdown = false;
   let userInput = false;
+  let abortedRun = false;
 
   const retire = async (_event: ExtensionEvent, ctx: ExtensionContext) => {
     const previous = scope;
@@ -779,8 +791,15 @@ export function installExecutor(
     scope.bind(pi, ctx);
   });
   pi.on("session_tree", (_event, ctx) => scope.bind(pi, ctx));
-  pi.on("agent_end", () => scope.flush());
-  pi.on("agent_settled", () => scope.settled());
+  pi.on("agent_end", (_event, ctx) => {
+    abortedRun = ctx.signal?.aborted === true;
+
+    if (!abortedRun) scope.flush();
+  });
+  pi.on("agent_settled", () => {
+    scope.settled(abortedRun);
+    abortedRun = false;
+  });
   pi.on("message_start", (event) => {
     if (event.message.role === "user")
       scope.acceptedUserMessage(contentText(event.message.content));

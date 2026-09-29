@@ -4,6 +4,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { contentText, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import { completionReportPrefix } from "../src/completion-report.js";
+import { taskRecords } from "../src/task-record.js";
 import { childFixture, packageRoot } from "./child-fixture.js";
 
 await test("failed manual compaction retains the child's report until the host is ready", {
@@ -308,6 +309,71 @@ await test("empty child output remains a full report with completed status", {
   await delivered;
   await f.session.waitForIdle();
   assert.deepEqual(f.errors, []);
+});
+
+await test("two reports survive a rejected idle startup and arrive once on the next valid turn", {
+  timeout: 10000,
+}, async (t) => {
+  const f = await childFixture(t);
+  const release = f.gate();
+  const completed = f.gate();
+  const rejected = f.gate();
+
+  t.after(f.session.extensionRunner.onError(() => rejected.resolve()));
+  t.after(
+    f.session.subscribe((event) => {
+      if (
+        event.type === "entry_appended" &&
+        [...taskRecords(f.session.sessionManager)].filter(
+          (record) => record.outcome.status === "completed",
+        ).length === 2
+      )
+        completed.resolve();
+    }),
+  );
+
+  f.nested.setResponses(
+    ["FIRST_GUARD_REPORT", "SECOND_GUARD_REPORT"].map((output) => async () => {
+      await release.promise;
+
+      return fauxAssistantMessage(output);
+    }),
+  );
+
+  for (const prompt of ["First report", "Second report"]) {
+    const result = await f.call("pstack_task", {
+      prompt,
+      model: "nested/child:rev1:low",
+      run_in_background: true,
+    });
+
+    assert.equal(result.isError, false, result.text);
+  }
+
+  const before = f.parent.state.callCount;
+
+  f.session.modelRuntime.unregisterProvider("fixture");
+  release.resolve();
+  await Promise.all([rejected.promise, completed.promise]);
+  assert.equal(f.errors.length, 1);
+  assert.match(f.errors[0] ?? "", /No API key found for fixture/);
+  assert.equal(f.parent.state.callCount, before);
+
+  f.session.modelRuntime.registerNativeProvider(f.parent.provider);
+  await f.session.modelRuntime.getAvailable();
+  f.parent.setResponses(Array.from({ length: 4 }, () => fauxAssistantMessage("Reports received")));
+  await f.session.prompt("Continue after restoring the provider");
+  await f.session.waitForIdle();
+
+  const reports = f.session.messages
+    .filter((message) => message.role === "user" || message.role === "custom")
+    .map((message) => contentText(message.content))
+    .filter((text) => text.startsWith(completionReportPrefix));
+
+  assert.equal(reports.length, 2);
+  assert.equal(reports.filter((text) => text.includes("FIRST_GUARD_REPORT")).length, 1);
+  assert.equal(reports.filter((text) => text.includes("SECOND_GUARD_REPORT")).length, 1);
+  assert.equal(f.errors.length, 1);
 });
 
 await test("a report rejected by an input preflight remains available at the next parent run", {

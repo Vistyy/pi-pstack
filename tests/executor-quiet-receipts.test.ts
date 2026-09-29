@@ -16,9 +16,12 @@ function reports(f: Awaited<ReturnType<typeof childFixture>>) {
     .getEntries()
     .filter(
       (entry) =>
-        entry.type === "message" &&
-        entry.message.role === "user" &&
-        contentText(entry.message.content).startsWith(completionReportPrefix),
+        (entry.type === "message" &&
+          entry.message.role === "user" &&
+          contentText(entry.message.content).startsWith(completionReportPrefix)) ||
+        (entry.type === "custom_message" &&
+          entry.customType === "pstack-task-result" &&
+          contentText(entry.content).startsWith(completionReportPrefix)),
     );
 }
 
@@ -154,7 +157,7 @@ await test("simultaneous idle completions do not race prompt preparation", {
   const unsubscribe = f.session.subscribe((event) => {
     if (
       event.type === "message_end" &&
-      event.message.role === "user" &&
+      (event.message.role === "user" || event.message.role === "custom") &&
       contentText(event.message.content).startsWith(completionReportPrefix) &&
       ++count === 2
     )
@@ -165,7 +168,10 @@ await test("simultaneous idle completions do not race prompt preparation", {
 
   const seen = new Set<string>();
   const before = f.parent.state.callCount;
-  const userCount = f.session.messages.filter((message) => message.role === "user").length;
+
+  const messageCount = f.session.messages.filter(
+    (message) => message.role === "user" || message.role === "custom",
+  ).length;
 
   f.parent.setResponses(
     Array.from({ length: 3 }, () => (context) => {
@@ -193,15 +199,16 @@ await test("simultaneous idle completions do not race prompt preparation", {
 
   assert.equal(reports(f).length, 2);
   assert.equal(
-    f.session.messages.filter((message) => message.role === "user").length,
-    userCount + 2,
+    f.session.messages.filter((message) => message.role === "user" || message.role === "custom")
+      .length,
+    messageCount + 2,
   );
   assert.deepEqual([...seen].sort(), [a.id, b.id].sort());
   assert.ok(f.parent.state.callCount - before <= 2);
   assert.deepEqual(f.errors, []);
 });
 
-await test("completion still wakes the parent after its current turn aborts", {
+await test("an already handed-off steer waits for a real user turn after abort", {
   timeout: 10000,
 }, async (t) => {
   const f = await childFixture(t);
@@ -251,10 +258,18 @@ await test("completion still wakes the parent after its current turn aborts", {
     },
     (context) => {
       const signal = context.messages.findLast(
-        (message) => message.role === "user" && contentText(message.content).includes(child.id),
+        (message) =>
+          message.role === "user" &&
+          contentText(message.content).startsWith(completionReportPrefix),
       );
 
       assert.ok(signal?.role === "user");
+      assert.deepEqual(parseReport(contentText(signal.content)), {
+        id: child.id,
+        attempt: 1,
+        status: "completed",
+        report: { kind: "full", text: "Private answer after abort" },
+      });
 
       return fauxAssistantMessage("Parent resumed after abort");
     },
@@ -266,6 +281,83 @@ await test("completion still wakes the parent after its current turn aborts", {
     setTimeout(resolve, 100);
   });
 
+  assert.equal(reports(f).length, 0);
+  assert.equal(f.parent.state.callCount, 3);
+  await f.session.prompt("Continue after abort");
+  await f.session.waitForIdle();
+
+  const delivered = reports(f);
+
+  assert.equal(delivered.length, 1);
+  assert.equal(delivered[0]?.type, "custom_message");
+  assert.deepEqual(f.errors, []);
+});
+
+await test("a child completing after the parent aborts wakes it once", {
+  timeout: 10000,
+}, async (t) => {
+  const f = await childFixture(t);
+  const release = f.gate();
+
+  f.nested.setResponses([
+    async () => {
+      await release.promise;
+
+      return fauxAssistantMessage("Finished after abort settled");
+    },
+  ]);
+
+  const launched = await f.call("pstack_task", {
+    prompt: "Finish only after abort",
+    model: "nested/child:rev1:low",
+    run_in_background: true,
+  });
+
+  assert.equal(launched.isError, false, launched.text);
+
+  const child = receipt(launched.text);
+
+  f.parent.setResponses([
+    async (_context, options) => {
+      void f.session.abort();
+      await new Promise<void>((resolve) => {
+        if (options?.signal?.aborted === true) resolve();
+        else options?.signal?.addEventListener("abort", () => resolve(), { once: true });
+      });
+
+      return fauxAssistantMessage("", { stopReason: "aborted" });
+    },
+  ]);
+
+  await f.session.prompt("Abort before child completion");
+  await f.session.waitForIdle();
+  assert.equal(reports(f).length, 0);
+
+  f.parent.setResponses([
+    (context) => {
+      const report = context.messages.findLast(
+        (message) =>
+          message.role === "user" &&
+          contentText(message.content).startsWith(completionReportPrefix),
+      );
+
+      assert.ok(report?.role === "user");
+      assert.deepEqual(parseReport(contentText(report.content)), {
+        id: child.id,
+        attempt: 1,
+        status: "completed",
+        report: { kind: "full", text: "Finished after abort settled" },
+      });
+
+      return fauxAssistantMessage("Received report after abort");
+    },
+  ]);
+
+  const settled = f.report();
+
+  release.resolve();
+  await settled;
+  await f.session.waitForIdle();
   assert.equal(reports(f).length, 1);
   assert.deepEqual(f.errors, []);
 });
@@ -401,7 +493,69 @@ await test("inspection of a previous attempt does not suppress a resumed attempt
   assert.match(JSON.stringify(f.session.messages), /Second attempt result/);
 });
 
-await test("inspection of a completed child prevents its queued completion turn", {
+await test("inspection before handoff suppresses the exact completed attempt", {
+  timeout: 10000,
+}, async (t) => {
+  const f = await childFixture(t);
+  const release = f.gate();
+  const inspected = Promise.withResolvers<string>();
+
+  f.nested.setResponses([
+    async () => {
+      await release.promise;
+
+      return fauxAssistantMessage("Inspected before delivery");
+    },
+  ]);
+
+  const launched = await f.call("pstack_task", {
+    prompt: "Inspect at the record boundary",
+    model: "nested/child:rev1:low",
+    run_in_background: true,
+  });
+
+  assert.equal(launched.isError, false, launched.text);
+
+  const child = receipt(launched.text);
+  const tool = f.session.getToolDefinition("pstack_tasks");
+
+  assert.ok(tool);
+
+  const unsubscribe = f.session.subscribe((event) => {
+    if (
+      event.type !== "entry_appended" ||
+      event.entry.type !== "custom" ||
+      event.entry.customType !== "pstack-task"
+    )
+      return;
+
+    const data: unknown = event.entry.data;
+
+    if (!Check(Completed, data) || data.id !== child.id) return;
+
+    void tool
+      .execute(
+        "inspect-before-handoff",
+        { action: "inspect", id: child.id },
+        undefined,
+        undefined,
+        f.session.extensionRunner.createContext(),
+      )
+      .then((result) => inspected.resolve(contentText(result.content)), inspected.reject);
+  });
+
+  t.after(unsubscribe);
+  release.resolve();
+  assert.match(await inspected.promise, /Inspected before delivery/);
+  await new Promise<void>((resolve) => {
+    setImmediate(resolve);
+  });
+
+  assert.equal(reports(f).length, 0);
+  assert.deepEqual(f.errors, []);
+});
+
+await test("inspection after handoff cannot retract a queued custom report", {
   timeout: 10000,
 }, async (t) => {
   const f = await childFixture(t);
@@ -470,5 +624,14 @@ await test("inspection of a completed child prevents its queued completion turn"
   const answer = f.session.messages.findLast((message) => message.role === "assistant");
   assert.ok(answer?.role === "assistant");
   assert.equal(contentText(answer.content), "Parent used the inspected answer");
-  assert.equal(reports(f).length, 0);
+  assert.equal(reports(f).length, 1);
+  const handedOff = reports(f)[0];
+
+  assert.ok(handedOff?.type === "custom_message");
+  assert.deepEqual(parseReport(contentText(handedOff.content)), {
+    id: child.id,
+    attempt: 1,
+    status: "completed",
+    report: { kind: "full", text: "Inspected answer" },
+  });
 });

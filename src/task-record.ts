@@ -143,8 +143,6 @@ export function resultReceived(entries: SessionEntry[], id: string, attempt: num
         return Check(Report, data) && data.id === id && data.attempt === attempt;
       }
 
-      if (entry.type !== "custom_message" || entry.customType !== "pstack-task-result")
-        return false;
       const data: unknown = JSON.parse(text);
 
       return Check(Receipt, data) && data.id === id && data.attempt === attempt;

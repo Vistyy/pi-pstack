@@ -6,9 +6,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
+import { contentText } from "@earendil-works/pi-ai";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
 import { Check } from "typebox/value";
+import { taskRecords, taskRecordType } from "../src/task-record.js";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 
@@ -503,6 +505,31 @@ for (const scenario of [
       "recovery handoff must reflect what remains in the saved model context",
     );
     await again.stop();
+
+    if (scenario === "clean") {
+      const manager = SessionManager.open(join(directory, "parent.jsonl"));
+      const saved = [...taskRecords(manager)].find((record) => record.id === created.id);
+
+      assert.ok(saved);
+
+      const lateId = `${created.id}-late`;
+
+      manager.appendCustomEntry(taskRecordType, {
+        ...saved,
+        id: lateId,
+        transcript: join(directory, "late-child.jsonl"),
+        outcome: { status: "interrupted" },
+      });
+
+      const later = await cli(t, directory, "later", scenario);
+      await later.tool("inventory");
+      assert.equal(notices().length, expectedNotices + 1);
+      const notice = notices().at(-1);
+
+      assert.ok(notice?.type === "custom_message");
+      assert.match(contentText(notice.content), new RegExp(lateId));
+      await later.stop();
+    }
 
     if (scenario === "crash") {
       const fork = SessionManager.forkFrom(

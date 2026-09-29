@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { CustomMessageEntry } from "@earendil-works/pi-coding-agent";
+import { type CustomMessageEntry, SessionManager } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { Check } from "typebox/value";
 import { completionReport, completionReportPrefix } from "../src/completion-report.js";
@@ -59,6 +59,22 @@ await test("JSON escaping and UTF-8 characters count toward the whole envelope b
     Buffer.byteLength(output) - Buffer.byteLength(parsed.report.text),
   );
   assert.ok(parsed.report.omittedBytes > 0);
+});
+
+await test("a saved inspection still counts as receiving its exact attempt", () => {
+  const session = SessionManager.inMemory("/fixture");
+
+  session.appendMessage({
+    role: "toolResult",
+    toolCallId: "inspect-1",
+    toolName: "pstack_tasks",
+    content: [{ type: "text", text: JSON.stringify({ ...identity, output: "saved result" }) }],
+    isError: false,
+    timestamp: 0,
+  });
+
+  assert.equal(resultReceived(session.getBranch(), "child-7", 2), true);
+  assert.equal(resultReceived(session.getBranch(), "child-7", 1), false);
 });
 
 await test("receipt recovery recognizes complete reports but not a near match or another attempt", () => {
