@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { join } from "node:path";
 import test from "node:test";
 import {
   contentText,
@@ -10,7 +8,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { Check } from "typebox/value";
-import { childFixture, packageRoot, receipt } from "./child-fixture.js";
+import { childFixture, receipt } from "./child-fixture.js";
 
 const Completed = Type.Object({
   id: Type.String(),
@@ -96,29 +94,7 @@ await test("background completion wakes the parent without a visible result payl
 await test("simultaneous idle completions do not race prompt preparation", {
   timeout: 10000,
 }, async (t) => {
-  const eventName = `pstack-wake-${randomUUID()}`;
-  const previous = process.env["PSTACK_WAKE_GATE_EVENT"];
-  process.env["PSTACK_WAKE_GATE_EVENT"] = eventName;
-  const started = Promise.withResolvers<void>();
-  const releaseInput = Promise.withResolvers<void>();
-
-  const listener = (release: () => void) => {
-    started.resolve();
-    void releaseInput.promise.then(release);
-  };
-
-  process.on(eventName, listener);
-  t.after(() => {
-    releaseInput.resolve();
-    process.off(eventName, listener);
-
-    if (previous === undefined) delete process.env["PSTACK_WAKE_GATE_EVENT"];
-    else process.env["PSTACK_WAKE_GATE_EVENT"] = previous;
-  });
-
-  const f = await childFixture(t, {
-    extensionPaths: [join(packageRoot, "tests/quiet-wake-gate-extension.ts")],
-  });
+  const f = await childFixture(t);
 
   const first = f.gate();
   const second = f.gate();
@@ -151,21 +127,23 @@ await test("simultaneous idle completions do not race prompt preparation", {
   const a = receipt(firstStarted.text);
   const b = receipt(secondStarted.text);
 
-  const secondSaved = f.gate();
+  const completions = f.gate();
+  let count = 0;
 
   const unsubscribe = f.session.subscribe((event) => {
-    if (event.type !== "entry_appended" || event.entry.type !== "custom") return;
-
-    if (event.entry.customType !== "pstack-task") return;
-
-    const data: unknown = event.entry.data;
-
-    if (Check(Completed, data) && data.id === b.id) secondSaved.resolve();
+    if (
+      event.type === "message_end" &&
+      event.message.role === "custom" &&
+      event.message.customType === "pstack-task-result" &&
+      ++count === 2
+    )
+      completions.resolve();
   });
 
   t.after(unsubscribe);
   const seen = new Set<string>();
   const before = f.parent.state.callCount;
+  const userCount = f.session.messages.filter((message) => message.role === "user").length;
 
   f.parent.setResponses(
     Array.from({ length: 3 }, () => (context) => {
@@ -182,21 +160,11 @@ await test("simultaneous idle completions do not race prompt preparation", {
   );
 
   first.resolve();
-  await started.promise;
   second.resolve();
-  await secondSaved.promise;
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, 100);
-  });
-
+  await completions.promise;
   const settled = f.report();
-
-  releaseInput.resolve();
   await settled;
   await f.session.waitForIdle();
-  await new Promise<void>((resolve) => {
-    setImmediate(resolve);
-  });
   await new Promise<void>((resolve) => {
     setImmediate(resolve);
   });
@@ -208,6 +176,7 @@ await test("simultaneous idle completions do not race prompt preparation", {
     );
 
   assert.equal(wakes.length, 2);
+  assert.equal(f.session.messages.filter((message) => message.role === "user").length, userCount);
   assert.deepEqual([...seen].sort(), [a.id, b.id].sort());
   assert.ok(f.parent.state.callCount - before <= 2);
   assert.deepEqual(f.errors, []);

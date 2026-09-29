@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { getCurrentSystemMessage } from "@earendil-works/pi-ai";
 import {
   type ExtensionAPI,
   type ExtensionContext,
@@ -105,7 +106,8 @@ export function createRuntime(pi: ExtensionAPI, options?: { profile: Profile }):
       text: `Use Poteto mode.\n\n${event.text.slice(command.length).trim()}`.trimEnd(),
     };
   });
-  pi.on("before_agent_start", async (event, ctx) => {
+
+  const pstackSection = async (ctx: ExtensionContext) => {
     const content = await source();
     let projection: string;
 
@@ -128,14 +130,32 @@ export function createRuntime(pi: ExtensionAPI, options?: { profile: Profile }):
       projection = `Invalid PStack role configuration: ${String(error)}. Use /setup-pstack to replace it.`;
     }
 
+    return `${content.identity}\n\nPackaged PStack skills directory: ${skillsDir}\n\n## PStack role map\n${projection}`.trim();
+  };
+
+  pi.on("before_agent_start", async (event, ctx) => {
     event.systemPromptOptions.sections = {
       ...event.systemPromptOptions.sections,
-      pstack:
-        `${content.identity}\n\nPackaged PStack skills directory: ${skillsDir}\n\n## PStack role map\n${projection}`.trim(),
+      pstack: await pstackSection(ctx),
     };
   });
   pi.on("context", async (event, ctx) => {
-    if (options?.profile !== "poteto-agent" && !(options === undefined && modeEnabled(ctx))) return;
+    const lastSystem = event.messages.findLastIndex((message) => message.role === "system");
+    const system = event.messages[lastSystem];
+    let messages = event.messages;
+
+    if (system?.role === "system") {
+      const section = `<pstack>\n${await pstackSection(ctx)}\n</pstack>`;
+
+      if (getCurrentSystemMessage(event.messages)?.sections?.["pstack"] !== section)
+        messages = event.messages.with(lastSystem, {
+          ...system,
+          sections: { ...system.sections, pstack: section },
+        });
+    }
+
+    if (options?.profile !== "poteto-agent" && !(options === undefined && modeEnabled(ctx)))
+      return messages === event.messages ? undefined : { messages };
     const { mode } = await source();
 
     return {
@@ -148,7 +168,7 @@ export function createRuntime(pi: ExtensionAPI, options?: { profile: Profile }):
             "poteto-mode": `<skill name="poteto-mode" location="${modePath}">\nReferences are relative to ${join(skillsDir, "poteto-mode")}.\n\n${mode}\n</skill>`,
           },
         },
-        ...event.messages,
+        ...messages,
       ],
     };
   });
